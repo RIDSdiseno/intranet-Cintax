@@ -1,5 +1,13 @@
 import React from "react";
-import { Home, Users, FileText, FolderKanban, LifeBuoy, Bell, Search, Settings, ChevronRight, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import ticketsPage from "./pages/ticketsPage";
+import {
+  Home, Users, FileText, FolderKanban, LifeBuoy, Bell, Search, Settings,
+  ChevronRight, CheckCircle2, Clock, AlertTriangle
+} from "lucide-react";
+import { Routes, Route, NavLink, useParams, Navigate, useLocation } from "react-router-dom";
+import LoginPage from "./pages/login_page";
+import PersonasPage from "./pages/personasPage";
+import TicketsPage from "./pages/ticketsPage";
 
 /**
  * Cintax Intranet Mockup (single-file TSX)
@@ -38,7 +46,7 @@ const KpiCard: React.FC<{ title: string; value: string; helper?: string; icon?: 
   </div>
 );
 
-// --- Sidebar Link ---
+// --- Sidebar Link (solo para "Soporte", los demás serán NavLink) ---
 const SideLink: React.FC<{ icon: React.ReactNode; label: string; active?: boolean }>
   = ({ icon, label, active }) => (
   <button
@@ -97,7 +105,124 @@ const ANNOUNCEMENTS = [
   { title: "Nueva política de gastos", copy: "Reembolsos vía módulo Finanzas desde el 15 de noviembre.", cta: "Leer guía" },
 ];
 
+// ---------- PÁGINAS ----------
+function HomePage() {
+  return (
+    <>
+      {/* Quick actions */}
+      <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Nueva solicitud", hint: "Permisos, licencias" },
+          { label: "Subir documento", hint: "PDF, DOCX, XLSX" },
+          { label: "Crear proyecto", hint: "Kanban, tareas" },
+          { label: "Soporte TI", hint: "Incidencias" },
+        ].map((a) => (
+          <button key={a.label} className="group flex items-center justify-between rounded-2xl bg-white border border-black/5 px-4 py-4 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300">
+            <div>
+              <p className="text-sm text-black/60">{a.hint}</p>
+              <p className="font-medium" style={{ color: "var(--primary-color)" }}>{a.label}</p>
+            </div>
+            <div className="rounded-full p-2 bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+              <ChevronRight size={18} />
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* KPIs */}
+      <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard title="Colaboradores activos" value="312" helper="Últimos 30 días" icon={<Users />}/>
+        <KpiCard title="Documentos nuevos" value="128" helper="Esta semana" icon={<FileText />}/>
+        <KpiCard title="Proyectos en curso" value="17" helper="Área TI y Operaciones" icon={<FolderKanban />}/>
+        <KpiCard title="Tickets abiertos" value="9" helper="Soporte TI" icon={<LifeBuoy />}/>
+      </div>
+
+      {/* Content grid */}
+      <div className="mt-6 grid xl:grid-cols-3 gap-6">
+        {/* Table */}
+        <section className="xl:col-span-2 bg-white rounded-2xl border border-black/5 shadow-sm">
+          <header className="flex items-center justify-between px-4 py-4 border-b border-black/5">
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>Tareas pendientes</h2>
+              <p className="text-xs text-black/50">Lo más urgente para esta quincena</p>
+            </div>
+            <button className="text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition">
+              Ver todas
+            </button>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-black/50 text-xs">
+                  <th className="py-3 px-3 font-medium">ID</th>
+                  <th className="py-3 px-3 font-medium">Tarea</th>
+                  <th className="py-3 px-3 font-medium">Estado</th>
+                  <th className="py-3 px-3 font-medium text-right">Vence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TASKS.map((t, i) => (
+                  <TaskRow key={t.title} idx={i + 1} title={t.title} owner={t.owner} status={t.status} due={t.due} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Activity & Announcements */}
+        <section className="space-y-6">
+          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
+            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>Actividad reciente</h2>
+            <div className="space-y-4">
+              <ActivityItem title="María cargó “Política de Gastos v2.pdf”" time="Hoy, 11:20" icon={<FileText size={16} className="text-[var(--secondary-color)]" />} hint="Finanzas / Políticas" />
+              <ActivityItem title="Equipo TI cerró ticket #2381" time="Ayer, 18:44" icon={<LifeBuoy size={16} className="text-[var(--secondary-color)]" />} hint="Incidente VPN – resuelto" />
+              <ActivityItem title="Se creó el proyecto ‘Onboarding 2026’" time="Ayer, 09:02" icon={<FolderKanban size={16} className="text-[var(--secondary-color)]" />} hint="Personas / Capacitación" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
+            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>Anuncios</h2>
+            <div className="space-y-3">
+              {ANNOUNCEMENTS.map((a) => (
+                <div key={a.title} className="flex items-start justify-between gap-3 rounded-xl p-3 bg-[var(--tertiary-color)]">
+                  <div>
+                    <p className="font-medium" style={{ color: "var(--primary-color)" }}>{a.title}</p>
+                    <p className="text-sm text-black/60">{a.copy}</p>
+                  </div>
+                  <button className="text-sm text-[var(--secondary-color)] hover:underline shrink-0">{a.cta}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+
+function NotFoundPage() {
+  return (
+    <section className="bg-white rounded-2xl border border-black/5 shadow-sm p-6 mt-6 text-center">
+      <h2 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>Página no encontrada</h2>
+      <p className="text-sm text-black/60">La ruta solicitada no existe.</p>
+    </section>
+  );
+}
+
+function isAuthed() {
+  return !!(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"));
+}
+
+function PrivateRoute({ element }: { element: JSX.Element }) {
+  return isAuthed() ? element : <Navigate to="/login" replace />;
+}
+
+// ---------- APP ----------
 export default function CintaxIntranetMockup() {
+  const { pathname } = useLocation();
+  const hideChrome = pathname.startsWith("/login");
+
   return (
     <div className="min-h-screen" style={{ background: "var(--tertiary-color)" }}>
       {/* Brand tokens */}
@@ -123,146 +248,123 @@ export default function CintaxIntranetMockup() {
         body { font-family: var(--primary-font); color: var(--primary-color); }
       `}</style>
 
-      <div className="grid lg:grid-cols-[260px_1fr] min-h-screen">
+      <div className={hideChrome ? "min-h-screen" : "grid lg:grid-cols-[260px_1fr] min-h-screen"}>
         {/* Sidebar */}
-        <aside className="bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4">
-          <div className="flex items-center gap-2 px-3">
-            <img src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg" alt="Cintax" className="h-8 w-auto" />
-          </div>
-          <nav className="mt-2 space-y-1">
-            <SideLink icon={<Home size={18} />} label="Inicio" active />
-            <SideLink icon={<Users size={18} />} label="Personas" />
-            <SideLink icon={<LifeBuoy size={18} />} label="Tickets" />
-            <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
-          </nav>
-          <div className="mt-auto border-t border-white/10 pt-4">
-            <div className="px-3">
-              <p className="text-xs text-white/60">Espacio usado</p>
-              <div className="h-2 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
-                <div className="h-full w-2/3 bg-[var(--secondary-color)]" />
-              </div>
-              <p className="mt-1 text-xs text-white/80">68% de 50 GB</p>
+        {!hideChrome && (
+          <aside className="bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4">
+            <div className="flex items-center gap-2 px-3">
+              <img src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg" alt="Cintax" className="h-8 w-auto" />
             </div>
-          </div>
-        </aside>
+
+            {/* NAV */}
+            <nav className="mt-2 space-y-1">
+              <NavLink
+                to="/home"
+                className={({ isActive }) =>
+                  `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                    isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`
+                }
+              >
+                <span className="shrink-0"><Home size={18} /></span>
+                <span className="truncate text-left">Inicio</span>
+              </NavLink>
+
+              <NavLink
+                to="/personas"
+                className={({ isActive }) =>
+                  `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                    isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`
+                }
+              >
+                <span className="shrink-0"><Users size={18} /></span>
+                <span className="truncate text-left">Personas</span>
+              </NavLink>
+
+              {/* Tickets */}
+              <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">Tickets</div>
+              <div className="pl-3 flex flex-col gap-1">
+                <NavLink to="/tickets/contabilidad" className={({isActive}) =>
+                  `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`
+                }>Contabilidad</NavLink>
+
+                <NavLink to="/tickets/tributario" className={({isActive}) =>
+                  `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`
+                }>Tributario</NavLink>
+
+                <NavLink to="/tickets/otros" className={({isActive}) =>
+                  `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`
+                }>Entre otros</NavLink>
+              </div>
+
+              <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+            </nav>
+
+            <div className="mt-auto border-t border-white/10 pt-4">
+              <div className="px-3">
+                <p className="text-xs text-white/60">Espacio usado</p>
+                <div className="h-2 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
+                  <div className="h-full w-2/3 bg-[var(--secondary-color)]" />
+                </div>
+                <p className="mt-1 text-xs text-white/80">68% de 50 GB</p>
+              </div>
+            </div>
+          </aside>
+        )}
 
         {/* Main */}
-        <main className="p-5 lg:p-8">
+        <main className={hideChrome ? "p-0" : "p-5 lg:p-8"}>
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-[var(--title-xl)] font-semibold">
-                Intranet <span className="text-[var(--secondary-color)]">Cintax</span>
-              </h1>
-              <p className="text-sm text-black/60 mt-1">Resumen general y accesos rápidos</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="hidden md:flex items-center gap-2 bg-white rounded-xl border border-black/5 px-3 py-2 w-[280px] shadow-sm">
-                <Search size={16} className="text-black/50" />
-                <input className="w-full outline-none text-sm placeholder:text-black/40" placeholder="Buscar en Cintax…" />
+          {!hideChrome && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-[var(--title-xl)] font-semibold">
+                  Intranet <span className="text-[var(--secondary-color)]">Cintax</span>
+                </h1>
+                <p className="text-sm text-black/60 mt-1">Resumen general y accesos rápidos</p>
               </div>
-              <button className="relative rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
-                <Bell size={18} />
-                <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] grid place-items-center rounded-full bg-[var(--secondary-color)] text-white">3</span>
-              </button>
-              <button className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
-                <Settings size={18} />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Nueva solicitud", hint: "Permisos, licencias" },
-              { label: "Subir documento", hint: "PDF, DOCX, XLSX" },
-              { label: "Crear proyecto", hint: "Kanban, tareas" },
-              { label: "Soporte TI", hint: "Incidencias" },
-            ].map((a) => (
-              <button key={a.label} className="group flex items-center justify-between rounded-2xl bg-white border border-black/5 px-4 py-4 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300">
-                <div>
-                  <p className="text-sm text-black/60">{a.hint}</p>
-                  <p className="font-medium" style={{ color: "var(--primary-color)" }}>{a.label}</p>
+              <div className="flex items-center gap-2">
+                <div className="hidden md:flex items-center gap-2 bg-white rounded-xl border border-black/5 px-3 py-2 w-[280px] shadow-sm">
+                  <Search size={16} className="text-black/50" />
+                  <input className="w-full outline-none text-sm placeholder:text-black/40" placeholder="Buscar en Cintax…" />
                 </div>
-                <div className="rounded-full p-2 bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
-                  <ChevronRight size={18} />
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* KPIs */}
-          <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <KpiCard title="Colaboradores activos" value="312" helper="Últimos 30 días" icon={<Users />}/>
-            <KpiCard title="Documentos nuevos" value="128" helper="Esta semana" icon={<FileText />}/>
-            <KpiCard title="Proyectos en curso" value="17" helper="Área TI y Operaciones" icon={<FolderKanban />}/>
-            <KpiCard title="Tickets abiertos" value="9" helper="Soporte TI" icon={<LifeBuoy />}/>
-          </div>
-
-          {/* Content grid */}
-          <div className="mt-6 grid xl:grid-cols-3 gap-6">
-            {/* Table */}
-            <section className="xl:col-span-2 bg-white rounded-2xl border border-black/5 shadow-sm">
-              <header className="flex items-center justify-between px-4 py-4 border-b border-black/5">
-                <div>
-                  <h2 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>Tareas pendientes</h2>
-                  <p className="text-xs text-black/50">Lo más urgente para esta quincena</p>
-                </div>
-                <button className="text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition">
-                  Ver todas
+                <button className="relative rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
+                  <Bell size={18} />
+                  <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] grid place-items-center rounded-full bg-[var(--secondary-color)] text-white">3</span>
                 </button>
-              </header>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-black/50 text-xs">
-                      <th className="py-3 px-3 font-medium">ID</th>
-                      <th className="py-3 px-3 font-medium">Tarea</th>
-                      <th className="py-3 px-3 font-medium">Estado</th>
-                      <th className="py-3 px-3 font-medium text-right">Vence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {TASKS.map((t, i) => (
-                      <TaskRow key={t.title} idx={i + 1} title={t.title} owner={t.owner} status={t.status} due={t.due} />
-                    ))}
-                  </tbody>
-                </table>
+                <button className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
+                  <Settings size={18} />
+                </button>
               </div>
-            </section>
+            </div>
+          )}
 
-            {/* Activity & Announcements */}
-            <section className="space-y-6">
-              <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
-                <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>Actividad reciente</h2>
-                <div className="space-y-4">
-                  <ActivityItem title="María cargó “Política de Gastos v2.pdf”" time="Hoy, 11:20" icon={<FileText size={16} className="text-[var(--secondary-color)]" />} hint="Finanzas / Políticas" />
-                  <ActivityItem title="Equipo TI cerró ticket #2381" time="Ayer, 18:44" icon={<LifeBuoy size={16} className="text-[var(--secondary-color)]" />} hint="Incidente VPN – resuelto" />
-                  <ActivityItem title="Se creó el proyecto ‘Onboarding 2026’" time="Ayer, 09:02" icon={<FolderKanban size={16} className="text-[var(--secondary-color)]" />} hint="Personas / Capacitación" />
-                </div>
-              </div>
+          {/* RUTAS */}
+          <Routes>
+            {/* Login sin chrome */}
+            <Route path="/login" element={<LoginPage />} />
 
-              <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
-                <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>Anuncios</h2>
-                <div className="space-y-3">
-                  {ANNOUNCEMENTS.map((a) => (
-                    <div key={a.title} className="flex items-start justify-between gap-3 rounded-xl p-3 bg-[var(--tertiary-color)]">
-                      <div>
-                        <p className="font-medium" style={{ color: "var(--primary-color)" }}>{a.title}</p>
-                        <p className="text-sm text-black/60">{a.copy}</p>
-                      </div>
-                      <button className="text-sm text-[var(--secondary-color)] hover:underline shrink-0">{a.cta}</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          </div>
+            {/* App con chrome */}
+            <Route path="/home" element={<HomePage />} />
+            <Route path="/personas" element={<PrivateRoute element={<PersonasPage />} />} />
+            <Route path="/tickets" element={<TicketsPage />} />
+<Route path="/tickets/:cat" element={<TicketsPage />} />
+
+            {/* Redirecciones */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/inicio" element={<Navigate to="/home" replace />} />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
 
           {/* Footer */}
-          <footer className="mt-8 text-center text-xs text-black/50">
-            © {new Date().getFullYear()} Cintax — Intranet mockup
-          </footer>
+          {!hideChrome && (
+            <footer className="mt-8 text-center text-xs text-black/50">
+              © {new Date().getFullYear()} Cintax — Intranet mockup
+            </footer>
+          )}
         </main>
       </div>
     </div>

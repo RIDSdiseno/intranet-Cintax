@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Search, LifeBuoy, ChevronRight } from "lucide-react";
+import axios from "axios";
 
 type Categoria = "Contabilidad" | "Tributario" | "Entre otros";
 type Estado = "Abierto" | "En curso" | "Resuelto" | "Cerrado";
@@ -16,20 +17,56 @@ type Ticket = {
   fecha: string; // ISO o legible
 };
 
-// --- MOCK DATA ---
-const TICKETS: Ticket[] = [
-  { id: 2381, asunto: "Error en acceso VPN", solicitante: "María González", categoria: "Contabilidad", estado: "Resuelto", prioridad: "Media", fecha: "2025-11-08" },
-  { id: 2382, asunto: "Dudas sobre facturación noviembre", solicitante: "Luis Pérez", categoria: "Contabilidad", estado: "En curso", prioridad: "Alta", fecha: "2025-11-09" },
-  { id: 2383, asunto: "Ajuste declaración F29", solicitante: "Ana Torres", categoria: "Tributario", estado: "Abierto", prioridad: "Crítica", fecha: "2025-11-10" },
-  { id: 2384, asunto: "Permisos de carpeta informes", solicitante: "Equipo Operaciones", categoria: "Entre otros", estado: "Abierto", prioridad: "Baja", fecha: "2025-11-09" },
-  { id: 2385, asunto: "Carga XML a SII", solicitante: "Pedro Rojas", categoria: "Tributario", estado: "En curso", prioridad: "Alta", fecha: "2025-11-07" },
-  { id: 2386, asunto: "Reporte gastos v2", solicitante: "Finanzas", categoria: "Contabilidad", estado: "Cerrado", prioridad: "Media", fecha: "2025-11-01" },
-  { id: 2387, asunto: "Solicitud usuario nuevo", solicitante: "RR.HH.", categoria: "Entre otros", estado: "Resuelto", prioridad: "Baja", fecha: "2025-11-06" },
-];
+// Si quieres, puedes usar import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = "http://localhost:3000/api";
 
-const CATS: Array<"Todos" | Categoria> = ["Todos", "Contabilidad", "Tributario", "Entre otros"];
-const ESTADOS: Array<"Todos" | Estado> = ["Todos", "Abierto", "En curso", "Resuelto", "Cerrado"];
-const PRIORIDADES: Array<"Todas" | Prioridad> = ["Todas", "Baja", "Media", "Alta", "Crítica"];
+// Helpers para mapear desde la API (Prisma + Freshdesk)
+function mapCategoria(raw: string | null | undefined): Categoria {
+  const norm = (raw ?? "").toLowerCase();
+  if (norm === "contabilidad") return "Contabilidad";
+  if (norm === "tributario") return "Tributario";
+  return "Entre otros";
+}
+
+function mapEstado(raw: string | null | undefined): Estado {
+  const norm = (raw ?? "").toLowerCase();
+
+  if (norm.includes("open") || norm.includes("abierto")) return "Abierto";
+  if (norm.includes("pending") || norm.includes("curso")) return "En curso";
+  if (norm.includes("resolved") || norm.includes("resuelto")) return "Resuelto";
+  if (norm.includes("closed") || norm.includes("cerrado")) return "Cerrado";
+
+  return "Abierto";
+}
+
+function mapPrioridad(raw: number | null | undefined): Prioridad {
+  if (raw === 4) return "Crítica";
+  if (raw === 3) return "Alta";
+  if (raw === 2) return "Media";
+  if (raw === 1) return "Baja";
+  return "Media";
+}
+
+const CATS: Array<"Todos" | Categoria> = [
+  "Todos",
+  "Contabilidad",
+  "Tributario",
+  "Entre otros",
+];
+const ESTADOS: Array<"Todos" | Estado> = [
+  "Todos",
+  "Abierto",
+  "En curso",
+  "Resuelto",
+  "Cerrado",
+];
+const PRIORIDADES: Array<"Todas" | Prioridad> = [
+  "Todas",
+  "Baja",
+  "Media",
+  "Alta",
+  "Crítica",
+];
 
 export default function TicketsPage() {
   const params = useParams(); // { cat?: "contabilidad" | "tributario" | "otros" }
@@ -37,39 +74,126 @@ export default function TicketsPage() {
 
   // Sincroniza la categoría con la URL
   const catFromUrl: "Todos" | Categoria =
-    params.cat === "contabilidad" ? "Contabilidad" :
-    params.cat === "tributario" ? "Tributario" :
-    params.cat === "otros" ? "Entre otros" : "Todos";
+    params.cat === "contabilidad"
+      ? "Contabilidad"
+      : params.cat === "tributario"
+      ? "Tributario"
+      : params.cat === "otros"
+      ? "Entre otros"
+      : "Todos";
 
   const [categoria, setCategoria] = useState<"Todos" | Categoria>(catFromUrl);
   const [estado, setEstado] = useState<"Todos" | Estado>("Todos");
   const [prioridad, setPrioridad] = useState<"Todas" | Prioridad>("Todas");
   const [query, setQuery] = useState("");
 
+  // Estado para datos reales
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   // Cuando cambie la URL, actualiza el tab
-  useEffect(() => { setCategoria(catFromUrl); }, [catFromUrl]);
+  useEffect(() => {
+    setCategoria(catFromUrl);
+  }, [catFromUrl]);
+
+  // Fetch de tickets desde tu backend
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await axios.get(`${API_BASE_URL}/auth/getTickets/`, {
+        withCredentials: true,
+      });
+
+      const apiTickets = res.data.tickets as any[];
+
+      const mapped: Ticket[] = apiTickets.map((t) => ({
+        id: t.id_ticket,
+        asunto: t.subject ?? "Sin asunto",
+        solicitante: t.requesterEmail ?? "Sin correo",
+        categoria: mapCategoria(t.categoria),
+        estado: mapEstado(t.estado),
+        prioridad: mapPrioridad(t.prioridad),
+        fecha: t.createdAt ?? new Date().toISOString(),
+      }));
+
+      setTickets(mapped);
+    } catch (err: any) {
+      console.error(err);
+      setError(
+        err?.response?.data?.error ??
+          "Error al cargar tickets desde el servidor."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Al montar el componente, carga tickets
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  // Botón para sincronizar con Freshdesk y recargar lista
+  const handleSyncFreshdesk = async () => {
+    try {
+      setSyncing(true);
+      setError(null);
+      await axios.post(
+        `${API_BASE_URL}/auth/sync-freshdesk`,
+        { pages: 3 },
+        { withCredentials: true }
+      );
+      await fetchTickets();
+    } catch (err: any) {
+      console.error(err);
+      setError(
+        err?.response?.data?.error ??
+          "Error al sincronizar tickets con Freshdesk."
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Al cambiar el tab de categoría, actualiza la URL
   const setCategoriaAndUrl = (c: "Todos" | Categoria) => {
     setCategoria(c);
     if (c === "Todos") navigate("/tickets", { replace: true });
     else {
-      const slug = c === "Contabilidad" ? "contabilidad" : c === "Tributario" ? "tributario" : "otros";
+      const slug =
+        c === "Contabilidad"
+          ? "contabilidad"
+          : c === "Tributario"
+          ? "tributario"
+          : "otros";
       navigate(`/tickets/${slug}`, { replace: true });
     }
   };
 
   // Contadores por categoría
   const counts = useMemo(() => {
-    const base = { Todos: TICKETS.length, Contabilidad: 0, Tributario: 0, "Entre otros": 0 } as Record<"Todos" | Categoria, number>;
-    TICKETS.forEach(t => { base[t.categoria] += 1; });
-    return base;
-  }, []);
+    const base = {
+      Todos: tickets.length,
+      Contabilidad: 0,
+      Tributario: 0,
+      "Entre otros": 0,
+    } as Record<"Todos" | Categoria, number>;
 
-  // Filtrado principal
+    tickets.forEach((t) => {
+      base[t.categoria] += 1;
+    });
+
+    return base;
+  }, [tickets]);
+
+  // Filtrado principal en cliente (mantengo tu lógica)
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return TICKETS.filter(t => {
+    return tickets.filter((t) => {
       const okCat = categoria === "Todos" ? true : t.categoria === categoria;
       const okEst = estado === "Todos" ? true : t.estado === estado;
       const okPri = prioridad === "Todas" ? true : t.prioridad === prioridad;
@@ -80,31 +204,54 @@ export default function TicketsPage() {
         t.id.toString().includes(q);
       return okCat && okEst && okPri && okQ;
     });
-  }, [categoria, estado, prioridad, query]);
+  }, [tickets, categoria, estado, prioridad, query]);
 
   return (
     <div className="mt-6">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>
-            <span className="inline-flex items-center gap-2"><LifeBuoy size={18} /> Tickets</span>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: "var(--primary-color)" }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <LifeBuoy size={18} /> Tickets
+            </span>
           </h2>
-          <p className="text-sm text-black/60">Gestiona y filtra tickets por categoría, estado, prioridad y búsqueda.</p>
+          <p className="text-sm text-black/60">
+            Gestiona y filtra tickets por categoría, estado, prioridad y
+            búsqueda. Datos sincronizados desde Freshdesk.
+          </p>
+          {error && (
+            <p className="mt-1 text-xs text-rose-600">
+              ⚠️ {error}
+            </p>
+          )}
         </div>
 
-        <button
-          className="rounded-xl px-3 py-2 text-sm text-white shadow-sm"
-          style={{ background: "var(--secondary-color)" }}
-          onClick={() => alert("Acción: crear ticket (mock)")}
-        >
-          Crear ticket
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20"
+            onClick={handleSyncFreshdesk}
+            disabled={syncing || loading}
+          >
+            {syncing ? "Sincronizando…" : "Sincronizar Freshdesk"}
+          </button>
+
+          <button
+            className="rounded-xl px-3 py-2 text-sm text-white shadow-sm"
+            style={{ background: "var(--secondary-color)" }}
+            onClick={() => alert("Acción: crear ticket (pendiente integrar)")}
+          >
+            Crear ticket
+          </button>
+        </div>
       </div>
 
       {/* Tabs de categoría */}
       <div className="flex flex-wrap items-center gap-2">
-        {CATS.map(c => (
+        {CATS.map((c) => (
           <button
             key={c}
             onClick={() => setCategoriaAndUrl(c)}
@@ -114,7 +261,8 @@ export default function TicketsPage() {
                 : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
             }`}
           >
-            {c} <span className="ml-1 text-xs opacity-80">
+            {c}{" "}
+            <span className="ml-1 text-xs opacity-80">
               ({c === "Todos" ? counts.Todos : counts[c]})
             </span>
           </button>
@@ -138,7 +286,11 @@ export default function TicketsPage() {
           onChange={(e) => setEstado(e.target.value as any)}
           className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
         >
-          {ESTADOS.map(e => <option key={e} value={e}>{e === "Todos" ? "Todos los estados" : e}</option>)}
+          {ESTADOS.map((e) => (
+            <option key={e} value={e}>
+              {e === "Todos" ? "Todos los estados" : e}
+            </option>
+          ))}
         </select>
 
         <select
@@ -146,7 +298,11 @@ export default function TicketsPage() {
           onChange={(e) => setPrioridad(e.target.value as any)}
           className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
         >
-          {PRIORIDADES.map(p => <option key={p} value={p}>{p === "Todas" ? "Todas las prioridades" : p}</option>)}
+          {PRIORIDADES.map((p) => (
+            <option key={p} value={p}>
+              {p === "Todas" ? "Todas las prioridades" : p}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -166,62 +322,83 @@ export default function TicketsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {loading && (
+              <tr>
+                <td className="py-6 px-3 text-center text-black/50" colSpan={8}>
+                  Cargando tickets…
+                </td>
+              </tr>
+            )}
+
+            {!loading && filtered.length === 0 && (
               <tr>
                 <td className="py-8 px-3 text-center text-black/50" colSpan={8}>
                   No hay tickets con los filtros actuales.
                 </td>
               </tr>
             )}
-            {filtered.map((t) => (
-              <tr key={t.id} className="border-t">
-                <td className="py-3 px-3 text-black/70">#{t.id}</td>
-                <td className="py-3 px-3">
-                  <div className="font-medium" style={{ color: "var(--primary-color)" }}>{t.asunto}</div>
-                </td>
-                <td className="py-3 px-3 text-black/70">{t.solicitante}</td>
-                <td className="py-3 px-3">
-                  <span className="inline-block rounded-full px-2 py-0.5 text-xs bg-[var(--tertiary-color)]">
-                    {t.categoria}
-                  </span>
-                </td>
-                <td className="py-3 px-3">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                    t.estado === "Abierto"    ? "bg-amber-50 text-amber-700" :
-                    t.estado === "En curso"   ? "bg-sky-50 text-sky-700" :
-                    t.estado === "Resuelto"   ? "bg-emerald-50 text-emerald-700" :
-                                                 "bg-zinc-100 text-zinc-700"
-                  }`}>
-                    {t.estado}
-                  </span>
-                </td>
-                <td className="py-3 px-3">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                    t.prioridad === "Crítica" ? "bg-rose-50 text-rose-700" :
-                    t.prioridad === "Alta"    ? "bg-orange-50 text-orange-700" :
-                    t.prioridad === "Media"   ? "bg-amber-50 text-amber-700" :
-                                                "bg-zinc-100 text-zinc-700"
-                  }`}>
-                    {t.prioridad}
-                  </span>
-                </td>
-                <td className="py-3 px-3 text-black/70">
-                  {new Date(t.fecha).toLocaleDateString()}
-                </td>
-                <td className="py-3 px-3 text-right">
-                  <button className="inline-flex items-center gap-1 text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition">
-                    Ver <ChevronRight size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+
+            {!loading &&
+              filtered.map((t) => (
+                <tr key={t.id} className="border-t">
+                  <td className="py-3 px-3 text-black/70">#{t.id}</td>
+                  <td className="py-3 px-3">
+                    <div
+                      className="font-medium"
+                      style={{ color: "var(--primary-color)" }}
+                    >
+                      {t.asunto}
+                    </div>
+                  </td>
+                  <td className="py-3 px-3 text-black/70">{t.solicitante}</td>
+                  <td className="py-3 px-3">
+                    <span className="inline-block rounded-full px-2 py-0.5 text-xs bg-[var(--tertiary-color)]">
+                      {t.categoria}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                        t.estado === "Abierto"
+                          ? "bg-amber-50 text-amber-700"
+                          : t.estado === "En curso"
+                          ? "bg-sky-50 text-sky-700"
+                          : t.estado === "Resuelto"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-zinc-100 text-zinc-700"
+                      }`}
+                    >
+                      {t.estado}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                        t.prioridad === "Crítica"
+                          ? "bg-rose-50 text-rose-700"
+                          : t.prioridad === "Alta"
+                          ? "bg-orange-50 text-orange-700"
+                          : t.prioridad === "Media"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-zinc-100 text-zinc-700"
+                      }`}
+                    >
+                      {t.prioridad}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-black/70">
+                    {new Date(t.fecha).toLocaleDateString()}
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <button className="inline-flex items-center gap-1 text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition">
+                      Ver <ChevronRight size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
-
-      <p className="mt-3 text-xs text-black/50">
-        *Para datos reales, reemplaza <code>TICKETS</code> por tu fetch a la API y conserva esta lógica de filtros en el cliente.
-      </p>
     </div>
   );
 }

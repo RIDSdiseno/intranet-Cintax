@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 
 export default function LoginPage() {
-    const navigate = useNavigate();
-    
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -11,32 +14,113 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* =========================
+     LOGIN GOOGLE
+  ========================== */
+  useEffect(() => {
+    // cargar script de Google Identity
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      // @ts-ignore
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response: any) => {
+          const idToken = response.credential; // <- JWT de Google
+
+          try {
+            setLoading(true);
+            setError(null);
+
+            const res = await axios.post(
+              "http://localhost:3000/api/auth/google",
+              { idToken, remember },
+              { withCredentials: true } // para la cookie rt
+            );
+
+            const accessToken = res.data.accessToken as string;
+
+            if (remember) {
+              localStorage.setItem("access_token", accessToken);
+            } else {
+              sessionStorage.setItem("access_token", accessToken);
+            }
+
+            navigate("/home", { replace: true });
+          } catch (err: any) {
+            console.error(err);
+            const msg =
+              err?.response?.data?.error ??
+              "Error al iniciar sesión con Google.";
+            setError(msg);
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
+
+      // @ts-ignore
+      google.accounts.id.renderButton(
+        document.getElementById("google-btn"),
+        {
+          theme: "outline",
+          size: "large",
+          shape: "pill",
+          width: 320,
+        }
+      );
+    };
+
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, [remember, navigate]);
+
+  /* =========================
+     LOGIN EMAIL + PASSWORD
+  ========================== */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    try {
-      // Simulación de login OK (acepta cualquier cuenta)
-      await new Promise((r) => setTimeout(r, 500));
 
-      const token = "demo-token";
+    try {
+      const res = await axios.post(
+        "http://localhost:3000/api/auth/login",
+        { email, password, remember },
+        { withCredentials: true }
+      );
+
+      const accessToken = res.data.accessToken as string;
+
       if (remember) {
-        localStorage.setItem("auth_token", token);
+        localStorage.setItem("access_token", accessToken);
       } else {
-        sessionStorage.setItem("auth_token", token);
+        sessionStorage.setItem("access_token", accessToken);
       }
 
       navigate("/home", { replace: true });
-    } catch {
-      setError("Credenciales inválidas. Intenta nuevamente.");
+    } catch (err: any) {
+      console.error(err);
+      const msg =
+        err?.response?.data?.error ??
+        "Credenciales inválidas. Intenta nuevamente.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--tertiary-color)" }}>
-      {/* Brand tokens por si esta página se monta sola */}
+    <div
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: "var(--tertiary-color)" }}
+    >
+      {/* Brand tokens */}
       <style>{`
         :root{ 
           --primary-font: "Loew", sans-serif; 
@@ -66,18 +150,31 @@ export default function LoginPage() {
             alt="Cintax"
             className="h-10 w-auto"
           />
-          <h1 className="text-2xl font-semibold" style={{ color: "var(--primary-color)" }}>Iniciar sesión</h1>
-          <p className="text-sm text-black/60 text-center max-w-sm">Bienvenido(a) a la intranet de Cintax. Ingresa tus credenciales corporativas.</p>
+          <h1
+            className="text-2xl font-semibold"
+            style={{ color: "var(--primary-color)" }}
+          >
+            Iniciar sesión
+          </h1>
+          <p className="text-sm text-black/60 text-center max-w-sm">
+            Bienvenido(a) a la intranet de Cintax. Ingresa tus credenciales o
+            utiliza tu cuenta de Google corporativa.
+          </p>
         </div>
 
-        <form onSubmit={onSubmit} className="rounded-2xl bg-white p-5 md:p-6 shadow-sm border border-black/5">
+        <form
+          onSubmit={onSubmit}
+          className="rounded-2xl bg-white p-5 md:p-6 shadow-sm border border-black/5"
+        >
           {error && (
             <div className="mb-4 rounded-lg bg-rose-50 text-rose-700 text-sm px-3 py-2 border border-rose-200">
               {error}
             </div>
           )}
 
-          <label className="block text-sm font-medium text-black/70">Correo</label>
+          <label className="block text-sm font-medium text-black/70">
+            Correo
+          </label>
           <input
             type="email"
             required
@@ -88,7 +185,9 @@ export default function LoginPage() {
           />
 
           <div className="mt-4">
-            <label className="block text-sm font-medium text-black/70">Contraseña</label>
+            <label className="block text-sm font-medium text-black/70">
+              Contraseña
+            </label>
             <div className="mt-1 flex items-stretch gap-2">
               <input
                 type={showPwd ? "text" : "password"}
@@ -100,7 +199,7 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowPwd(v => !v)}
+                onClick={() => setShowPwd((v) => !v)}
                 className="rounded-xl border border-black/10 px-3 text-sm text-black/70 hover:bg-black/5"
                 aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
               >
@@ -119,7 +218,13 @@ export default function LoginPage() {
               />
               Recordarme
             </label>
-            <a href="#" className="text-sm" style={{ color: "var(--secondary-color)" }}>¿Olvidaste tu contraseña?</a>
+            <a
+              href="#"
+              className="text-sm"
+              style={{ color: "var(--secondary-color)" }}
+            >
+              ¿Olvidaste tu contraseña?
+            </a>
           </div>
 
           <button
@@ -130,6 +235,16 @@ export default function LoginPage() {
           >
             {loading ? "Ingresando…" : "Ingresar"}
           </button>
+
+          {/* separador */}
+          <div className="my-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-black/10" />
+            <span className="text-xs text-black/50">o</span>
+            <div className="h-px flex-1 bg-black/10" />
+          </div>
+
+          {/* botón de Google (se renderiza dentro) */}
+          <div id="google-btn" className="flex justify-center" />
 
           <p className="mt-4 text-center text-xs text-black/50">
             © {new Date().getFullYear()} Cintax. Todos los derechos reservados.

@@ -4,8 +4,14 @@ import { Search, LifeBuoy, ChevronRight } from "lucide-react";
 import axios from "axios";
 
 type Categoria = "Contabilidad" | "Tributario" | "Entre otros";
-type Estado = "Abierto" | "En curso" | "Resuelto" | "Cerrado";
-type Prioridad = "Baja" | "Media" | "Alta" | "Crítica";
+type Estado =
+  | "Abierto"
+  | "Pendiente"
+  | "Resuelto"
+  | "Cerrado"
+  | "Pendiente de cliente"
+  | "Pendiente de tercero";
+type Prioridad = "Baja" | "Media" | "Alta" | "Urgente";
 
 type Ticket = {
   id: number;
@@ -28,23 +34,51 @@ function mapCategoria(raw: string | null | undefined): Categoria {
   return "Entre otros";
 }
 
-function mapEstado(raw: string | null | undefined): Estado {
-  const norm = (raw ?? "").toLowerCase();
+function mapEstado(raw: string | number | null | undefined): Estado {
+  const num = typeof raw === "number" ? raw : Number(raw);
 
-  if (norm.includes("open") || norm.includes("abierto")) return "Abierto";
-  if (norm.includes("pending") || norm.includes("curso")) return "En curso";
-  if (norm.includes("resolved") || norm.includes("resuelto")) return "Resuelto";
-  if (norm.includes("closed") || norm.includes("cerrado")) return "Cerrado";
-
-  return "Abierto";
+  switch (num) {
+    case 3:
+      return "Pendiente";
+    case 4:
+      return "Resuelto";
+    case 5:
+      return "Cerrado";
+    case 6:
+      return "Pendiente de cliente";
+    case 7:
+      return "Pendiente de tercero";
+    case 2:
+    default:
+      return "Abierto";
+  }
 }
 
 function mapPrioridad(raw: number | null | undefined): Prioridad {
-  if (raw === 4) return "Crítica";
+  if (raw === 4) return "Urgente";
   if (raw === 3) return "Alta";
   if (raw === 2) return "Media";
   if (raw === 1) return "Baja";
   return "Media";
+}
+
+// Clase de color según estado (para evitar comparar con "En curso")
+function getEstadoClasses(e: Estado): string {
+  switch (e) {
+    case "Abierto":
+      return "bg-amber-50 text-amber-700";
+    case "Pendiente":
+      return "bg-sky-50 text-sky-700"; // general pendiente
+    case "Pendiente de cliente":
+      return "bg-sky-50 text-sky-700"; // puedes cambiar el color si quieres
+    case "Pendiente de tercero":
+      return "bg-sky-50 text-sky-700"; // idem
+    case "Resuelto":
+      return "bg-emerald-50 text-emerald-700";
+    case "Cerrado":
+    default:
+      return "bg-zinc-100 text-zinc-700";
+  }
 }
 
 const CATS: Array<"Todos" | Categoria> = [
@@ -53,19 +87,23 @@ const CATS: Array<"Todos" | Categoria> = [
   "Tributario",
   "Entre otros",
 ];
+
 const ESTADOS: Array<"Todos" | Estado> = [
   "Todos",
   "Abierto",
-  "En curso",
+  "Pendiente",
+  "Pendiente de cliente",
+  "Pendiente de tercero",
   "Resuelto",
   "Cerrado",
 ];
+
 const PRIORIDADES: Array<"Todas" | Prioridad> = [
   "Todas",
   "Baja",
   "Media",
   "Alta",
-  "Crítica",
+  "Urgente",
 ];
 
 export default function TicketsPage() {
@@ -98,14 +136,32 @@ export default function TicketsPage() {
     setCategoria(catFromUrl);
   }, [catFromUrl]);
 
+  function getAccessToken() {
+    return (
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token")
+    );
+  }
+
   // Fetch de tickets desde tu backend
   const fetchTickets = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const res = await axios.get(`${API_BASE_URL}/auth/getTickets/`, {
+      const token = getAccessToken();
+      if (!token) {
+        setError("No autenticado (falta token)");
+        setTickets([]);
+        setLoading(false);
+        return;
+      }
+
+      const res = await axios.get(`${API_BASE_URL}/auth/getTickets`, {
         withCredentials: true,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       const apiTickets = res.data.tickets as any[];
@@ -135,6 +191,7 @@ export default function TicketsPage() {
   // Al montar el componente, carga tickets
   useEffect(() => {
     fetchTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Botón para sincronizar con Freshdesk y recargar lista
@@ -142,10 +199,23 @@ export default function TicketsPage() {
     try {
       setSyncing(true);
       setError(null);
+
+      const token = getAccessToken();
+      if (!token) {
+        setError("No autenticado (falta token)");
+        setSyncing(false);
+        return;
+      }
+
       await axios.post(
         `${API_BASE_URL}/auth/sync-freshdesk`,
         { pages: 3 },
-        { withCredentials: true }
+        {
+          withCredentials: true,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
       await fetchTickets();
     } catch (err: any) {
@@ -190,7 +260,7 @@ export default function TicketsPage() {
     return base;
   }, [tickets]);
 
-  // Filtrado principal en cliente (mantengo tu lógica)
+  // Filtrado principal en cliente
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tickets.filter((t) => {
@@ -224,9 +294,7 @@ export default function TicketsPage() {
             búsqueda. Datos sincronizados desde Freshdesk.
           </p>
           {error && (
-            <p className="mt-1 text-xs text-rose-600">
-              ⚠️ {error}
-            </p>
+            <p className="mt-1 text-xs text-rose-600">⚠️ {error}</p>
           )}
         </div>
 
@@ -324,7 +392,10 @@ export default function TicketsPage() {
           <tbody>
             {loading && (
               <tr>
-                <td className="py-6 px-3 text-center text-black/50" colSpan={8}>
+                <td
+                  className="py-6 px-3 text-center text-black/50"
+                  colSpan={8}
+                >
                   Cargando tickets…
                 </td>
               </tr>
@@ -332,7 +403,10 @@ export default function TicketsPage() {
 
             {!loading && filtered.length === 0 && (
               <tr>
-                <td className="py-8 px-3 text-center text-black/50" colSpan={8}>
+                <td
+                  className="py-8 px-3 text-center text-black/50"
+                  colSpan={8}
+                >
                   No hay tickets con los filtros actuales.
                 </td>
               </tr>
@@ -350,7 +424,9 @@ export default function TicketsPage() {
                       {t.asunto}
                     </div>
                   </td>
-                  <td className="py-3 px-3 text-black/70">{t.solicitante}</td>
+                  <td className="py-3 px-3 text-black/70">
+                    {t.solicitante}
+                  </td>
                   <td className="py-3 px-3">
                     <span className="inline-block rounded-full px-2 py-0.5 text-xs bg-[var(--tertiary-color)]">
                       {t.categoria}
@@ -358,15 +434,9 @@ export default function TicketsPage() {
                   </td>
                   <td className="py-3 px-3">
                     <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                        t.estado === "Abierto"
-                          ? "bg-amber-50 text-amber-700"
-                          : t.estado === "En curso"
-                          ? "bg-sky-50 text-sky-700"
-                          : t.estado === "Resuelto"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-zinc-100 text-zinc-700"
-                      }`}
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs ${getEstadoClasses(
+                        t.estado
+                      )}`}
                     >
                       {t.estado}
                     </span>
@@ -374,7 +444,7 @@ export default function TicketsPage() {
                   <td className="py-3 px-3">
                     <span
                       className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                        t.prioridad === "Crítica"
+                        t.prioridad === "Urgente"
                           ? "bg-rose-50 text-rose-700"
                           : t.prioridad === "Alta"
                           ? "bg-orange-50 text-orange-700"

@@ -474,110 +474,166 @@ export default function CintaxIntranetMockup() {
         }
       >
         {/* Sidebar */}
-        {!hideChrome && (
-          <aside className="bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 px-3">
-              <img
-                src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
-                alt="Cintax"
-                className="h-8 w-auto"
-              />
-            </div>
+{!hideChrome && (
+  <aside className="bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4">
+    <div className="flex items-center gap-2 px-3">
+      <img
+        src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
+        alt="Cintax"
+        className="h-8 w-auto"
+      />
+    </div>
 
-            {/* NAV */}
-            <nav className="mt-2 space-y-1">
-              <NavLink
-                to="/home"
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                    isActive
-                      ? "bg-white text-[var(--primary-color)] shadow-sm"
-                      : "text-white/80 hover:text-white hover:bg-white/10"
-                  }`
-                }
-              >
-                <span className="shrink-0">
-                  <Home size={18} />
-                </span>
-                <span className="truncate text-left">Inicio</span>
-              </NavLink>
+    {/* NAV */}
+    <nav className="mt-2 space-y-1">
+      {/* Inicio */}
+      <NavLink
+        to="/home"
+        className={({ isActive }) =>
+          `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+            isActive
+              ? "bg-white text-[var(--primary-color)] shadow-sm"
+              : "text-white/80 hover:text-white hover:bg-white/10"
+          }`
+        }
+      >
+        <span className="shrink-0">
+          <Home size={18} />
+        </span>
+        <span className="truncate text-left">Inicio</span>
+      </NavLink>
 
-              <NavLink
-                to="/personas"
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                    isActive
-                      ? "bg-white text-[var(--primary-color)] shadow-sm"
-                      : "text-white/80 hover:text-white hover:bg-white/10"
-                  }`
-                }
-              >
-                <span className="shrink-0">
-                  <Users size={18} />
-                </span>
-                <span className="truncate text-left">Personas</span>
-              </NavLink>
+      {/* Personas */}
+      <NavLink
+        to="/personas"
+        className={({ isActive }) =>
+          `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+            isActive
+              ? "bg-white text-[var(--primary-color)] shadow-sm"
+              : "text-white/80 hover:text-white hover:bg-white/10"
+          }`
+        }
+      >
+        <span className="shrink-0">
+          <Users size={18} />
+        </span>
+        <span className="truncate text-left">Personas</span>
+      </NavLink>
 
-              {/* Tickets */}
-              <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
-                Tickets
-              </div>
-              <div className="pl-3 flex flex-col gap-1">
-                <NavLink
-                  to="/tickets/contabilidad"
-                  className={({ isActive }) =>
-                    `text-sm px-3 py-2 rounded-lg ${
-                      isActive
-                        ? "text-white bg-white/10"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`
-                  }
-                >
-                  Contabilidad
-                </NavLink>
+      {/* Tickets */}
+      <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
+        Tickets
+      </div>
+      <div className="pl-3 flex flex-col gap-1">
+        {/* Todos los tickets */}
+        <NavLink
+  to="/tickets"
+  end
+  className={({ isActive }) =>
+    `text-sm px-3 py-2 rounded-lg ${
+      isActive
+        ? "text-white bg-white/10"
+        : "text-white/80 hover:text-white hover:bg-white/10"
+    }`
+  }
+>
+  Todos
+</NavLink>
 
-                <NavLink
-                  to="/tickets/tributario"
-                  className={({ isActive }) =>
-                    `text-sm px-3 py-2 rounded-lg ${
-                      isActive
-                        ? "text-white bg-white/10"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`
-                  }
-                >
-                  Tributario
-                </NavLink>
 
-                <NavLink
-                  to="/tickets/otros"
-                  className={({ isActive }) =>
-                    `text-sm px-3 py-2 rounded-lg ${
-                      isActive
-                        ? "text-white bg-white/10"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`
-                  }
-                >
-                  Entre otros
-                </NavLink>
-              </div>
+        <NavLink
+          to="/tickets/contabilidad"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Contabilidad
+        </NavLink>
 
-              <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
-              
-            </nav>
+        <NavLink
+          to="/tickets/tributario"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Tributario
+        </NavLink>
 
-            <div className="mt-auto border-t border-white/10 pt-4">
-              <button
-      onClick={handleLogout}
-      className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
-    >
-      Cerrar sesión
-    </button>
-            </div>
-            
-          </aside>
-        )}
+        {/* NUEVAS CATEGORÍAS */}
+        <NavLink
+          to="/tickets/administracion"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Administración
+        </NavLink>
+
+        <NavLink
+          to="/tickets/marketing"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Marketing y Comercial
+        </NavLink>
+
+        <NavLink
+          to="/tickets/rrhh"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Recursos Humanos
+        </NavLink>
+
+        <NavLink
+          to="/tickets/otros"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+        >
+          Entre otros
+        </NavLink>
+      </div>
+
+      <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+    </nav>
+
+    <div className="mt-auto border-t border-white/10 pt-4">
+      <button
+        onClick={handleLogout}
+        className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
+      >
+        Cerrar sesión
+      </button>
+    </div>
+  </aside>
+)}
 
         {/* Main */}
         <main className={hideChrome ? "p-0" : "p-5 lg:p-8"}>

@@ -3,7 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Search, LifeBuoy, ChevronRight } from "lucide-react";
 import axios from "axios";
 
-type Categoria = "Contabilidad" | "Tributario" | "Entre otros";
+type Categoria =
+  | "Contabilidad"
+  | "Tributario"
+  | "Administración"
+  | "Marketing y Comercial"
+  | "Recursos Humanos"
+  | "Entre otros";
+
 type Estado =
   | "Abierto"
   | "Pendiente"
@@ -11,6 +18,7 @@ type Estado =
   | "Cerrado"
   | "Pendiente de cliente"
   | "Pendiente de tercero";
+
 type Prioridad = "Baja" | "Media" | "Alta" | "Urgente";
 
 type Ticket = {
@@ -24,13 +32,30 @@ type Ticket = {
 };
 
 // Si quieres, puedes usar import.meta.env.VITE_API_BASE_URL
-const API_BASE_URL = "http://localhost:3000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 
 // Helpers para mapear desde la API (Prisma + Freshdesk)
 function mapCategoria(raw: string | null | undefined): Categoria {
   const norm = (raw ?? "").toLowerCase();
+
   if (norm === "contabilidad") return "Contabilidad";
   if (norm === "tributario") return "Tributario";
+
+  // Nuevas categorías
+  if (norm === "administracion" || norm === "administración") {
+    return "Administración";
+  }
+  if (
+    norm === "marketing" ||
+    norm === "marketing y comercial" ||
+    norm === "marketing_comercial"
+  ) {
+    return "Marketing y Comercial";
+  }
+  if (norm === "rrhh" || norm === "recursos humanos") {
+    return "Recursos Humanos";
+  }
+
   return "Entre otros";
 }
 
@@ -62,17 +87,15 @@ function mapPrioridad(raw: number | null | undefined): Prioridad {
   return "Media";
 }
 
-// Clase de color según estado (para evitar comparar con "En curso")
+// Clase de color según estado
 function getEstadoClasses(e: Estado): string {
   switch (e) {
     case "Abierto":
       return "bg-amber-50 text-amber-700";
     case "Pendiente":
-      return "bg-sky-50 text-sky-700"; // general pendiente
     case "Pendiente de cliente":
-      return "bg-sky-50 text-sky-700"; // puedes cambiar el color si quieres
     case "Pendiente de tercero":
-      return "bg-sky-50 text-sky-700"; // idem
+      return "bg-sky-50 text-sky-700";
     case "Resuelto":
       return "bg-emerald-50 text-emerald-700";
     case "Cerrado":
@@ -85,6 +108,9 @@ const CATS: Array<"Todos" | Categoria> = [
   "Todos",
   "Contabilidad",
   "Tributario",
+  "Administración",
+  "Marketing y Comercial",
+  "Recursos Humanos",
   "Entre otros",
 ];
 
@@ -107,7 +133,7 @@ const PRIORIDADES: Array<"Todas" | Prioridad> = [
 ];
 
 export default function TicketsPage() {
-  const params = useParams(); // { cat?: "contabilidad" | "tributario" | "otros" }
+  const params = useParams(); // { cat?: "contabilidad" | "tributario" | "administracion" | "marketing" | "rrhh" | "otros" }
   const navigate = useNavigate();
 
   // Sincroniza la categoría con la URL
@@ -116,6 +142,12 @@ export default function TicketsPage() {
       ? "Contabilidad"
       : params.cat === "tributario"
       ? "Tributario"
+      : params.cat === "administracion"
+      ? "Administración"
+      : params.cat === "marketing"
+      ? "Marketing y Comercial"
+      : params.cat === "rrhh"
+      ? "Recursos Humanos"
       : params.cat === "otros"
       ? "Entre otros"
       : "Todos";
@@ -130,6 +162,15 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Paginación
+  const [pageSize, setPageSize] = useState(10); // 10 por defecto
+  const [page, setPage] = useState(1);
+
+  // Resetear página cuando cambian filtros o búsqueda
+  useEffect(() => {
+    setPage(1);
+  }, [categoria, estado, prioridad, query]);
 
   // Cuando cambie la URL, actualiza el tab
   useEffect(() => {
@@ -188,12 +229,6 @@ export default function TicketsPage() {
     }
   };
 
-  // Al montar el componente, carga tickets
-  useEffect(() => {
-    fetchTickets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Botón para sincronizar con Freshdesk y recargar lista
   const handleSyncFreshdesk = async () => {
     try {
@@ -229,6 +264,18 @@ export default function TicketsPage() {
     }
   };
 
+  // Sincronizar al entrar + cada 5 minutos
+  useEffect(() => {
+    handleSyncFreshdesk(); // primera vez
+
+    const id = setInterval(() => {
+      handleSyncFreshdesk();
+    }, 5 * 60 * 1000); // cada 5 minutos
+
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Al cambiar el tab de categoría, actualiza la URL
   const setCategoriaAndUrl = (c: "Todos" | Categoria) => {
     setCategoria(c);
@@ -239,6 +286,12 @@ export default function TicketsPage() {
           ? "contabilidad"
           : c === "Tributario"
           ? "tributario"
+          : c === "Administración"
+          ? "administracion"
+          : c === "Marketing y Comercial"
+          ? "marketing"
+          : c === "Recursos Humanos"
+          ? "rrhh"
           : "otros";
       navigate(`/tickets/${slug}`, { replace: true });
     }
@@ -246,12 +299,15 @@ export default function TicketsPage() {
 
   // Contadores por categoría
   const counts = useMemo(() => {
-    const base = {
+    const base: Record<"Todos" | Categoria, number> = {
       Todos: tickets.length,
       Contabilidad: 0,
       Tributario: 0,
+      Administración: 0,
+      "Marketing y Comercial": 0,
+      "Recursos Humanos": 0,
       "Entre otros": 0,
-    } as Record<"Todos" | Categoria, number>;
+    };
 
     tickets.forEach((t) => {
       base[t.categoria] += 1;
@@ -275,6 +331,13 @@ export default function TicketsPage() {
       return okCat && okEst && okPri && okQ;
     });
   }, [tickets, categoria, estado, prioridad, query]);
+
+  // Paginación en memoria
+  const total = filtered.length;
+  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const pagedTickets = filtered.slice(startIndex, endIndex);
 
   return (
     <div className="mt-6">
@@ -393,15 +456,15 @@ export default function TicketsPage() {
             {loading && (
               <tr>
                 <td
-                  className="py-6 px-3 text-center text-black/50"
                   colSpan={8}
+                  className="py-6 px-3 text-center text-black/50"
                 >
-                  Cargando tickets…
+                  Cargando tickets desde Freshdesk…
                 </td>
               </tr>
             )}
 
-            {!loading && filtered.length === 0 && (
+            {!loading && total === 0 && (
               <tr>
                 <td
                   className="py-8 px-3 text-center text-black/50"
@@ -413,7 +476,7 @@ export default function TicketsPage() {
             )}
 
             {!loading &&
-              filtered.map((t) => (
+              pagedTickets.map((t) => (
                 <tr key={t.id} className="border-t">
                   <td className="py-3 px-3 text-black/70">#{t.id}</td>
                   <td className="py-3 px-3">
@@ -468,6 +531,58 @@ export default function TicketsPage() {
               ))}
           </tbody>
         </table>
+
+        {/* Footer de paginación */}
+        {!loading && total > 0 && (
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-black/5 text-xs text-black/60">
+            <span>
+              Mostrando{" "}
+              <strong>
+                {startIndex + 1}–{Math.min(endIndex, total)}
+              </strong>{" "}
+              de <strong>{total}</strong> tickets
+            </span>
+
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1">
+                <span>Por página:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="border border-black/10 rounded-lg px-2 py-1 bg-white"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 rounded-lg border border-black/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span>
+                  Página <strong>{page}</strong> de{" "}
+                  <strong>{totalPages}</strong>
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages || total === 0}
+                  className="px-2 py-1 rounded-lg border border-black/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

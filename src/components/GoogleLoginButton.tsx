@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import axios from "axios";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 
 export default function GoogleLoginButton() {
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function GoogleLoginButton() {
 
           // Mandar al backend
           const res = await axios.post(
-            "http://localhost:3000/api/auth/google",
+            `${API_BASE_URL}/auth/google`,
             { idToken, remember: true },
             { withCredentials: true } // para que guarde la cookie rt
           );

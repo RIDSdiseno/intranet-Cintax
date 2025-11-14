@@ -17,6 +17,7 @@ export default function LoginPage() {
   /* =========================
      LOGIN GOOGLE
   ========================== */
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
   useEffect(() => {
     // cargar script de Google Identity
     const script = document.createElement("script");
@@ -36,7 +37,7 @@ export default function LoginPage() {
             setError(null);
 
             const res = await axios.post(
-              "http://localhost:3000/api/auth/google",
+              `${API_BASE_URL}/auth/google`,
               { idToken, remember },
               { withCredentials: true } // para la cookie rt
             );
@@ -90,7 +91,7 @@ export default function LoginPage() {
 
     try {
       const res = await axios.post(
-        "http://localhost:3000/api/auth/login",
+        `${API_BASE_URL}/auth/login`,
         { email, password, remember },
         { withCredentials: true }
       );

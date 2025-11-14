@@ -35,6 +35,7 @@ import TicketsPage from "./pages/ticketsPage";
  */
 
 // --- Helper chips ---
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 const Chip: React.FC<{
   children: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "danger";
@@ -421,7 +422,7 @@ export default function CintaxIntranetMockup() {
   const handleLogout = async () => {
     try {
       await axios.post(
-        "http://localhost:3000/api/auth/logout",
+        `${API_BASE_URL}/auth/logout`,
         {},
         { withCredentials: true }
       );

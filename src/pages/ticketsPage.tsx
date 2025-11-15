@@ -208,7 +208,7 @@ export default function TicketsPage() {
       const apiTickets = res.data.tickets as any[];
 
       const mapped: Ticket[] = apiTickets.map((t) => ({
-        id: t.id_ticket,
+        id: t.freshdeskId,
         asunto: t.subject ?? "Sin asunto",
         solicitante: t.requesterEmail ?? "Sin correo",
         categoria: mapCategoria(t.categoria),

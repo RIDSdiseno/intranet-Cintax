@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  Folder,
 } from "lucide-react";
 import {
   Routes,
@@ -25,6 +26,7 @@ import axios from "axios";
 import LoginPage from "./pages/login_page";
 import PersonasPage from "./pages/personasPage";
 import TicketsPage from "./pages/ticketsPage";
+import DrivePage from "./pages/DrivePage";
 
 /**
  * Cintax Intranet Mockup (single-file TSX)
@@ -506,7 +508,7 @@ export default function CintaxIntranetMockup() {
 
       {/* Personas */}
       <NavLink
-        to="/personas"
+        to="/drive"
         className={({ isActive }) =>
           `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
             isActive
@@ -516,9 +518,9 @@ export default function CintaxIntranetMockup() {
         }
       >
         <span className="shrink-0">
-          <Users size={18} />
+          <Folder size={18}/>
         </span>
-        <span className="truncate text-left">Personas</span>
+        <span className="truncate text-left">Drive</span>
       </NavLink>
 
       {/* Tickets */}
@@ -680,10 +682,7 @@ export default function CintaxIntranetMockup() {
 
             {/* App con chrome (protegidas) */}
             <Route path="/home" element={<PrivateRoute element={<HomePage />} />} />
-            <Route
-              path="/personas"
-              element={<PrivateRoute element={<PersonasPage />} />}
-            />
+            <Route path="/drive" element={<DrivePage />} />
             <Route
               path="/tickets"
               element={<PrivateRoute element={<TicketsPage />} />}

@@ -520,7 +520,7 @@ export default function CintaxIntranetMockup() {
         <span className="shrink-0">
           <Folder size={18}/>
         </span>
-        <span className="truncate text-left">Drive</span>
+        <span className="truncate text-left">Google Drive</span>
       </NavLink>
 
       {/* Tickets */}

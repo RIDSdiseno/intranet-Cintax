@@ -118,8 +118,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-6"
-      style={{ background: "var(--tertiary-color)" }}
+      className="min-h-screen flex items-center justify-center p-6 bg-[url(/img/bg-login.webp)] bg-cover bg-center"
     >
       {/* Brand tokens */}
       <style>{`
@@ -146,17 +145,7 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <img
-            src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
-            alt="Cintax"
-            className="h-10 w-auto"
-          />
-          <h1
-            className="text-2xl font-semibold"
-            style={{ color: "var(--primary-color)" }}
-          >
-            Iniciar sesión
-          </h1>
+
           <p className="text-sm text-black/60 text-center max-w-sm">
             Bienvenido(a) a la intranet de Cintax. Ingresa tus credenciales o
             utiliza tu cuenta de Google corporativa.
@@ -165,15 +154,26 @@ export default function LoginPage() {
 
         <form
           onSubmit={onSubmit}
-          className="rounded-2xl bg-white p-5 md:p-6 shadow-sm border border-black/5"
+          className="rounded-2xl bg-white p-4 md:p-6 shadow-md border border-black/5"
         >
           {error && (
             <div className="mb-4 rounded-lg bg-rose-50 text-rose-700 text-sm px-3 py-2 border border-rose-200">
               {error}
             </div>
           )}
-
-          <label className="block text-sm font-medium text-black/70">
+          <img
+            src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
+            alt="Cintax"
+            className="h-12 w-auto py-2 px-4 rounded-md mx-auto mb-4"
+            style={{ background: "var(--primary-color)" }}
+          />
+          <h1
+            className="text-2xl font-semibold mb-4 text-center"
+            style={{ color: "var(--primary-color)" }}
+          >
+            Iniciar sesión
+          </h1>
+          <label className="block text-sm font-semibold text-black/70">
             Correo
           </label>
           <input
@@ -182,11 +182,11 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="nombre@cintax.cl"
-            className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none focus:border-black/20 text-[var(--primary-color)]"
+            className="mt-1 w-full rounded-xl border border-black/20 bg-white px-3 py-2 outline-none focus:border-black/40 text-[var(--primary-color)]"
           />
 
           <div className="mt-4">
-            <label className="block text-sm font-medium text-black/70">
+            <label className="block text-sm font-semibold text-black/70">
               Contraseña
             </label>
             <div className="mt-1 flex items-stretch gap-2">
@@ -195,13 +195,13 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none focus:border-black/20 text-[var(--primary-color)]"
+                className="w-full rounded-xl border border-black/20 bg-white px-3 py-2 outline-none focus:border-black/40 text-[var(--primary-color)]"
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPwd((v) => !v)}
-                className="rounded-xl border border-black/10 px-3 text-sm text-black/70 hover:bg-black/5"
+                className="rounded-xl border border-black/20 px-3 text-sm text-black/70 hover:bg-black/5"
                 aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
               >
                 {showPwd ? "Ocultar" : "Ver"}
@@ -221,7 +221,7 @@ export default function LoginPage() {
             </label>
             <a
               href="#"
-              className="text-sm"
+              className="text-sm underline"
               style={{ color: "var(--secondary-color)" }}
             >
               ¿Olvidaste tu contraseña?
@@ -231,7 +231,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 w-full rounded-xl px-4 py-2 font-medium text-white shadow-sm transition disabled:opacity-60"
+            className="mt-6 w-full rounded-xl px-4 py-2 font-medium text-white active:scale-95 disabled:opacity-60"
             style={{ background: "var(--secondary-color)" }}
           >
             {loading ? "Ingresando…" : "Ingresar"}

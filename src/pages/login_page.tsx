@@ -118,7 +118,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-6 bg-[url(/img/bg-login.webp)] bg-cover bg-center"
+      className="min-h-screen flex items-center justify-center p-6 bg-[url(/img/bg-login.webp)]  bg-cover bg-center"
     >
       {/* Brand tokens */}
       <style>{`
@@ -146,7 +146,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3">
 
-          <p className="text-sm text-black/60 text-center max-w-sm">
+          <p className="text-sm text-white/80 text-center max-w-sm">
             Bienvenido(a) a la intranet de Cintax. Ingresa tus credenciales o
             utiliza tu cuenta de Google corporativa.
           </p>

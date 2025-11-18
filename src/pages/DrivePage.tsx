@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
   Loader2,
   ExternalLink,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 
 type DriveFolder = {
@@ -96,11 +97,13 @@ export default function DrivePage() {
   );
 
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [files, setFiles] = useState<DriveFile[]>([]);
 
   const [connecting, setConnecting] = useState(false);
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // pila de carpetas abiertas para breadcrumb: CINTAX / año / CONTA / A01 / ...
   const [folderPath, setFolderPath] = useState<{ id: string; name: string }[]>(
@@ -225,6 +228,51 @@ export default function DrivePage() {
     setFolderPath((prev) => prev.slice(0, index + 1));
     await fetchFiles(node.id, node.name);
   };
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  try {
+    if (!selectedFolder) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const token = getAccessToken();
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    await axios.post(
+      `${API_BASE_URL}/drive/folder/${selectedFolder.id}/upload`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+        withCredentials: true,
+      }
+    );
+
+    // recargar el contenido de la carpeta actual
+    await fetchFiles(selectedFolder.id, selectedFolder.name);
+  } catch (err: any) {
+    console.error("Error subiendo archivo:", err);
+    const msg =
+      err?.response?.data?.error || "Error subiendo archivo a Drive";
+    setError(msg);
+  } finally {
+    setUploading(false);
+    // limpiar el input para poder subir el mismo archivo otra vez si se quiere
+    e.target.value = "";
+  }
+};
+
 
   // === Conectar Google Drive (flujo OAuth) ===
   const handleConnectDrive = async () => {
@@ -421,50 +469,81 @@ export default function DrivePage() {
         </section>
 
         {/* LISTA DE ARCHIVOS / SUBCARPETAS */}
-        <section className="rounded-2xl bg-white border border-black/5 shadow-sm p-4 md:p-5 flex flex-col min-h-[260px]">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-black/70">
-                {selectedFolder
-                  ? `Contenido de: ${selectedFolder.name}`
-                  : "Selecciona una carpeta"}
-              </h2>
+      <section className="rounded-2xl bg-white border border-black/5 shadow-sm p-4 md:p-5 flex flex-col min-h-[260px]">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-black/70">
+              {selectedFolder
+                ? `Contenido de: ${selectedFolder.name}`
+                : "Selecciona una carpeta"}
+            </h2>
 
-              {/* Breadcrumb de ruta actual */}
-              {folderPath.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/50">
-                  <span className="font-mono">CINTAX / {year}</span>
-                  {folderPath.map((node, idx) => (
-                    <React.Fragment key={node.id}>
-                      <ChevronRight size={12} />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          idx === folderPath.length - 1
-                            ? null
-                            : handleBreadcrumbClick(idx)
-                        }
-                        className={
-                          idx === folderPath.length - 1
-                            ? "font-medium text-black/70 cursor-default"
-                            : "hover:text-[var(--secondary-color)]"
-                        }
-                      >
-                        {node.name}
-                      </button>
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Breadcrumb de ruta actual (Tu código existente) */}
+            {folderPath.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/50">
+                <span className="font-mono">CINTAX / {year}</span>
+                {folderPath.map((node, idx) => (
+                  <React.Fragment key={node.id}>
+                    <ChevronRight size={12} />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        idx === folderPath.length - 1
+                          ? null
+                          : handleBreadcrumbClick(idx)
+                      }
+                      className={
+                        idx === folderPath.length - 1
+                          ? "font-medium text-black/70 cursor-default"
+                          : "hover:text-[var(--secondary-color)]"
+                      }
+                    >
+                      {node.name}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
 
+          {/* === ZONA DE ACCIONES (Spinner de carga y Botón de Subir) === */}
+          <div className="flex items-center gap-3">
             {loadingFiles && (
               <span className="inline-flex items-center gap-1 text-[11px] text-black/50">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Cargando…
               </span>
             )}
+
+            {/* Solo mostramos el botón subir si hay una carpeta seleccionada y drive está conectado */}
+            {selectedFolder && driveConnected && (
+              <>
+                {/* Input invisible conectado al handleUploadFile */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleUploadFile}
+                  className="hidden"
+                />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || loadingFiles}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--secondary-color)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {uploading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Upload size={14} />
+                  )}
+                  {uploading ? "Subiendo..." : "Subir archivo"}
+                </button>
+              </>
+            )}
           </div>
+        </div>
+
+        {/* ... El resto de tu tabla de archivos ... */}
 
           {!selectedFolder && (
             <div className="flex flex-1 items-center justify-center">

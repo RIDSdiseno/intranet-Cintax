@@ -13,14 +13,14 @@ type Persona = {
 
 // ---- Datos MOCK (puedes reemplazar luego por fetch a tu API) ----
 const PERSONAS: Persona[] = [
-  { id: 1,  nombre: "María González",  email: "maria.gonzalez@cliente.cl", area: "Clientes",  categoria: "Contabilidad", estado: "Activo" },
-  { id: 2,  nombre: "Pedro Rojas",     email: "projas@cliente.cl",          area: "Interno",   categoria: "Tributario",   estado: "Activo" },
-  { id: 3,  nombre: "Ana Torres",       email: "ana.torres@cliente.cl",     area: "Clientes",  categoria: "Entre otros",  estado: "Activo" },
-  { id: 4,  nombre: "Luis Pérez",       email: "lperez@cliente.cl",         area: "Proveedores",categoria: "Contabilidad", estado: "Inactivo" },
-  { id: 5,  nombre: "Carla Bustos",     email: "carla@cliente.cl",          area: "Clientes",  categoria: "Tributario",   estado: "Activo" },
-  { id: 6,  nombre: "Jorge Fuentes",    email: "jorge@cliente.cl",          area: "Interno",   categoria: "Contabilidad", estado: "Activo" },
-  { id: 7,  nombre: "Valentina Mora",   email: "valentina@cliente.cl",      area: "Clientes",  categoria: "Tributario",   estado: "Activo" },
-  { id: 8,  nombre: "Ricardo Díaz",     email: "ricardo@cliente.cl",        area: "Proveedores",categoria: "Entre otros",  estado: "Inactivo" },
+  { id: 1, nombre: "María González", email: "maria.gonzalez@cliente.cl", area: "Clientes", categoria: "Contabilidad", estado: "Activo" },
+  { id: 2, nombre: "Pedro Rojas", email: "projas@cliente.cl", area: "Interno", categoria: "Tributario", estado: "Activo" },
+  { id: 3, nombre: "Ana Torres", email: "ana.torres@cliente.cl", area: "Clientes", categoria: "Entre otros", estado: "Activo" },
+  { id: 4, nombre: "Luis Pérez", email: "lperez@cliente.cl", area: "Proveedores", categoria: "Contabilidad", estado: "Inactivo" },
+  { id: 5, nombre: "Carla Bustos", email: "carla@cliente.cl", area: "Clientes", categoria: "Tributario", estado: "Activo" },
+  { id: 6, nombre: "Jorge Fuentes", email: "jorge@cliente.cl", area: "Interno", categoria: "Contabilidad", estado: "Activo" },
+  { id: 7, nombre: "Valentina Mora", email: "valentina@cliente.cl", area: "Clientes", categoria: "Tributario", estado: "Activo" },
+  { id: 8, nombre: "Ricardo Díaz", email: "ricardo@cliente.cl", area: "Proveedores", categoria: "Entre otros", estado: "Inactivo" },
 ];
 
 const CATS: Array<"Todos" | Categoria> = ["Todos", "Contabilidad", "Tributario", "Entre otros"];
@@ -66,11 +66,10 @@ export default function PersonasPage() {
             <button
               key={c}
               onClick={() => setCat(c)}
-              className={`rounded-full px-3 py-1.5 text-sm border transition ${
-                cat === c
+              className={`rounded-full px-3 py-1.5 text-sm border transition ${cat === c
                   ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
                   : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-              }`}
+                }`}
             >
               {c} <span className="ml-1 text-xs opacity-80">
                 ({c === "Todos" ? counts.Todos : counts[c]})
@@ -131,11 +130,10 @@ export default function PersonasPage() {
                 </td>
                 <td className="py-3 px-3">
                   <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                      p.estado === "Activo"
+                    className={`inline-block rounded-full px-2 py-0.5 text-xs ${p.estado === "Activo"
                         ? "bg-emerald-50 text-emerald-700"
                         : "bg-rose-50 text-rose-700"
-                    }`}
+                      }`}
                   >
                     {p.estado ?? "—"}
                   </span>
@@ -153,7 +151,8 @@ export default function PersonasPage() {
 
       {/* Hint para integración futura */}
       <p className="mt-3 text-xs text-black/50">
-        *Luego puedes sustituir el arreglo <code>PERSONAS</code> por datos desde tu API y mantener este mismo filtrado en el cliente.
+        *Luego puedes sustituir el arreglo <strong>PERSONAS</strong 
+        > por datos desde tu API y mantener este mismo filtrado en el cliente.
       </p>
     </div>
   );

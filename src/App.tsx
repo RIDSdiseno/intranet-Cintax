@@ -13,6 +13,7 @@ import {
   Clock,
   AlertTriangle,
   Folder,
+  X,
 } from "lucide-react";
 import {
   Routes,
@@ -64,7 +65,8 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-2xl bg-white shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300">
+  <div 
+  className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -90,11 +92,10 @@ const SideLink: React.FC<{
   active?: boolean;
 }> = ({ icon, label, active }) => (
   <button
-    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-      active
-        ? "bg-white text-[var(--primary-color)] shadow-sm"
-        : "text-white/80 hover:text-white hover:bg-white/10"
-    }`}
+    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${active
+      ? "bg-white text-[var(--primary-color)] shadow-sm"
+      : "text-white/80 hover:text-white hover:bg-white/10"
+      }`}
   >
     <span className="shrink-0">{icon}</span>
     <span className="truncate text-left">{label}</span>
@@ -200,6 +201,47 @@ const ANNOUNCEMENTS = [
 
 // ---------- PÁGINAS ----------
 function HomePage() {
+  const [activeModal, setActiveModal] = React.useState<string | null>(null);
+
+  const modals: Record<string, { title: string; hint: string; fields: Array<{ label: string; type: string; placeholder: string }> }> = {
+    "Nueva solicitud": {
+      title: "Nueva solicitud",
+      hint: "Permisos, licencias",
+      fields: [
+        { label: "Tipo de solicitud", type: "select", placeholder: "Selecciona..." },
+        { label: "Descripción", type: "textarea", placeholder: "Describe tu solicitud..." },
+        { label: "Fecha requerida", type: "date", placeholder: "" },
+      ],
+    },
+    "Subir documento": {
+      title: "Subir documento",
+      hint: "PDF, DOCX, XLSX",
+      fields: [
+        { label: "Nombre del documento", type: "text", placeholder: "ej: Reporte Q4 2025" },
+        { label: "Categoría", type: "select", placeholder: "Selecciona..." },
+        { label: "Archivo", type: "file", placeholder: "" },
+      ],
+    },
+    "Crear proyecto": {
+      title: "Crear proyecto",
+      hint: "Kanban, tareas",
+      fields: [
+        { label: "Nombre del proyecto", type: "text", placeholder: "ej: Onboarding 2026" },
+        { label: "Tipo", type: "select", placeholder: "Kanban / Tareas" },
+        { label: "Descripción", type: "textarea", placeholder: "Descripción del proyecto..." },
+      ],
+    },
+    "Soporte TI": {
+      title: "Reporte de incidencia",
+      hint: "Incidencias",
+      fields: [
+        { label: "Tipo de incidencia", type: "select", placeholder: "Hardware / Software / Red" },
+        { label: "Descripción del problema", type: "textarea", placeholder: "Describe el problema..." },
+        { label: "Prioridad", type: "select", placeholder: "Baja / Media / Alta" },
+      ],
+    },
+  };
+
   return (
     <>
       {/* Quick actions */}
@@ -212,6 +254,7 @@ function HomePage() {
         ].map((a) => (
           <button
             key={a.label}
+            onClick={() => setActiveModal(a.label)}
             className="group flex items-center justify-between rounded-2xl bg-white border border-black/5 px-4 py-4 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300"
           >
             <div>
@@ -229,6 +272,105 @@ function HomePage() {
           </button>
         ))}
       </div>
+
+      {/* Modales personalizados */}
+      {activeModal && modals[activeModal] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setActiveModal(null)}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>
+                  {modals[activeModal].title}
+                </h3>
+                <p className="text-xs text-black/50 mt-1">{modals[activeModal].hint}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                className="p-1 rounded hover:bg-black/5"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setActiveModal(null);
+                alert(`${activeModal} enviada exitosamente`);
+              }}
+              className="flex flex-col gap-4"
+            >
+              {modals[activeModal].fields.map((field) => (
+                <div key={field.label}>
+                  <label className="block text-xs font-medium text-black/70 mb-1.5">
+                    {field.label}
+                  </label>
+                  {field.type === "select" && (
+                    <select className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors bg-white">
+                      <option value="">{field.placeholder}</option>
+                      <option value="opt1">Opción 1</option>
+                      <option value="opt2">Opción 2</option>
+                    </select>
+                  )}
+                  {field.type === "textarea" && (
+                    <textarea
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors resize-none"
+                      rows={3}
+                      placeholder={field.placeholder}
+                      required
+                    />
+                  )}
+                  {field.type === "file" && (
+                    <input
+                      type="file"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      required
+                    />
+                  )}
+                  {field.type === "date" && (
+                    <input
+                      type="date"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      required
+                    />
+                  )}
+                  {field.type === "text" && (
+                    <input
+                      type="text"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      placeholder={field.placeholder}
+                      required
+                    />
+                  )}
+                </div>
+              ))}
+
+              <div className="flex gap-2 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium text-white transition"
+                  style={{ background: "var(--secondary-color)" }}
+                >
+                  Enviar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium border border-black/10 bg-white hover:border-black/20 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -420,6 +562,7 @@ export default function CintaxIntranetMockup() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const hideChrome = pathname.startsWith("/login");
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
@@ -467,6 +610,34 @@ export default function CintaxIntranetMockup() {
         }
         html { font-size: var(--base-size-font); }
         body { font-family: var(--primary-font); color: var(--primary-color); }
+        .sidebar-mobile {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 80vw;
+          max-width: 320px;
+          height: 100vh;
+          z-index: 50;
+          transform: translateX(-100%);
+          transition: transform 0.3s ease;
+          overflow-y: auto;
+        }
+        .sidebar-mobile.open {
+          transform: translateX(0);
+        }
+        .sidebar-overlay {
+          position: fixed;
+          inset: 0;
+          background-color: rgba(0, 0, 0, 0.4);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.3s ease;
+          z-index: 40;
+        }
+        .sidebar-overlay.open {
+          opacity: 1;
+          pointer-events: auto;
+        }
       `}</style>
 
       <div
@@ -476,170 +647,120 @@ export default function CintaxIntranetMockup() {
             : "grid lg:grid-cols-[260px_1fr] min-h-screen"
         }
       >
+        {/* Overlay para cerrar sidebar en mobile */}
+        {!hideChrome && sidebarOpen && (
+          <div
+            className="sidebar-overlay open"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Botón hamburguesa */}
+        {!hideChrome && (
+          <button
+            className="lg:hidden fixed top-4 left-4 z-50 bg-[var(--primary-color)] text-white rounded-full p-2.5 shadow-md hover:shadow-lg transition"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menú"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        )}
+
         {/* Sidebar */}
-{!hideChrome && (
-  <aside className="bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4">
-    <div className="flex items-center gap-2 px-3">
-      <img
-        src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
-        alt="Cintax"
-        className="h-8 w-auto"
-      />
-    </div>
+        {!hideChrome && (
+          <>
+            {/* Sidebar Mobile */}
+            <aside className={`sidebar-mobile ${sidebarOpen ? "open" : ""} bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4 lg:hidden`}>
+              <div className="flex items-center justify-between">
+                <img
+                  src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
+                  alt="Cintax"
+                  className="h-8 w-auto"
+                />
+                <button
+                  className="text-white/70 hover:text-white p-2 -mr-2"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Cerrar menú"
+                >
+                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
 
-    {/* NAV */}
-    <nav className="mt-2 space-y-1">
-      {/* Inicio */}
-      <NavLink
-        to="/home"
-        className={({ isActive }) =>
-          `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-            isActive
-              ? "bg-white text-[var(--primary-color)] shadow-sm"
-              : "text-white/80 hover:text-white hover:bg-white/10"
-          }`
-        }
-      >
-        <span className="shrink-0">
-          <Home size={18} />
-        </span>
-        <span className="truncate text-left">Inicio</span>
-      </NavLink>
+              <nav className="mt-2 space-y-1 flex-1 overflow-y-auto">
+                <NavLink to="/home" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Home size={18} /></span><span className="truncate text-left">Inicio</span></NavLink>
+                <NavLink to="/personas" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Users size={18} /></span><span className="truncate text-left">Personas</span></NavLink>
+                <NavLink to="/drive" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Folder size={18} /></span><span className="truncate text-left">Google Drive</span></NavLink>
+                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">Tickets</div>
+                <div className="pl-3 flex flex-col gap-1">
+                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Todos</NavLink>
+                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Contabilidad</NavLink>
+                  <NavLink to="/tickets/tributario" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Tributario</NavLink>
+                  <NavLink to="/tickets/administracion" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Administración</NavLink>
+                  <NavLink to="/tickets/marketing" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Marketing y Comercial</NavLink>
+                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Recursos Humanos</NavLink>
+                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Entre otros</NavLink>
+                </div>
+                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+              </nav>
 
-      {/* Personas */}
-      <NavLink
-        to="/drive"
-        className={({ isActive }) =>
-          `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-            isActive
-              ? "bg-white text-[var(--primary-color)] shadow-sm"
-              : "text-white/80 hover:text-white hover:bg-white/10"
-          }`
-        }
-      >
-        <span className="shrink-0">
-          <Folder size={18}/>
-        </span>
-        <span className="truncate text-left">Google Drive</span>
-      </NavLink>
+              <div className="border-t border-white/10 pt-4">
+                <button
+                  onClick={() => { setSidebarOpen(false); handleLogout(); }}
+                  className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </aside>
 
-      {/* Tickets */}
-      <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
-        Tickets
-      </div>
-      <div className="pl-3 flex flex-col gap-1">
-        {/* Todos los tickets */}
-        <NavLink
-  to="/tickets"
-  end
-  className={({ isActive }) =>
-    `text-sm px-3 py-2 rounded-lg ${
-      isActive
-        ? "text-white bg-white/10"
-        : "text-white/80 hover:text-white hover:bg-white/10"
-    }`
-  }
->
-  Todos
-</NavLink>
+            {/* Sidebar Desktop */}
+            <aside className="hidden lg:flex bg-[var(--primary-color)] text-white px-4 py-5 flex-col gap-4 min-h-screen">
+              <div className="flex items-center gap-2 px-3">
+                <img
+                  src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
+                  alt="Cintax"
+                  className="h-8 w-auto"
+                />
+              </div>
 
+              <nav className="mt-2 space-y-1">
+                <NavLink to="/home" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Home size={18} /></span><span className="truncate text-left">Inicio</span></NavLink>
+                <NavLink to="/personas" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Users size={18} /></span><span className="truncate text-left">Personas</span></NavLink>
+                <NavLink to="/drive" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Folder size={18} /></span><span className="truncate text-left">Google Drive</span></NavLink>
+                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">Tickets</div>
+                <div className="pl-3 flex flex-col gap-1">
+                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Todos</NavLink>
+                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Contabilidad</NavLink>
+                  <NavLink to="/tickets/tributario" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Tributario</NavLink>
+                  <NavLink to="/tickets/administracion" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Administración</NavLink>
+                  <NavLink to="/tickets/marketing" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Marketing y Comercial</NavLink>
+                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Recursos Humanos</NavLink>
+                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Entre otros</NavLink>
+                </div>
+                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+              </nav>
 
-        <NavLink
-          to="/tickets/contabilidad"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Contabilidad
-        </NavLink>
-
-        <NavLink
-          to="/tickets/tributario"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Tributario
-        </NavLink>
-
-        {/* NUEVAS CATEGORÍAS */}
-        <NavLink
-          to="/tickets/administracion"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Administración
-        </NavLink>
-
-        <NavLink
-          to="/tickets/marketing"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Marketing y Comercial
-        </NavLink>
-
-        <NavLink
-          to="/tickets/rrhh"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Recursos Humanos
-        </NavLink>
-
-        <NavLink
-          to="/tickets/otros"
-          className={({ isActive }) =>
-            `text-sm px-3 py-2 rounded-lg ${
-              isActive
-                ? "text-white bg-white/10"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-        >
-          Entre otros
-        </NavLink>
-      </div>
-
-      <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
-    </nav>
-
-    <div className="mt-auto border-t border-white/10 pt-4">
-      <button
-        onClick={handleLogout}
-        className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
-      >
-        Cerrar sesión
-      </button>
-    </div>
-  </aside>
-)}
+              <div className="mt-auto border-t border-white/10 pt-4">
+                <button
+                  onClick={handleLogout}
+                  className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </aside>
+          </>
+        )}
 
         {/* Main */}
-        <main className={hideChrome ? "p-0" : "p-5 lg:p-8"}>
+        <main className={hideChrome ? "p-0" : "p-5 lg:p-8 pt-16 lg:pt-5"}>
           {/* Header */}
           {!hideChrome && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
@@ -653,24 +774,11 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <div className="hidden md:flex items-center gap-2 bg-white rounded-xl border border-black/5 px-3 py-2 w-[280px] shadow-sm">
-                  <Search size={16} className="text-black/50" />
-                  <input
-                    className="w-full outline-none text-sm placeholder:text-black/40"
-                    placeholder="Buscar en Cintax…"
-                  />
-                </div>
-                <button className="relative rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
-                  <Bell size={18} />
-                  <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] grid place-items-center rounded-full bg-[var(--secondary-color)] text-white">
-                    3
-                  </span>
-                </button>
+                {/* BOTÓN NOTIFICACIONES */}
                 <button className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
                   <Settings size={18} />
                 </button>
                 {/* BOTÓN LOGOUT */}
-                
               </div>
             </div>
           )}
@@ -682,6 +790,7 @@ export default function CintaxIntranetMockup() {
 
             {/* App con chrome (protegidas) */}
             <Route path="/home" element={<PrivateRoute element={<HomePage />} />} />
+            <Route path="/personas" element={<PrivateRoute element={<PersonasPage />} />} />
             <Route path="/drive" element={<DrivePage />} />
             <Route
               path="/tickets"

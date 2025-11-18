@@ -27,6 +27,7 @@ import PersonasPage from "./pages/personasPage";
 import DrivePage from "./pages/DrivePage";
 import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
+import SoportePage from "./pages/SoportePage";
 /**
  * Cintax Intranet Mockup (single-file TSX)
  * - TailwindCSS for styling
@@ -88,8 +89,10 @@ const SideLink: React.FC<{
   icon: React.ReactNode;
   label: string;
   active?: boolean;
-}> = ({ icon, label, active }) => (
+  onClick?: () => void;
+}> = ({ icon, label, active, onClick }) => (
   <button
+    onClick={onClick}
     className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
       active
         ? "bg-white text-[var(--primary-color)] shadow-sm"
@@ -817,14 +820,94 @@ export default function CintaxIntranetMockup() {
                   Tickets
                 </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Todos</NavLink>
-                  <NavLink to="/tickets/comercial" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Comercial y Marketing</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/gerencia" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Gerencia</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/comercial"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Comercial y Marketing
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/gerencia"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Gerencia
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
-                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+                <SideLink
+                  icon={<LifeBuoy size={18} />}
+                  label="Soporte"
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/soporte");
+                  }}
+                />
               </nav>
 
               <div className="border-t border-white/10 pt-4">
@@ -900,14 +983,85 @@ export default function CintaxIntranetMockup() {
                   Tickets
                 </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Todos</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/comercial" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Comercial y Marketing</NavLink>
-                  <NavLink to="/tickets/gerencia" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Gerencia</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/comercial"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Comercial y Marketing
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/gerencia"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Gerencia
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
-                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+                <SideLink
+                  icon={<LifeBuoy size={18} />}
+                  label="Soporte"
+                  onClick={() => navigate("/soporte")}
+                />
               </nav>
 
               <div className="mt-auto border-t border-white/10 pt-4">
@@ -937,9 +1091,10 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                onClick={() => navigate("/configurar")}
-                className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
+                <button
+                  onClick={() => navigate("/configurar")}
+                  className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition"
+                >
                   <Settings size={18} />
                 </button>
               </div>
@@ -972,6 +1127,10 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/configurar"
               element={<PrivateRoute element={<ConfigurarPage />} />}
+            />
+            <Route
+              path="/soporte"
+              element={<PrivateRoute element={<SoportePage />} />}
             />
 
             {/* Redirecciones */}

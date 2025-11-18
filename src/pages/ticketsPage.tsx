@@ -300,16 +300,15 @@ export default function TicketsPage() {
             {syncing ? "Sincronizando..." : "Sincronizar"}
           </button>
           <button
-            className="rounded-xl px-3 py-2 text-sm text-white shadow-sm"
+            className="rounded-xl px-3 py-2 text-sm text-white shadow-md shadow-black/30 active:scale-95"
             style={{ background: "var(--secondary-color)" }}
-            onClick={() => setIsModalOpen(true)} // Abre el modal nuevo
+            onClick={() => setIsModalOpen(true)}
           >
             Crear ticket
           </button>
         </div>
       </div>
 
-      {/* === MODAL CREAR TICKET (Lo Nuevo) === */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -450,7 +449,7 @@ export default function TicketsPage() {
                 </div>
               </div>
 
-              {/* Editor de Descripción (Simulado) */}
+              {/* Editor de Descripción */}
               <div>
                 <label className="text-xs font-medium text-black/70 mb-1 block">
                   Descripción <span className="text-rose-500">*</span>
@@ -542,7 +541,7 @@ export default function TicketsPage() {
         <select
           value={estado}
           onChange={(e) => setEstado(e.target.value as any)}
-          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
+          className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm"
         >
           {ESTADOS.map((e) => (
             <option key={e} value={e}>{e === "Todos" ? "Todos los estados" : e}</option>

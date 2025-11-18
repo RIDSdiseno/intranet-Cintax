@@ -5,8 +5,6 @@ import {
   FileText,
   FolderKanban,
   LifeBuoy,
-  Bell,
-  Search,
   Settings,
   ChevronRight,
   CheckCircle2,
@@ -26,9 +24,9 @@ import {
 import axios from "axios";
 import LoginPage from "./pages/login_page";
 import PersonasPage from "./pages/personasPage";
-import TicketsPage from "./pages/ticketsPage";
 import DrivePage from "./pages/DrivePage";
-
+import TicketsPage from "./pages/ticketsPage";
+import ConfigurarPage from "./pages/ConfigurarPage";
 /**
  * Cintax Intranet Mockup (single-file TSX)
  * - TailwindCSS for styling
@@ -38,7 +36,8 @@ import DrivePage from "./pages/DrivePage";
  */
 
 // --- Helper chips ---
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 const Chip: React.FC<{
   children: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "danger";
@@ -65,8 +64,7 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div 
-  className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
+  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -92,10 +90,11 @@ const SideLink: React.FC<{
   active?: boolean;
 }> = ({ icon, label, active }) => (
   <button
-    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${active
-      ? "bg-white text-[var(--primary-color)] shadow-sm"
-      : "text-white/80 hover:text-white hover:bg-white/10"
-      }`}
+    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+      active
+        ? "bg-white text-[var(--primary-color)] shadow-sm"
+        : "text-white/80 hover:text-white hover:bg-white/10"
+    }`}
   >
     <span className="shrink-0">{icon}</span>
     <span className="truncate text-left">{label}</span>
@@ -111,9 +110,17 @@ const TaskRow: React.FC<{
   due: string;
 }> = ({ idx, title, owner, status, due }) => {
   const tone =
-    status === "Completada" ? "success" : status === "Bloqueada" ? "danger" : "warning";
+    status === "Completada"
+      ? "success"
+      : status === "Bloqueada"
+      ? "danger"
+      : "warning";
   const Icon =
-    status === "Completada" ? CheckCircle2 : status === "Bloqueada" ? AlertTriangle : Clock;
+    status === "Completada"
+      ? CheckCircle2
+      : status === "Bloqueada"
+      ? AlertTriangle
+      : Clock;
   return (
     <tr className="border-b last:border-b-0">
       <td className="py-3 px-3 text-black/70">
@@ -153,7 +160,9 @@ const ActivityItem: React.FC<{
         {title}
       </p>
       {hint && <p className="text-xs text-black/50 mt-0.5">{hint}</p>}
-      <p className="text-[10px] uppercase tracking-wider text-black/40 mt-1">{time}</p>
+      <p className="text-[10px] uppercase tracking-wider text-black/40 mt-1">
+        {time}
+      </p>
     </div>
   </div>
 );
@@ -203,13 +212,28 @@ const ANNOUNCEMENTS = [
 function HomePage() {
   const [activeModal, setActiveModal] = React.useState<string | null>(null);
 
-  const modals: Record<string, { title: string; hint: string; fields: Array<{ label: string; type: string; placeholder: string }> }> = {
+  const modals: Record<
+    string,
+    {
+      title: string;
+      hint: string;
+      fields: Array<{ label: string; type: string; placeholder: string }>;
+    }
+  > = {
     "Nueva solicitud": {
       title: "Nueva solicitud",
       hint: "Permisos, licencias",
       fields: [
-        { label: "Tipo de solicitud", type: "select", placeholder: "Selecciona..." },
-        { label: "Descripción", type: "textarea", placeholder: "Describe tu solicitud..." },
+        {
+          label: "Tipo de solicitud",
+          type: "select",
+          placeholder: "Selecciona...",
+        },
+        {
+          label: "Descripción",
+          type: "textarea",
+          placeholder: "Describe tu solicitud...",
+        },
         { label: "Fecha requerida", type: "date", placeholder: "" },
       ],
     },
@@ -217,7 +241,11 @@ function HomePage() {
       title: "Subir documento",
       hint: "PDF, DOCX, XLSX",
       fields: [
-        { label: "Nombre del documento", type: "text", placeholder: "ej: Reporte Q4 2025" },
+        {
+          label: "Nombre del documento",
+          type: "text",
+          placeholder: "ej: Reporte Q4 2025",
+        },
         { label: "Categoría", type: "select", placeholder: "Selecciona..." },
         { label: "Archivo", type: "file", placeholder: "" },
       ],
@@ -226,18 +254,38 @@ function HomePage() {
       title: "Crear proyecto",
       hint: "Kanban, tareas",
       fields: [
-        { label: "Nombre del proyecto", type: "text", placeholder: "ej: Onboarding 2026" },
+        {
+          label: "Nombre del proyecto",
+          type: "text",
+          placeholder: "ej: Onboarding 2026",
+        },
         { label: "Tipo", type: "select", placeholder: "Kanban / Tareas" },
-        { label: "Descripción", type: "textarea", placeholder: "Descripción del proyecto..." },
+        {
+          label: "Descripción",
+          type: "textarea",
+          placeholder: "Descripción del proyecto...",
+        },
       ],
     },
     "Soporte TI": {
       title: "Reporte de incidencia",
       hint: "Incidencias",
       fields: [
-        { label: "Tipo de incidencia", type: "select", placeholder: "Hardware / Software / Red" },
-        { label: "Descripción del problema", type: "textarea", placeholder: "Describe el problema..." },
-        { label: "Prioridad", type: "select", placeholder: "Baja / Media / Alta" },
+        {
+          label: "Tipo de incidencia",
+          type: "select",
+          placeholder: "Hardware / Software / Red",
+        },
+        {
+          label: "Descripción del problema",
+          type: "textarea",
+          placeholder: "Describe el problema...",
+        },
+        {
+          label: "Prioridad",
+          type: "select",
+          placeholder: "Baja / Media / Alta",
+        },
       ],
     },
   };
@@ -283,10 +331,15 @@ function HomePage() {
           <div className="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>
+                <h3
+                  className="text-lg font-semibold"
+                  style={{ color: "var(--primary-color)" }}
+                >
                   {modals[activeModal].title}
                 </h3>
-                <p className="text-xs text-black/50 mt-1">{modals[activeModal].hint}</p>
+                <p className="text-xs text-black/50 mt-1">
+                  {modals[activeModal].hint}
+                </p>
               </div>
               <button
                 type="button"
@@ -457,7 +510,7 @@ function HomePage() {
             </h2>
             <div className="space-y-4">
               <ActivityItem
-                title='María cargó “Política de Gastos v2.pdf”'
+                title="María cargó “Política de Gastos v2.pdf”"
                 time="Hoy, 11:20"
                 icon={
                   <FileText
@@ -536,9 +589,7 @@ function NotFoundPage() {
       >
         Página no encontrada
       </h2>
-      <p className="text-sm text-black/60">
-        La ruta solicitada no existe.
-      </p>
+      <p className="text-sm text-black/60">La ruta solicitada no existe.</p>
     </section>
   );
 }
@@ -662,7 +713,15 @@ export default function CintaxIntranetMockup() {
             onClick={() => setSidebarOpen(true)}
             aria-label="Abrir menú"
           >
-            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="3" y1="6" x2="21" y2="6" />
               <line x1="3" y1="12" x2="21" y2="12" />
               <line x1="3" y1="18" x2="21" y2="18" />
@@ -674,7 +733,11 @@ export default function CintaxIntranetMockup() {
         {!hideChrome && (
           <>
             {/* Sidebar Mobile */}
-            <aside className={`sidebar-mobile ${sidebarOpen ? "open" : ""} bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4 lg:hidden`}>
+            <aside
+              className={`sidebar-mobile ${
+                sidebarOpen ? "open" : ""
+              } bg-[var(--primary-color)] text-white px-4 py-5 flex flex-col gap-4 lg:hidden`}
+            >
               <div className="flex items-center justify-between">
                 <img
                   src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
@@ -686,7 +749,15 @@ export default function CintaxIntranetMockup() {
                   onClick={() => setSidebarOpen(false)}
                   aria-label="Cerrar menú"
                 >
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -694,25 +765,160 @@ export default function CintaxIntranetMockup() {
               </div>
 
               <nav className="mt-2 space-y-1 flex-1 overflow-y-auto">
-                <NavLink to="/home" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Home size={18} /></span><span className="truncate text-left">Inicio</span></NavLink>
-                <NavLink to="/personas" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Users size={18} /></span><span className="truncate text-left">Personas</span></NavLink>
-                <NavLink to="/drive" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}><span className="shrink-0"><Folder size={18} /></span><span className="truncate text-left">Google Drive</span></NavLink>
-                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">Tickets</div>
+                <NavLink
+                  to="/home"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <Home size={18} />
+                  </span>
+                  <span className="truncate text-left">Inicio</span>
+                </NavLink>
+                <NavLink
+                  to="/personas"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <Users size={18} />
+                  </span>
+                  <span className="truncate text-left">Personas</span>
+                </NavLink>
+                <NavLink
+                  to="/drive"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <Folder size={18} />
+                  </span>
+                  <span className="truncate text-left">Google Drive</span>
+                </NavLink>
+                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
+                  Tickets
+                </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Todos</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/tributario" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Tributario</NavLink>
-                  <NavLink to="/tickets/administracion" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Administración</NavLink>
-                  <NavLink to="/tickets/marketing" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Marketing y Comercial</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/tributario"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Tributario
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/administracion"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Administración
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/marketing"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Marketing y Comercial
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
                 <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
               </nav>
 
               <div className="border-t border-white/10 pt-4">
                 <button
-                  onClick={() => { setSidebarOpen(false); handleLogout(); }}
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    handleLogout();
+                  }}
                   className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
                 >
                   Cerrar sesión
@@ -731,18 +937,140 @@ export default function CintaxIntranetMockup() {
               </div>
 
               <nav className="mt-2 space-y-1">
-                <NavLink to="/home" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Home size={18} /></span><span className="truncate text-left">Inicio</span></NavLink>
-                <NavLink to="/personas" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Users size={18} /></span><span className="truncate text-left">Personas</span></NavLink>
-                <NavLink to="/drive" className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${isActive ? "bg-white text-[var(--primary-color)] shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"}`}><span className="shrink-0"><Folder size={18} /></span><span className="truncate text-left">Google Drive</span></NavLink>
-                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">Tickets</div>
+                <NavLink
+                  to="/home"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <Home size={18} />
+                  </span>
+                  <span className="truncate text-left">Inicio</span>
+                </NavLink>
+                <NavLink
+                  to="/personas"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <Users size={18} />
+                  </span>
+                  <span className="truncate text-left">Personas</span>
+                </NavLink>
+                <NavLink
+                  to="/drive"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <Folder size={18} />
+                  </span>
+                  <span className="truncate text-left">Google Drive</span>
+                </NavLink>
+                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
+                  Tickets
+                </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Todos</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/tributario" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Tributario</NavLink>
-                  <NavLink to="/tickets/administracion" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Administración</NavLink>
-                  <NavLink to="/tickets/marketing" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Marketing y Comercial</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/tributario"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Tributario
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/administracion"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Administración
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/marketing"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Marketing y Comercial
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
                 <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
               </nav>
@@ -774,11 +1102,11 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {/* BOTÓN NOTIFICACIONES */}
-                <button className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
+                <button 
+                onClick={() => navigate("/configurar")}
+                className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
                   <Settings size={18} />
                 </button>
-                {/* BOTÓN LOGOUT */}
               </div>
             </div>
           )}
@@ -789,8 +1117,14 @@ export default function CintaxIntranetMockup() {
             <Route path="/login" element={<LoginPage />} />
 
             {/* App con chrome (protegidas) */}
-            <Route path="/home" element={<PrivateRoute element={<HomePage />} />} />
-            <Route path="/personas" element={<PrivateRoute element={<PersonasPage />} />} />
+            <Route
+              path="/home"
+              element={<PrivateRoute element={<HomePage />} />}
+            />
+            <Route
+              path="/personas"
+              element={<PrivateRoute element={<PersonasPage />} />}
+            />
             <Route path="/drive" element={<DrivePage />} />
             <Route
               path="/tickets"
@@ -799,6 +1133,10 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/tickets/:cat"
               element={<PrivateRoute element={<TicketsPage />} />}
+            />
+            <Route
+              path="/configurar"
+              element={<PrivateRoute element={<ConfigurarPage />} />}
             />
 
             {/* Redirecciones */}

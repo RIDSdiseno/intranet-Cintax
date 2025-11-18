@@ -13,6 +13,7 @@ import {
   Clock,
   AlertTriangle,
   Folder,
+  X,
 } from "lucide-react";
 import {
   Routes,
@@ -64,7 +65,8 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-2xl bg-white shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300">
+  <div 
+  className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -199,6 +201,47 @@ const ANNOUNCEMENTS = [
 
 // ---------- PÁGINAS ----------
 function HomePage() {
+  const [activeModal, setActiveModal] = React.useState<string | null>(null);
+
+  const modals: Record<string, { title: string; hint: string; fields: Array<{ label: string; type: string; placeholder: string }> }> = {
+    "Nueva solicitud": {
+      title: "Nueva solicitud",
+      hint: "Permisos, licencias",
+      fields: [
+        { label: "Tipo de solicitud", type: "select", placeholder: "Selecciona..." },
+        { label: "Descripción", type: "textarea", placeholder: "Describe tu solicitud..." },
+        { label: "Fecha requerida", type: "date", placeholder: "" },
+      ],
+    },
+    "Subir documento": {
+      title: "Subir documento",
+      hint: "PDF, DOCX, XLSX",
+      fields: [
+        { label: "Nombre del documento", type: "text", placeholder: "ej: Reporte Q4 2025" },
+        { label: "Categoría", type: "select", placeholder: "Selecciona..." },
+        { label: "Archivo", type: "file", placeholder: "" },
+      ],
+    },
+    "Crear proyecto": {
+      title: "Crear proyecto",
+      hint: "Kanban, tareas",
+      fields: [
+        { label: "Nombre del proyecto", type: "text", placeholder: "ej: Onboarding 2026" },
+        { label: "Tipo", type: "select", placeholder: "Kanban / Tareas" },
+        { label: "Descripción", type: "textarea", placeholder: "Descripción del proyecto..." },
+      ],
+    },
+    "Soporte TI": {
+      title: "Reporte de incidencia",
+      hint: "Incidencias",
+      fields: [
+        { label: "Tipo de incidencia", type: "select", placeholder: "Hardware / Software / Red" },
+        { label: "Descripción del problema", type: "textarea", placeholder: "Describe el problema..." },
+        { label: "Prioridad", type: "select", placeholder: "Baja / Media / Alta" },
+      ],
+    },
+  };
+
   return (
     <>
       {/* Quick actions */}
@@ -211,6 +254,7 @@ function HomePage() {
         ].map((a) => (
           <button
             key={a.label}
+            onClick={() => setActiveModal(a.label)}
             className="group flex items-center justify-between rounded-2xl bg-white border border-black/5 px-4 py-4 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300"
           >
             <div>
@@ -228,6 +272,105 @@ function HomePage() {
           </button>
         ))}
       </div>
+
+      {/* Modales personalizados */}
+      {activeModal && modals[activeModal] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setActiveModal(null)}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>
+                  {modals[activeModal].title}
+                </h3>
+                <p className="text-xs text-black/50 mt-1">{modals[activeModal].hint}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                className="p-1 rounded hover:bg-black/5"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setActiveModal(null);
+                alert(`${activeModal} enviada exitosamente`);
+              }}
+              className="flex flex-col gap-4"
+            >
+              {modals[activeModal].fields.map((field) => (
+                <div key={field.label}>
+                  <label className="block text-xs font-medium text-black/70 mb-1.5">
+                    {field.label}
+                  </label>
+                  {field.type === "select" && (
+                    <select className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors bg-white">
+                      <option value="">{field.placeholder}</option>
+                      <option value="opt1">Opción 1</option>
+                      <option value="opt2">Opción 2</option>
+                    </select>
+                  )}
+                  {field.type === "textarea" && (
+                    <textarea
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors resize-none"
+                      rows={3}
+                      placeholder={field.placeholder}
+                      required
+                    />
+                  )}
+                  {field.type === "file" && (
+                    <input
+                      type="file"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      required
+                    />
+                  )}
+                  {field.type === "date" && (
+                    <input
+                      type="date"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      required
+                    />
+                  )}
+                  {field.type === "text" && (
+                    <input
+                      type="text"
+                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                      placeholder={field.placeholder}
+                      required
+                    />
+                  )}
+                </div>
+              ))}
+
+              <div className="flex gap-2 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium text-white transition"
+                  style={{ background: "var(--secondary-color)" }}
+                >
+                  Enviar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium border border-black/10 bg-white hover:border-black/20 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">

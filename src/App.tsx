@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Folder,
   X,
+  FileChartLine,
 } from "lucide-react";
 import {
   Routes,
@@ -28,6 +29,7 @@ import DrivePage from "./pages/DrivePage";
 import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
+import AnalistaPage from "./pages/AnalistaPage";
 /**
  * Cintax Intranet Mockup (single-file TSX)
  * - TailwindCSS for styling
@@ -65,7 +67,7 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
+  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-md">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -979,6 +981,21 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
+                <NavLink
+                  to="/analista"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <FileChartLine size={18} />
+                  </span>
+                  <span className="truncate text-left">Analista</span>
+                </NavLink>
                 <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
                   Tickets
                 </div>
@@ -1131,6 +1148,10 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/soporte"
               element={<PrivateRoute element={<SoportePage />} />}
+            />
+            <Route
+              path="/analista"
+              element={<PrivateRoute element={<AnalistaPage />} />}
             />
 
             {/* Redirecciones */}

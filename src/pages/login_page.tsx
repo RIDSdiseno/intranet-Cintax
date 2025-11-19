@@ -17,7 +17,8 @@ export default function LoginPage() {
   /* =========================
      LOGIN GOOGLE
   ========================== */
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
   useEffect(() => {
     // cargar script de Google Identity
     const script = document.createElement("script");
@@ -64,15 +65,12 @@ export default function LoginPage() {
       });
 
       // @ts-ignore
-      google.accounts.id.renderButton(
-        document.getElementById("google-btn"),
-        {
-          theme: "outline",
-          size: "large",
-          shape: "pill",
-          width: 320,
-        }
-      );
+      google.accounts.id.renderButton(document.getElementById("google-btn"), {
+        theme: "outline",
+        size: "large",
+        shape: "pill",
+        width: 320,
+      });
     };
 
     document.body.appendChild(script);
@@ -117,9 +115,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-6 bg-[url(/img/bg-login.webp)]  bg-cover bg-center"
-    >
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.7)_0%,rgba(0,0,0,0)_60%),url(/img/bg-login.webp)] bg-cover bg-center bg-no-repeat bg-fixed">
       {/* Brand tokens */}
       <style>{`
         :root{ 
@@ -145,7 +141,6 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3">
-
           <p className="text-sm text-white/80 text-center max-w-sm">
             Bienvenido(a) a la intranet de Cintax. Ingresa tus credenciales o
             utiliza tu cuenta de Google corporativa.
@@ -202,7 +197,9 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setShowPwd((v) => !v)}
                 className="rounded-xl border border-black/20 px-3 text-sm text-black/70 hover:bg-black/5"
-                aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+                aria-label={
+                  showPwd ? "Ocultar contraseña" : "Mostrar contraseña"
+                }
               >
                 {showPwd ? "Ocultar" : "Ver"}
               </button>

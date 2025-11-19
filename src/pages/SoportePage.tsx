@@ -48,7 +48,7 @@ export default function SoportePage() {
           className="text-2xl md:text-3xl font-bold mb-2"
           style={{ color: "var(--primary-color)" }}
         >
-          ¿Necesitas ayuda? Contacta a Soporte RIDS
+          ¿Necesitas ayuda? Contacta el soporte de RIDS
         </h1>
         <p className="text-black/60 md:text-lg">
           Estamos listos para asistirte con cualquier consulta o incidencia.

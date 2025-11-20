@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   Folder,
   X,
-  FileChartLine,
+  BookCheck,
 } from "lucide-react";
 import {
   Routes,
@@ -29,7 +29,7 @@ import DrivePage from "./pages/DrivePage";
 import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
-import AnalistaPage from "./pages/AnalistaPage";
+import TareasPage from "./pages/TareasPage";
 /**
  * Cintax Intranet Mockup (single-file TSX)
  * - TailwindCSS for styling
@@ -982,7 +982,7 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
                 <NavLink
-                  to="/analista"
+                  to="/tareas"
                   className={({ isActive }) =>
                     `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
                       isActive
@@ -992,9 +992,9 @@ export default function CintaxIntranetMockup() {
                   }
                 >
                   <span className="shrink-0">
-                    <FileChartLine size={18} />
+                    <BookCheck size={18} />
                   </span>
-                  <span className="truncate text-left">Analista</span>
+                  <span className="truncate text-left">Tareas</span>
                 </NavLink>
                 <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
                   Tickets
@@ -1150,8 +1150,8 @@ export default function CintaxIntranetMockup() {
               element={<PrivateRoute element={<SoportePage />} />}
             />
             <Route
-              path="/analista"
-              element={<PrivateRoute element={<AnalistaPage />} />}
+              path="/tareas"
+              element={<PrivateRoute element={<TareasPage />} />}
             />
 
             {/* Redirecciones */}

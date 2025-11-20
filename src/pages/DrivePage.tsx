@@ -17,7 +17,11 @@ type DriveFolder = {
   name: string;
   mimeType: string;
   modifiedTime?: string;
+  categoria?: string | null;
+  pathNames?: string[];   // ← viene del backend
+  pathString?: string;    // ← "CINTAX / 2025 / CONTA / A01"
 };
+
 
 type DriveFile = {
   id: string;
@@ -95,6 +99,8 @@ export default function DrivePage() {
   const [selectedFolder, setSelectedFolder] = useState<DriveFolder | null>(
     null
   );
+  const [noAccess, setNoAccess] = useState(false);
+
 
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -173,41 +179,51 @@ export default function DrivePage() {
 
   // === Cargar archivos dentro de una carpeta (por id) ===
   const fetchFiles = async (folderId: string, folderName: string) => {
-    try {
-      setLoadingFiles(true);
-      setError(null);
-      setSelectedFolder({
-        id: folderId,
-        name: folderName,
-        mimeType: FOLDER_MIME,
-      } as DriveFolder);
+  try {
+    setLoadingFiles(true);
+    setError(null);
+    setNoAccess(false);
 
-      const token = getAccessToken();
-      if (!token) {
-        navigate("/login");
-        return;
-      }
+    setSelectedFolder({
+      id: folderId,
+      name: folderName,
+      mimeType: FOLDER_MIME,
+    } as DriveFolder);
 
-      const res = await axios.get(
-        `${API_BASE_URL}/drive/folder/${folderId}/files`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          withCredentials: true,
-        }
-      );
-
-      setFiles(res.data.files || []);
-    } catch (err: any) {
-      console.error("Error cargando archivos:", err);
-      const msg =
-        err?.response?.data?.error || "Error cargando archivos de Drive";
-      setError(msg);
-    } finally {
-      setLoadingFiles(false);
+    const token = getAccessToken();
+    if (!token) {
+      navigate("/login");
+      return;
     }
-  };
+
+    const res = await axios.get(
+      `${API_BASE_URL}/drive/folder/${folderId}/files`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        withCredentials: true,
+      }
+    );
+
+    setFiles(res.data.files || []);
+  } catch (err: any) {
+    console.error("Error cargando archivos:", err);
+    const status = err?.response?.status;
+    const msg =
+      err?.response?.data?.error || "Error cargando archivos de Drive";
+
+    if (status === 403) {
+      // 👇 sin permisos sobre esta carpeta
+      setNoAccess(true);
+      setFiles([]);
+    } else {
+      setError(msg);
+    }
+  } finally {
+    setLoadingFiles(false);
+  }
+};
 
   // Abre una carpeta y actualiza la ruta (breadcrumb)
   const openFolder = async (
@@ -318,6 +334,7 @@ export default function DrivePage() {
   };
 
   const isLoading = loadingFolders || loadingFiles;
+  const canUpload = Boolean(selectedFolder && driveConnected && !noAccess);
 
   return (
     <div className="space-y-6">
@@ -424,48 +441,74 @@ export default function DrivePage() {
           )}
 
           {folders.length > 0 && (
-            <ul className="mt-1 space-y-1">
-              {folders.map((folder) => {
-                const isActive = selectedFolder?.id === folder.id;
-                return (
-                  <li key={folder.id}>
-                    <button
-                      onClick={() =>
-                        openFolder({ id: folder.id, name: folder.name }, true)
-                      }
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                        isActive
-                          ? "bg-[var(--primary-color)] text-white shadow-sm"
-                          : "hover:bg-black/5 text-black/80"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
-                            isActive
-                              ? "border-white/20 bg-white/10"
-                              : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
-                          }`}
-                        >
-                          <FolderIcon size={16} />
-                        </span>
-                        <span className="truncate">{folder.name}</span>
-                      </span>
-                      <span
-                        className={`text-[11px] ${
-                          isActive ? "text-white/70" : "text-black/45"
-                        }`}
-                      >
-                        {folder.modifiedTime
-                          ? new Date(folder.modifiedTime).toLocaleDateString()
-                          : ""}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+  <ul className="mt-1 space-y-1">
+    {folders.map((folder) => {
+      const isActive = selectedFolder?.id === folder.id;
+      return (
+        <li key={folder.id}>
+          <button
+            onClick={() =>
+              openFolder(
+                {
+                  id: folder.id,
+                  name: folder.name,
+                  // le pasamos también la ruta completa (si está)
+                },
+                true
+              )
+            }
+            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+              isActive
+                ? "bg-[var(--primary-color)] text-white shadow-sm"
+                : "hover:bg-black/5 text-black/80"
+            }`}
+          >
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-2">
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
+                    isActive
+                      ? "border-white/20 bg-white/10"
+                      : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
+                  }`}
+                >
+                  <FolderIcon size={16} />
+                </span>
+                <span className="truncate font-medium">
+                  {folder.name}
+                </span>
+              </span>
+
+              {/* Ruta completa */}
+              <span
+                className={`text-[11px] truncate ${
+                  isActive ? "text-white/80" : "text-black/45"
+                }`}
+              >
+                {folder.pathString
+                  ? folder.pathString
+                  : `CINTAX / ${year} / ${folder.categoria ?? ""} / ${
+                      folder.name
+                    }`}
+              </span>
+            </span>
+
+            <span
+              className={`text-[11px] ${
+                isActive ? "text-white/70" : "text-black/45"
+              }`}
+            >
+              {folder.modifiedTime
+                ? new Date(folder.modifiedTime).toLocaleDateString()
+                : ""}
+            </span>
+          </button>
+        </li>
+      );
+    })}
+  </ul>
+)}
+
         </section>
 
         {/* LISTA DE ARCHIVOS / SUBCARPETAS */}
@@ -516,30 +559,29 @@ export default function DrivePage() {
             )}
 
             {/* Solo mostramos el botón subir si hay una carpeta seleccionada y drive está conectado */}
-            {selectedFolder && driveConnected && (
-              <>
-                {/* Input invisible conectado al handleUploadFile */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleUploadFile}
-                  className="hidden"
-                />
+            {canUpload && (
+  <>
+    <input
+      type="file"
+      ref={fileInputRef}
+      onChange={handleUploadFile}
+      className="hidden"
+    />
+    <button
+      onClick={() => fileInputRef.current?.click()}
+      disabled={uploading || loadingFiles}
+      className="inline-flex items-center gap-2 rounded-lg bg-[var(--secondary-color)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+    >
+      {uploading ? (
+        <Loader2 size={14} className="animate-spin" />
+      ) : (
+        <Upload size={14} />
+      )}
+      {uploading ? "Subiendo..." : "Subir archivo"}
+    </button>
+  </>
+)}
 
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || loadingFiles}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--secondary-color)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  {uploading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Upload size={14} />
-                  )}
-                  {uploading ? "Subiendo..." : "Subir archivo"}
-                </button>
-              </>
-            )}
           </div>
         </div>
 
@@ -554,13 +596,23 @@ export default function DrivePage() {
             </div>
           )}
 
-          {selectedFolder && files.length === 0 && !loadingFiles && (
-            <div className="flex flex-1 items-center justify-center">
-              <p className="text-sm text-black/50">
-                Esta carpeta no tiene contenido.
-              </p>
-            </div>
-          )}
+          {selectedFolder && noAccess && !loadingFiles && (
+  <div className="flex flex-1 items-center justify-center">
+    <p className="text-sm text-black/50 text-center max-w-sm">
+      No tienes permisos para ver el contenido de esta carpeta.
+      <br />
+      Si crees que es un error, contacta al administrador de la intranet.
+    </p>
+  </div>
+)}
+
+{selectedFolder && !noAccess && files.length === 0 && !loadingFiles && (
+  <div className="flex flex-1 items-center justify-center">
+    <p className="text-sm text-black/50">
+      Esta carpeta no tiene contenido.
+    </p>
+  </div>
+)}
 
           {selectedFolder && files.length > 0 && (
             <div className="overflow-x-auto mt-1">

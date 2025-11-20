@@ -17,7 +17,11 @@ type DriveFolder = {
   name: string;
   mimeType: string;
   modifiedTime?: string;
+  categoria?: string | null;
+  pathNames?: string[];   // ← viene del backend
+  pathString?: string;    // ← "CINTAX / 2025 / CONTA / A01"
 };
+
 
 type DriveFile = {
   id: string;
@@ -437,48 +441,74 @@ export default function DrivePage() {
           )}
 
           {folders.length > 0 && (
-            <ul className="mt-1 space-y-1">
-              {folders.map((folder) => {
-                const isActive = selectedFolder?.id === folder.id;
-                return (
-                  <li key={folder.id}>
-                    <button
-                      onClick={() =>
-                        openFolder({ id: folder.id, name: folder.name }, true)
-                      }
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                        isActive
-                          ? "bg-[var(--primary-color)] text-white shadow-sm"
-                          : "hover:bg-black/5 text-black/80"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
-                            isActive
-                              ? "border-white/20 bg-white/10"
-                              : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
-                          }`}
-                        >
-                          <FolderIcon size={16} />
-                        </span>
-                        <span className="truncate">{folder.name}</span>
-                      </span>
-                      <span
-                        className={`text-[11px] ${
-                          isActive ? "text-white/70" : "text-black/45"
-                        }`}
-                      >
-                        {folder.modifiedTime
-                          ? new Date(folder.modifiedTime).toLocaleDateString()
-                          : ""}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+  <ul className="mt-1 space-y-1">
+    {folders.map((folder) => {
+      const isActive = selectedFolder?.id === folder.id;
+      return (
+        <li key={folder.id}>
+          <button
+            onClick={() =>
+              openFolder(
+                {
+                  id: folder.id,
+                  name: folder.name,
+                  // le pasamos también la ruta completa (si está)
+                },
+                true
+              )
+            }
+            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+              isActive
+                ? "bg-[var(--primary-color)] text-white shadow-sm"
+                : "hover:bg-black/5 text-black/80"
+            }`}
+          >
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-2">
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
+                    isActive
+                      ? "border-white/20 bg-white/10"
+                      : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
+                  }`}
+                >
+                  <FolderIcon size={16} />
+                </span>
+                <span className="truncate font-medium">
+                  {folder.name}
+                </span>
+              </span>
+
+              {/* Ruta completa */}
+              <span
+                className={`text-[11px] truncate ${
+                  isActive ? "text-white/80" : "text-black/45"
+                }`}
+              >
+                {folder.pathString
+                  ? folder.pathString
+                  : `CINTAX / ${year} / ${folder.categoria ?? ""} / ${
+                      folder.name
+                    }`}
+              </span>
+            </span>
+
+            <span
+              className={`text-[11px] ${
+                isActive ? "text-white/70" : "text-black/45"
+              }`}
+            >
+              {folder.modifiedTime
+                ? new Date(folder.modifiedTime).toLocaleDateString()
+                : ""}
+            </span>
+          </button>
+        </li>
+      );
+    })}
+  </ul>
+)}
+
         </section>
 
         {/* LISTA DE ARCHIVOS / SUBCARPETAS */}

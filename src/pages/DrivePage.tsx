@@ -337,7 +337,7 @@ export default function DrivePage() {
   const canUpload = Boolean(selectedFolder && driveConnected && !noAccess);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mt-6">
       {/* HEADER */}
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">

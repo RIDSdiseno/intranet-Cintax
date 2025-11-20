@@ -26,6 +26,7 @@ type DashboardProps = {
   area: string;
 };
 
+// --- DATOS MOCK POR ÁREA ---
 const MOCK_DATA: Record<string, any> = {
   Contabilidad: {
     kpis: {
@@ -107,14 +108,8 @@ const MOCK_DATA: Record<string, any> = {
       { name: "Cerrado", value: 5 },
     ],
   },
-  // Default para "Entre otros" o "Todos"
   Default: {
-    kpis: {
-      abiertos: 0,
-      urgentes: 0,
-      sinAsignar: 0,
-      resueltos: 0,
-    },
+    kpis: { abiertos: 0, urgentes: 0, sinAsignar: 0, resueltos: 0 },
     prioridad: [],
     estado: [],
   },
@@ -146,12 +141,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardArea({ area }: DashboardProps) {
-  // Selección de datos segura
   const data = useMemo(() => {
     return MOCK_DATA[area] || MOCK_DATA["Default"];
   }, [area]);
 
-  // Si no hay datos (ej. área nueva sin configurar), mostramos un estado vacío elegante
   if (!data.prioridad.length) {
     return (
       <div className="bg-white p-8 rounded-2xl border border-black/5 text-center animate-in fade-in">
@@ -170,7 +163,7 @@ export default function DashboardArea({ area }: DashboardProps) {
       {/* KPI GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Abiertos */}
-        <div className="bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-md p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-105">
+        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
           <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
             <Clock size={24} />
           </div>
@@ -185,7 +178,7 @@ export default function DashboardArea({ area }: DashboardProps) {
         </div>
 
         {/* KPI 2: Urgentes */}
-        <div className="bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
+        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
           <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
             <AlertTriangle size={24} />
           </div>
@@ -200,7 +193,7 @@ export default function DashboardArea({ area }: DashboardProps) {
         </div>
 
         {/* KPI 3: Sin Asignar */}
-        <div className="bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
+        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
           <div className="p-3 bg-gray-100 text-gray-600 rounded-xl">
             <Users size={24} />
           </div>
@@ -213,7 +206,7 @@ export default function DashboardArea({ area }: DashboardProps) {
         </div>
 
         {/* KPI 4: Resueltos */}
-        <div className="bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
+        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
             <CheckCircle2 size={24} />
           </div>
@@ -244,11 +237,13 @@ export default function DashboardArea({ area }: DashboardProps) {
             </button>
           </div>
 
-          <div className="flex-1 w-full min-h-[250px]">
+          <div className="flex-1 w-full min-h-[300px]">
+            {" "}
+            {/* Altura aumentada para móvil */}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={data.prioridad}
-                margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -261,6 +256,7 @@ export default function DashboardArea({ area }: DashboardProps) {
                   tickLine={false}
                   tick={{ fill: "#9ca3af", fontSize: 12 }}
                   dy={10}
+                  interval={0} // Intenta mostrar todas las etiquetas
                 />
                 <YAxis
                   axisLine={false}
@@ -271,7 +267,12 @@ export default function DashboardArea({ area }: DashboardProps) {
                   content={<CustomTooltip />}
                   cursor={{ fill: "#f5f4f0" }}
                 />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                <Bar
+                  dataKey="value"
+                  radius={[6, 6, 0, 0]}
+                  barSize={40}
+                  maxBarSize={60}
+                >
                   {data.prioridad.map((entry: any, index: number) => (
                     <Cell
                       key={`cell-${index}`}
@@ -304,15 +305,17 @@ export default function DashboardArea({ area }: DashboardProps) {
             </div>
           </div>
 
-          <div className="flex-1 w-full min-h-[250px] relative">
+          <div className="flex-1 w-full min-h-[300px] relative">
+            {" "}
+            {/* Altura aumentada */}
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data.estado}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
+                  innerRadius="60%" // Porcentaje para escalar bien
+                  outerRadius="80%" // Porcentaje para escalar bien
                   paddingAngle={5}
                   dataKey="value"
                   stroke="none"
@@ -338,11 +341,13 @@ export default function DashboardArea({ area }: DashboardProps) {
                 />
               </PieChart>
             </ResponsiveContainer>
-
             {/* Centro del Donut */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8">
-              <span className="text-2xl font-bold text-[var(--primary-color)]">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-10">
+              <span className="text-3xl font-bold text-[var(--primary-color)]">
                 100%
+              </span>
+              <span className="text-xs text-black/40 font-medium uppercase tracking-wider mt-1">
+                Total
               </span>
             </div>
           </div>

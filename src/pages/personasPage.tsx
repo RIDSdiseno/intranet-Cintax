@@ -18,11 +18,10 @@ type Persona = {
   nombre: string;
   email: string;
   area: string; // Ej: "Clientes", "Proveedores", "Interno", etc.
-  categoria: Categoria; // Para filtrar por tipo (igual a categorías de tickets)
+  categoria: Categoria;
   estado?: "Activo" | "Inactivo";
 };
 
-// ---- Datos MOCK (puedes reemplazar luego por fetch a tu API) ----
 const PERSONAS: Persona[] = [
   {
     id: 1,
@@ -277,17 +276,6 @@ export default function PersonasPage() {
                         ) : (
                           <ChevronRight size={18} />
                         )}
-                      </button>
-
-                      {/* Botón de acción principal */}
-                      <button
-                        onClick={() =>
-                          alert(`Acción principal: Ver ficha de ${p.nombre}`)
-                        }
-                        className="inline-flex items-center gap-1 text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition bg-white text-[var(--primary-color)]"
-                      >
-                        <Eye size={16} />
-                        Ficha
                       </button>
                     </td>
                   </tr>

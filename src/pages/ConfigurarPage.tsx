@@ -28,7 +28,7 @@ export default function ConfigurarPage() {
 
   const [formData, setFormData] = useState({
     nombre: "Rosalía",
-    cargo: "Anibistrador",
+    cargo: "Administrador",
     email: "administrador@cintax.com",
     telefono: "+56 9 1234 5678",
     currentPass: "",
@@ -194,7 +194,7 @@ export default function ConfigurarPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-black/70 mb-1">
-                    Nombre completo
+                    Nombre
                   </label>
                   <input
                     type="text"

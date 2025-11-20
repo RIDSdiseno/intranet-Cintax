@@ -1116,7 +1116,7 @@ export default function CintaxIntranetMockup() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => navigate("/configurar")}
-                  className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition"
+                  className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition active:scale-95"
                 >
                   <Settings size={18} />
                 </button>

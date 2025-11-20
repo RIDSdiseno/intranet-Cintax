@@ -13,8 +13,10 @@ import {
   RefreshCw,
   User,
   Shield,
-  LogOut,
-  Users,
+  Edit2, // Nuevo icono
+  Save, // Nuevo icono
+  X, // Nuevo icono (reutilizado)
+  MessageSquare,
 } from "lucide-react";
 
 // --- TIPOS DE DATOS ---
@@ -64,7 +66,7 @@ const ADMIN_USER: UserProfile = {
   avatar: "AD",
 };
 
-// --- DATOS INICIALES VACÍOS (REQUERIMIENTO) ---
+// --- DATOS INICIALES VACÍOS ---
 const INITIAL_DATA: Analista[] = [];
 
 // --- COMPONENTES UI ---
@@ -92,7 +94,6 @@ const StatusBadge = ({
 }) => {
   const vencimiento = new Date(date);
   const hoy = new Date();
-  // Si vence hoy o antes y no está listo, es atrasado (o urgente)
   const isLate =
     !isNaN(vencimiento.getTime()) &&
     vencimiento < hoy &&
@@ -117,12 +118,99 @@ const StatusBadge = ({
   );
 };
 
-export default function TareasPage() {
-  // Estado de Sesión
-  const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
+// --- NUEVO COMPONENTE: CELDA DE OBSERVACIÓN EDITABLE ---
+const ObservationCell = ({
+  value,
+  onSave,
+  disabled,
+}: {
+  value: string;
+  onSave: (val: string) => void;
+  disabled: boolean;
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempValue, setTempValue] = useState(value);
 
-  // Estados de Datos
-  const [periodo, setPeriodo] = useState("Marzo 2025");
+  useEffect(() => {
+    setTempValue(value);
+  }, [value]);
+
+  if (disabled) {
+    return (
+      <div
+        className="text-xs text-black/40 italic truncate max-w-[200px] text-right"
+        title={value}
+      >
+        {value || "-"}
+      </div>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <div className="relative z-10 min-w-[200px]">
+        <textarea
+          className="w-full text-xs p-2 border border-[var(--secondary-color)] rounded-lg bg-white shadow-md outline-none resize-y min-h-[60px]"
+          value={tempValue}
+          onChange={(e) => setTempValue(e.target.value)}
+          autoFocus
+          placeholder="Escribe una observación..."
+        />
+        <div className="flex justify-end gap-1 mt-1">
+          <button
+            onClick={() => {
+              setIsEditing(false);
+              setTempValue(value);
+            }}
+            className="p-1 bg-gray-100 rounded hover:bg-gray-200 text-black/60"
+            title="Cancelar"
+          >
+            <X size={12} />
+          </button>
+          <button
+            onClick={() => {
+              onSave(tempValue);
+              setIsEditing(false);
+            }}
+            className="p-1 bg-[var(--secondary-color)] rounded text-white hover:opacity-90"
+            title="Guardar"
+          >
+            <Save size={12} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center justify-end gap-2 group cursor-pointer"
+      onClick={() => setIsEditing(true)}
+    >
+      <span
+        className={`text-xs italic truncate max-w-[150px] ${
+          value ? "text-black/60" : "text-black/20"
+        }`}
+      >
+        {value || "Agregar obs..."}
+      </span>
+      <button className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-black/5 rounded text-[var(--secondary-color)] transition-all">
+        <Edit2 size={12} />
+      </button>
+    </div>
+  );
+};
+
+const getCurrentPeriod = () => {
+  const date = new Date();
+  const month = date.toLocaleString("es-ES", { month: "long" });
+  const year = date.getFullYear();
+  return `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
+};
+
+export default function TareasPage() {
+  const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
+  const [periodo, setPeriodo] = useState(getCurrentPeriod());
   const [analistas, setAnalistas] = useState<Analista[]>(INITIAL_DATA);
 
   // Estados UI
@@ -134,14 +222,14 @@ export default function TareasPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Generar lista de usuarios disponibles para simulación basada en los datos cargados
+  // Generar usuarios para simulación
   const availableUsers = useMemo(() => {
     const users: UserProfile[] = [ADMIN_USER];
     analistas.forEach((a) => {
       users.push({
         id: a.id,
         name: a.nombre,
-        email: `${a.nombre.split(" ")[0].toLowerCase()}@cintax.cl`, // Generar email fake
+        email: `${a.nombre.split(" ")[0].toLowerCase()}@cintax.cl`,
         role: "analyst",
         avatar: a.avatar,
       });
@@ -149,7 +237,6 @@ export default function TareasPage() {
     return users;
   }, [analistas]);
 
-  // Efecto de vista según rol
   useEffect(() => {
     if (currentUser.role === "analyst") {
       setExpandedAnalista(currentUser.id);
@@ -163,12 +250,14 @@ export default function TareasPage() {
   const toggleCliente = (id: string) =>
     setExpandedCliente((prev) => (prev === id ? null : id));
 
-  // --- LÓGICA: CHECK TAREA ---
-  const handleToggleTask = (
+  // --- LÓGICA: UPDATE TAREA (Check o Comentario) ---
+  const updateTask = (
     analistaId: string,
     clienteId: string,
-    tareaId: string
+    tareaId: string,
+    changes: Partial<Tarea>
   ) => {
+    // Permisos
     if (currentUser.role === "admin") {
       alert("Modo Supervisión: Solo lectura.");
       return;
@@ -185,16 +274,13 @@ export default function TareasPage() {
           ...a,
           clientes: a.clientes.map((c) => {
             if (c.id !== clienteId) return c;
+
             const updatedTareas = c.tareas.map((t) => {
               if (t.id !== tareaId) return t;
-              return {
-                ...t,
-                estado:
-                  t.estado === "completado"
-                    ? "pendiente"
-                    : ("completado" as TareaEstado),
-              };
+              return { ...t, ...changes };
             });
+
+            // Recalcular progreso
             const completed = updatedTareas.filter(
               (t) => t.estado === "completado"
             ).length;
@@ -202,18 +288,44 @@ export default function TareasPage() {
               (completed / updatedTareas.length) * 100
             );
 
+            // Recalcular carga del analista (simplificado)
+            // Nota: En una app real esto se calcula derivado, no almacenado
             const delta =
               completed >
               c.tareas.filter((x) => x.estado === "completado").length
                 ? 1
                 : -1;
-            a.completadas = Math.max(0, a.completadas + delta);
+            // Solo ajustamos si el cambio fue de estado
+            if (changes.estado) {
+              a.completadas = Math.max(
+                0,
+                a.completadas + (changes.estado === "completado" ? 1 : -1)
+              );
+            }
 
             return { ...c, tareas: updatedTareas, progreso: progress };
           }),
         };
       })
     );
+  };
+
+  const handleToggleTask = (
+    analistaId: string,
+    clienteId: string,
+    tarea: Tarea
+  ) => {
+    const newState = tarea.estado === "completado" ? "pendiente" : "completado";
+    updateTask(analistaId, clienteId, tarea.id, { estado: newState });
+  };
+
+  const handleSaveObservation = (
+    analistaId: string,
+    clienteId: string,
+    tareaId: string,
+    text: string
+  ) => {
+    updateTask(analistaId, clienteId, tareaId, { comentario: text });
   };
 
   // --- IMPORTADOR CSV ---
@@ -223,7 +335,6 @@ export default function TareasPage() {
     if (!file) return;
     setIsImporting(true);
     setErrorMsg(null);
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -245,7 +356,6 @@ export default function TareasPage() {
       return;
     }
 
-    // Detectar separador (excel en español usa punto y coma)
     const separator =
       (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length
         ? ";"
@@ -260,7 +370,6 @@ export default function TareasPage() {
         .map((cell) => cell.replace(/^"|"$/g, "").trim());
       if (row.length < 5) continue;
 
-      // Formato esperado: Analista, Cliente, RUT, Tarea, Vencimiento
       const [
         nombreAnalista,
         nombreCliente,
@@ -273,9 +382,7 @@ export default function TareasPage() {
 
       if (!nombreAnalista || !nombreCliente) continue;
 
-      // 1. Crear Analista si no existe
       if (!mapAnalistas.has(nombreAnalista)) {
-        // Generamos un ID basado en el nombre para consistencia simple
         const generatedId = `a-${nombreAnalista
           .replace(/\s+/g, "")
           .toLowerCase()}`;
@@ -290,7 +397,6 @@ export default function TareasPage() {
       }
       const analista = mapAnalistas.get(nombreAnalista)!;
 
-      // 2. Crear Cliente
       let cliente = analista.clientes.find((c) => c.nombre === nombreCliente);
       if (!cliente) {
         cliente = {
@@ -303,7 +409,6 @@ export default function TareasPage() {
         analista.clientes.push(cliente);
       }
 
-      // 3. Tarea
       const estadoNormalizado = estadoRaw?.toLowerCase().includes("completado")
         ? "completado"
         : "pendiente";
@@ -319,7 +424,6 @@ export default function TareasPage() {
       if (estadoNormalizado === "completado") analista.completadas++;
     }
 
-    // Recalcular progresos de clientes
     mapAnalistas.forEach((analista) => {
       analista.clientes.forEach((cliente) => {
         const done = cliente.tareas.filter(
@@ -376,13 +480,13 @@ export default function TareasPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "Tareas.csv");
+    link.setAttribute("download", `Reporte_${periodo.replace(/\s/g, "_")}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Filtros de vista
+  // Filtros y Stats
   const viewData = useMemo(() => {
     let data = analistas;
     if (currentUser.role === "analyst") {
@@ -399,7 +503,6 @@ export default function TareasPage() {
     return data;
   }, [analistas, currentUser, searchTerm]);
 
-  // Stats
   const stats = useMemo(() => {
     let total = 0,
       completadas = 0,
@@ -423,7 +526,7 @@ export default function TareasPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      {/* === SIMULADOR DE SESIÓN DINÁMICO === */}
+      {/* Simulador de Sesión */}
       <div className="bg-black text-white p-4 rounded-xl flex flex-wrap items-center justify-between text-sm shadow-lg mb-8 gap-4">
         <div className="flex items-center gap-3">
           <Shield size={18} className="text-[var(--secondary-color)]" />
@@ -443,7 +546,6 @@ export default function TareasPage() {
             </span>
           </div>
         </div>
-
         <div className="flex flex-col items-end gap-1">
           <p className="text-xs opacity-60 mr-1">Cambiar perfil para probar:</p>
           <div className="flex flex-wrap gap-2 justify-end">
@@ -465,7 +567,7 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* === HEADER === */}
+      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-black/5 pb-6">
         <div>
           <h1 className="text-2xl font-bold text-[var(--primary-color)]">
@@ -514,7 +616,6 @@ export default function TareasPage() {
                   ? "Actualizar Planificación"
                   : "Cargar Planificación"}
               </button>
-
               <button
                 onClick={handleExport}
                 disabled={analistas.length === 0}
@@ -528,7 +629,14 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* === ESTADÍSTICAS === */}
+      {/* Contenido */}
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
+          <AlertCircle size={16} /> {errorMsg}
+        </div>
+      )}
+
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
           <p className="text-xs text-black/50 font-medium uppercase">
@@ -541,6 +649,7 @@ export default function TareasPage() {
             <ProgressBar value={stats.cumplimiento} />
           </div>
         </div>
+        {/* ... resto de stats igual ... */}
         <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
           <p className="text-xs text-black/50 font-medium uppercase">
             Total Clientes
@@ -572,35 +681,27 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* === CONTENIDO === */}
-      {errorMsg && (
-        <div className="bg-rose-50 text-rose-700 p-4 rounded-xl flex items-center gap-2">
-          <AlertCircle size={18} /> {errorMsg}
-        </div>
-      )}
-
       {analistas.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-black/10 rounded-2xl bg-[var(--tertiary-color)]/20">
           <UploadCloud size={48} className="mx-auto text-black/20 mb-4" />
           <h3 className="text-lg font-semibold text-black/60">
             Sin Planificación
           </h3>
-          <p className="text-sm text-black/40 max-w-md mx-auto mt-1">
-            El panel está vacío. Como Administrador, carga el archivo CSV
-            generado por el CRM para comenzar el ciclo mensual.
-          </p>
-          {currentUser.role === "admin" && (
+          {currentUser.role === "admin" ? (
             <button
               onClick={() => fileInputRef.current?.click()}
               className="mt-6 px-6 py-2 bg-[var(--secondary-color)] text-white rounded-xl font-medium shadow-sm hover:opacity-90"
             >
               Subir Archivo CSV
             </button>
+          ) : (
+            <p className="text-sm text-black/40 max-w-md mx-auto mt-1">
+              El administrador aún no ha cargado la planificación del mes.
+            </p>
           )}
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Buscador */}
           <div className="relative">
             <Search
               size={18}
@@ -615,7 +716,6 @@ export default function TareasPage() {
             />
           </div>
 
-          {/* Listado de Analistas */}
           {viewData.map((analista) => (
             <div
               key={analista.id}
@@ -730,9 +830,7 @@ export default function TareasPage() {
                                 <th className="py-2 hidden sm:table-cell">
                                   Estado
                                 </th>
-                                {currentUser.role === "admin" && (
-                                  <th className="py-2 text-right">Obs</th>
-                                )}
+                                <th className="py-2 text-right">Obs</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-black/5">
@@ -751,7 +849,7 @@ export default function TareasPage() {
                                         handleToggleTask(
                                           analista.id,
                                           cliente.id,
-                                          t.id
+                                          t
                                         )
                                       }
                                       disabled={currentUser.role === "admin"}
@@ -786,11 +884,20 @@ export default function TareasPage() {
                                       date={t.vencimiento}
                                     />
                                   </td>
-                                  {currentUser.role === "admin" && (
-                                    <td className="py-2 text-right text-xs text-black/40 italic">
-                                      {t.comentario || "-"}
-                                    </td>
-                                  )}
+                                  <td className="py-2 text-right text-xs text-black/40 italic">
+                                    <ObservationCell
+                                      value={t.comentario || ""}
+                                      onSave={(val) =>
+                                        handleSaveObservation(
+                                          analista.id,
+                                          cliente.id,
+                                          t.id,
+                                          val
+                                        )
+                                      }
+                                      disabled={currentUser.role === "admin"}
+                                    />
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>

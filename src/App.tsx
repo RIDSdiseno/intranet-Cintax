@@ -621,24 +621,30 @@ export default function CintaxIntranetMockup() {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const handleLogout = async () => {
-    try {
-      await axios.post(
-        `${API_BASE_URL}/auth/logout`,
-        {},
-        { withCredentials: true }
-      );
-    } catch (err) {
-      console.error("Error al cerrar sesión", err);
-    } finally {
-      // limpiar tokens tanto nuevos como antiguos
-      localStorage.removeItem("access_token");
-      sessionStorage.removeItem("access_token");
-      localStorage.removeItem("auth_token");
-      sessionStorage.removeItem("auth_token");
+  try {
+    const token =
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token");
 
-      navigate("/login", { replace: true });
-    }
-  };
+    await axios.post(
+      `${API_BASE_URL}/auth/logout`,
+      {},
+      {
+        withCredentials: true,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+  } catch (err) {
+    console.error("Error al cerrar sesión", err);
+  } finally {
+    localStorage.removeItem("access_token");
+    sessionStorage.removeItem("access_token");
+    localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
+    navigate("/login", { replace: true });
+  }
+};
+
 
   return (
     <div

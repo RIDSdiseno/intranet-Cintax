@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Folder,
   X,
+  FileChartLine,
 } from "lucide-react";
 import {
   Routes,
@@ -27,6 +28,8 @@ import PersonasPage from "./pages/personasPage";
 import DrivePage from "./pages/DrivePage";
 import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
+import SoportePage from "./pages/SoportePage";
+import AnalistaPage from "./pages/AnalistaPage";
 /**
  * Cintax Intranet Mockup (single-file TSX)
  * - TailwindCSS for styling
@@ -64,7 +67,7 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-lg">
+  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-md">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -88,8 +91,10 @@ const SideLink: React.FC<{
   icon: React.ReactNode;
   label: string;
   active?: boolean;
-}> = ({ icon, label, active }) => (
+  onClick?: () => void;
+}> = ({ icon, label, active, onClick }) => (
   <button
+    onClick={onClick}
     className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
       active
         ? "bg-white text-[var(--primary-color)] shadow-sm"
@@ -817,14 +822,94 @@ export default function CintaxIntranetMockup() {
                   Tickets
                 </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Todos</NavLink>
-                  <NavLink to="/tickets/comercial" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Comercial y Marketing</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/gerencia" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Gerencia</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`} onClick={() => setSidebarOpen(false)}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/comercial"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Comercial y Marketing
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/gerencia"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Gerencia
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
-                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+                <SideLink
+                  icon={<LifeBuoy size={18} />}
+                  label="Soporte"
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/soporte");
+                  }}
+                />
               </nav>
 
               <div className="border-t border-white/10 pt-4">
@@ -896,18 +981,104 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
+                <NavLink
+                  to="/analista"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <FileChartLine size={18} />
+                  </span>
+                  <span className="truncate text-left">Analista</span>
+                </NavLink>
                 <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
                   Tickets
                 </div>
                 <div className="pl-3 flex flex-col gap-1">
-                  <NavLink to="/tickets" end className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Todos</NavLink>
-                  <NavLink to="/tickets/contabilidad" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Contabilidad</NavLink>
-                  <NavLink to="/tickets/comercial" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Comercial y Marketing</NavLink>
-                  <NavLink to="/tickets/gerencia" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Gerencia</NavLink>
-                  <NavLink to="/tickets/rrhh" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Recursos Humanos</NavLink>
-                  <NavLink to="/tickets/otros" className={({ isActive }) => `text-sm px-3 py-2 rounded-lg ${isActive ? "text-white bg-white/10" : "text-white/80 hover:text-white hover:bg-white/10"}`}>Entre otros</NavLink>
+                  <NavLink
+                    to="/tickets"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Todos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/contabilidad"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Contabilidad
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/comercial"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Comercial y Marketing
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/gerencia"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Gerencia
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/rrhh"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Recursos Humanos
+                  </NavLink>
+                  <NavLink
+                    to="/tickets/otros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-lg ${
+                        isActive
+                          ? "text-white bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    Entre otros
+                  </NavLink>
                 </div>
-                <SideLink icon={<LifeBuoy size={18} />} label="Soporte" />
+                <SideLink
+                  icon={<LifeBuoy size={18} />}
+                  label="Soporte"
+                  onClick={() => navigate("/soporte")}
+                />
               </nav>
 
               <div className="mt-auto border-t border-white/10 pt-4">
@@ -937,9 +1108,10 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                onClick={() => navigate("/configurar")}
-                className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition">
+                <button
+                  onClick={() => navigate("/configurar")}
+                  className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition"
+                >
                   <Settings size={18} />
                 </button>
               </div>
@@ -972,6 +1144,14 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/configurar"
               element={<PrivateRoute element={<ConfigurarPage />} />}
+            />
+            <Route
+              path="/soporte"
+              element={<PrivateRoute element={<SoportePage />} />}
+            />
+            <Route
+              path="/analista"
+              element={<PrivateRoute element={<AnalistaPage />} />}
             />
 
             {/* Redirecciones */}

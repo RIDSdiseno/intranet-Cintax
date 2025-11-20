@@ -20,5 +20,10 @@
   --text-content-size: 1rem;
 }
 
+@view-transition {
+  navigation: auto;
+}
+
+
 html { font-size: var(--base-size-font); }
 body { font-family: var(--primary-font); color: var(--primary-color); background: var(--tertiary-color); }

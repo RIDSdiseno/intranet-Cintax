@@ -39,10 +39,10 @@ export default function SoportePage() {
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
       {/* Header Llamativo */}
       <div className="bg-gradient-to-t from-[#af9150]/30 via-white to-transparent backdrop-blur-lg rounded-2xl p-6 md:p-10 shadow-xl border border-black/5 text-center mb-8">
-        <LifeBuoy
-          size={48}
-          className="mx-auto mb-4"
-          style={{ color: "var(--secondary-color)" }}
+        <img
+          className="mx-auto mb-4 h-8 md:h-14 w-auto"
+          src="/img/logo-rids.webp"
+          alt="Logo RIDS"
         />
         <h1
           className="text-2xl md:text-3xl font-bold mb-2"

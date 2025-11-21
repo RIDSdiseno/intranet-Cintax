@@ -13,6 +13,7 @@ import {
   Folder,
   X,
   BookCheck,
+  ChevronDown,
 } from "lucide-react";
 import {
   Routes,
@@ -30,17 +31,13 @@ import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
-/**
- * Cintax Intranet Mockup (single-file TSX)
- * - TailwindCSS for styling
- * - Uses CSS variables with the provided brand tokens
- * - Responsive dashboard layout: sidebar + header + content (KPIs, table, activity)
- * - No external UI deps beyond lucide-react (icons)
- */
+import RecuperarContrasena from "./pages/RecuperarContrasena";
 
-// --- Helper chips ---
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
+  // @ts-ignore
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  "https://localhost:3000";
+
 const Chip: React.FC<{
   children: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "danger";
@@ -60,14 +57,13 @@ const Chip: React.FC<{
   );
 };
 
-// --- KPI Card ---
 const KpiCard: React.FC<{
   title: string;
   value: string;
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300 bg-gradient-to-tr from-[#af9150]/30 via-white to-transparent backdrop-blur-md">
+  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md transition-shadow duration-300 bg-gradient-to-t from-[#af9150]/30 via-white to-transparent backdrop-blur-md">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm text-black/50 tracking-wide">{title}</p>
@@ -86,7 +82,6 @@ const KpiCard: React.FC<{
   </div>
 );
 
-// --- Sidebar Link (solo para "Soporte", los demás serán NavLink) ---
 const SideLink: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -106,7 +101,115 @@ const SideLink: React.FC<{
   </button>
 );
 
-// --- Table Row ---
+const TicketsNav: React.FC<{
+  onNavigate?: () => void;
+}> = ({ onNavigate }) => {
+  const [isOpen, setIsOpen] = React.useState(true);
+
+  return (
+    <div className="flex flex-col">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+      >
+        <span>Tickets</span>
+        <ChevronDown
+          size={14}
+          className={`transition-transform duration-300 ${
+            isOpen ? "rotate-0" : "-rotate-90"
+          }`}
+        />
+      </button>
+
+      <div
+        className={`pl-3 flex flex-col gap-1 overflow-hidden transition-all duration-300 ease-in-out ${
+          isOpen ? "max-h-[400px] opacity-100 mt-1" : "max-h-0 opacity-0 mt-0"
+        }`}
+      >
+        <NavLink
+          to="/tickets"
+          end
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Todos
+        </NavLink>
+        <NavLink
+          to="/tickets/comercial"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Comercial y Marketing
+        </NavLink>
+        <NavLink
+          to="/tickets/contabilidad"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Contabilidad
+        </NavLink>
+        <NavLink
+          to="/tickets/gerencia"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Gerencia
+        </NavLink>
+        <NavLink
+          to="/tickets/rrhh"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Recursos Humanos
+        </NavLink>
+        <NavLink
+          to="/tickets/otros"
+          className={({ isActive }) =>
+            `text-sm px-3 py-2 rounded-lg transition-colors block ${
+              isActive
+                ? "text-white bg-white/10"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`
+          }
+          onClick={onNavigate}
+        >
+          Entre otros
+        </NavLink>
+      </div>
+    </div>
+  );
+};
+
 const TaskRow: React.FC<{
   idx: number;
   title: string;
@@ -149,7 +252,6 @@ const TaskRow: React.FC<{
   );
 };
 
-// --- Activity Item ---
 const ActivityItem: React.FC<{
   title: string;
   time: string;
@@ -172,7 +274,6 @@ const ActivityItem: React.FC<{
   </div>
 );
 
-// --- DATA (mock) ---
 const TASKS = [
   {
     title: "Actualizar política de vacaciones 2026",
@@ -181,7 +282,7 @@ const TASKS = [
     due: "15 Nov 2025",
   },
   {
-    title: "Cierre de sprint #12 – Intranet Cintax",
+    title: "Cierre de sprint #12 - Intranet Cintax",
     owner: "TI",
     status: "Completada" as const,
     due: "08 Nov 2025",
@@ -213,7 +314,6 @@ const ANNOUNCEMENTS = [
   },
 ];
 
-// ---------- PÁGINAS ----------
 function HomePage() {
   const [activeModal, setActiveModal] = React.useState<string | null>(null);
 
@@ -297,7 +397,6 @@ function HomePage() {
 
   return (
     <>
-      {/* Quick actions */}
       <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Nueva solicitud", hint: "Permisos, licencias" },
@@ -326,7 +425,6 @@ function HomePage() {
         ))}
       </div>
 
-      {/* Modales personalizados */}
       {activeModal && modals[activeModal] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -430,7 +528,6 @@ function HomePage() {
         </div>
       )}
 
-      {/* KPIs */}
       <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard
           title="Colaboradores activos"
@@ -458,9 +555,7 @@ function HomePage() {
         />
       </div>
 
-      {/* Content grid */}
       <div className="mt-6 grid xl:grid-cols-3 gap-6">
-        {/* Table */}
         <section className="xl:col-span-2 bg-white rounded-2xl border border-black/5 shadow-sm">
           <header className="flex items-center justify-between px-4 py-4 border-b border-black/5">
             <div>
@@ -504,7 +599,6 @@ function HomePage() {
           </div>
         </section>
 
-        {/* Activity & Announcements */}
         <section className="space-y-6">
           <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
             <h2
@@ -534,7 +628,7 @@ function HomePage() {
                     className="text-[var(--secondary-color)]"
                   />
                 }
-                hint="Incidente VPN – resuelto"
+                hint="Incidente VPN - resuelto"
               />
               <ActivityItem
                 title="Se creó el proyecto ‘Onboarding 2026’"
@@ -599,12 +693,11 @@ function NotFoundPage() {
   );
 }
 
-// ======= Auth helpers =======
 function isAuthed() {
   const token =
     localStorage.getItem("access_token") ||
     sessionStorage.getItem("access_token") ||
-    localStorage.getItem("auth_token") || // por compatibilidad con el mock antiguo
+    localStorage.getItem("auth_token") ||
     sessionStorage.getItem("auth_token");
   return !!token;
 }
@@ -613,45 +706,44 @@ function PrivateRoute({ element }: { element: JSX.Element }) {
   return isAuthed() ? element : <Navigate to="/login" replace />;
 }
 
-// ---------- APP ----------
 export default function CintaxIntranetMockup() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const hideChrome = pathname.startsWith("/login");
+  const hideChrome =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/recuperar-contrasena");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const handleLogout = async () => {
-  try {
-    const token =
-      localStorage.getItem("access_token") ||
-      sessionStorage.getItem("access_token");
+    try {
+      const token =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
 
-    await axios.post(
-      `${API_BASE_URL}/auth/logout`,
-      {},
-      {
-        withCredentials: true,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }
-    );
-  } catch (err) {
-    console.error("Error al cerrar sesión", err);
-  } finally {
-    localStorage.removeItem("access_token");
-    sessionStorage.removeItem("access_token");
-    localStorage.removeItem("auth_token");
-    sessionStorage.removeItem("auth_token");
-    navigate("/login", { replace: true });
-  }
-};
-
+      await axios.post(
+        `${API_BASE_URL}/auth/logout`,
+        {},
+        {
+          withCredentials: true,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+    } catch (err) {
+      console.error("Error al cerrar sesión", err);
+    } finally {
+      localStorage.removeItem("access_token");
+      sessionStorage.removeItem("access_token");
+      localStorage.removeItem("auth_token");
+      sessionStorage.removeItem("auth_token");
+      navigate("/login", { replace: true });
+    }
+  };
 
   return (
     <div
       className="min-h-screen"
       style={{ background: "var(--tertiary-color)" }}
     >
-      {/* Brand tokens */}
       <style>{`
         :root{ 
           --primary-font: "Loew", sans-serif; 
@@ -709,7 +801,6 @@ export default function CintaxIntranetMockup() {
             : "grid lg:grid-cols-[260px_1fr] min-h-screen"
         }
       >
-        {/* Overlay para cerrar sidebar en mobile */}
         {!hideChrome && sidebarOpen && (
           <div
             className="sidebar-overlay open"
@@ -717,7 +808,6 @@ export default function CintaxIntranetMockup() {
           />
         )}
 
-        {/* Botón hamburguesa */}
         {!hideChrome && (
           <button
             className="lg:hidden fixed top-4 left-4 z-50 bg-[var(--primary-color)] text-white rounded-full p-2.5 shadow-md hover:shadow-lg transition"
@@ -740,10 +830,8 @@ export default function CintaxIntranetMockup() {
           </button>
         )}
 
-        {/* Sidebar */}
         {!hideChrome && (
           <>
-            {/* Sidebar Mobile */}
             <aside
               className={`sidebar-mobile ${
                 sidebarOpen ? "open" : ""
@@ -824,90 +912,23 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
-                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
-                  Tickets
-                </div>
-                <div className="pl-3 flex flex-col gap-1">
-                  <NavLink
-                    to="/tickets"
-                    end
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Todos
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/comercial"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Comercial y Marketing
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/contabilidad"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Contabilidad
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/gerencia"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Gerencia
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/rrhh"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Recursos Humanos
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/otros"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    Entre otros
-                  </NavLink>
-                </div>
+                <NavLink
+                  to="/tareas"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <BookCheck size={18} />
+                  </span>
+                  <span className="truncate text-left">Tareas</span>
+                </NavLink>
+                <TicketsNav onNavigate={() => setSidebarOpen(false)} />
                 <SideLink
                   icon={<LifeBuoy size={18} />}
                   label="Soporte"
@@ -931,7 +952,6 @@ export default function CintaxIntranetMockup() {
               </div>
             </aside>
 
-            {/* Sidebar Desktop */}
             <aside className="hidden lg:flex bg-[var(--primary-color)] text-white px-4 py-5 flex-col gap-4 min-h-screen">
               <div className="flex items-center gap-2 px-3">
                 <img
@@ -1002,84 +1022,7 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Tareas</span>
                 </NavLink>
-                <div className="px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider">
-                  Tickets
-                </div>
-                <div className="pl-3 flex flex-col gap-1">
-                  <NavLink
-                    to="/tickets"
-                    end
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Todos
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/contabilidad"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Contabilidad
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/comercial"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Comercial y Marketing
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/gerencia"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Gerencia
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/rrhh"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Recursos Humanos
-                  </NavLink>
-                  <NavLink
-                    to="/tickets/otros"
-                    className={({ isActive }) =>
-                      `text-sm px-3 py-2 rounded-lg ${
-                        isActive
-                          ? "text-white bg-white/10"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    Entre otros
-                  </NavLink>
-                </div>
+                <TicketsNav />
                 <SideLink
                   icon={<LifeBuoy size={18} />}
                   label="Soporte"
@@ -1099,9 +1042,7 @@ export default function CintaxIntranetMockup() {
           </>
         )}
 
-        {/* Main */}
         <main className={hideChrome ? "p-0" : "p-5 lg:p-8 pt-16 lg:pt-5"}>
-          {/* Header */}
           {!hideChrome && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
               <div>
@@ -1124,12 +1065,9 @@ export default function CintaxIntranetMockup() {
             </div>
           )}
 
-          {/* RUTAS */}
           <Routes>
-            {/* Login sin chrome */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* App con chrome (protegidas) */}
             <Route
               path="/home"
               element={<PrivateRoute element={<HomePage />} />}
@@ -1160,18 +1098,19 @@ export default function CintaxIntranetMockup() {
               element={<PrivateRoute element={<TareasPage />} />}
             />
 
-            {/* Redirecciones */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/inicio" element={<Navigate to="/home" replace />} />
+            <Route
+              path="/recuperar-contrasena"
+              element={<RecuperarContrasena />}
+            />
 
-            {/* 404 */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
 
-          {/* Footer */}
           {!hideChrome && (
             <footer className="mt-8 text-center text-xs text-black/50">
-              © {new Date().getFullYear()} Cintax — Intranet Cintax
+              © {new Date().getFullYear()} Cintax - Intranet Cintax
             </footer>
           )}
         </main>

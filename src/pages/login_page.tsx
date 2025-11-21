@@ -217,7 +217,7 @@ export default function LoginPage() {
               Recordarme
             </label>
             <a
-              href="#"
+              href="recuperar-contrasena"
               className="text-sm underline"
               style={{ color: "var(--secondary-color)" }}
             >

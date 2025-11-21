@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Mail, Phone, Globe, Copy, Check, LifeBuoy } from "lucide-react";
+import { Mail, Phone, Globe, Copy, Check } from "lucide-react";
 
 // Datos de contacto de RIDS
 const RIDS_CONTACT = {
   email: "soporte@rids.cl",
-  phone: "+56 9 1234 5678",
+  phone: "+56 9 7371 3869",
   website: "https://www.rids.cl",
 };
 
@@ -38,7 +38,7 @@ export default function SoportePage() {
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
       {/* Header Llamativo */}
-      <div className="bg-gradient-to-t from-[#af9150]/30 via-white to-transparent backdrop-blur-lg rounded-2xl p-6 md:p-10 shadow-xl border border-black/5 text-center mb-8">
+      <div className="bg-gradient-to-t from-[#af9150]/30 via-white to-transparent rounded-2xl p-6 md:p-10 shadow-xl border border-black/5 text-center mb-8">
         <img
           className="mx-auto mb-4 h-8 md:h-14 w-auto"
           src="/img/logo-rids.webp"

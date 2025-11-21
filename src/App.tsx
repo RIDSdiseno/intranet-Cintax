@@ -63,22 +63,27 @@ const KpiCard: React.FC<{
   helper?: string;
   icon?: React.ReactNode;
 }> = ({ title, value, helper, icon }) => (
-  <div className="group relative rounded-xl shadow-sm p-5 border border-black/5 hover:shadow-md transition-shadow duration-300 bg-gradient-to-t from-[#af9150]/30 via-white to-transparent backdrop-blur-md">
-    <div className="flex items-start justify-between">
+  <div className="group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border border-white/40 bg-white/60 backdrop-blur-xl shadow-lg">
+    <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#af9150]/10 blur-2xl transition-all group-hover:bg-[#af9150]/20" />
+    <div className="relative flex items-start justify-between">
       <div>
-        <p className="text-sm text-black/50 tracking-wide">{title}</p>
+        <p className="text-sm font-medium teack/50 tracking-wide">{title}</p>
         <h3
-          className="mt-2 text-3xl font-semibold"
+          className="mt-3 text-3xl font-bold"
           style={{ color: "var(--primary-color)" }}
         >
           {value}
         </h3>
       </div>
-      <div className="opacity-70 group-hover:opacity-100 transition-opacity">
+      <div className="rounded-xl bg-white/50 p-3 text-[#af9150] shadow-sm ring-1 ring-black/5 backdrop-blur-md">
         {icon}
       </div>
     </div>
-    {helper && <p className="mt-3 text-xs text-black/50">{helper}</p>}
+    {helper && (
+      <div className="mt-4 flex items-center gap-1 text-xs font-medium text-black/40">
+        {helper}
+      </div>
+    )}
   </div>
 );
 

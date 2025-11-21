@@ -26,7 +26,6 @@ type DashboardProps = {
   area: string;
 };
 
-// --- DATOS MOCK POR ÁREA ---
 const MOCK_DATA: Record<string, any> = {
   Contabilidad: {
     kpis: {
@@ -116,10 +115,10 @@ const MOCK_DATA: Record<string, any> = {
 };
 
 const COLORS_PRIORIDAD = {
-  Baja: "#10b981", // Emerald
-  Media: "#3b82f6", // Blue
-  Alta: "#f59e0b", // Amber
-  Urgente: "#e11d48", // Rose
+  Baja: "#10b981",
+  Media: "#3b82f6",
+  Alta: "#f59e0b",
+  Urgente: "#e11d48",
 };
 
 const COLORS_ESTADO = ["#1d1e1c", "#af9150", "#71717a", "#d4d4d8"];
@@ -127,7 +126,7 @@ const COLORS_ESTADO = ["#1d1e1c", "#af9150", "#71717a", "#d4d4d8"];
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white p-3 border border-black/10 shadow-lg rounded-xl z-50">
+      <div className="bg-white/90 backdrop-blur-sm p-3 border border-white/50 shadow-lg rounded-xl z-50">
         <p className="text-sm font-semibold text-[var(--primary-color)]">
           {label}
         </p>
@@ -147,8 +146,8 @@ export default function DashboardArea({ area }: DashboardProps) {
 
   if (!data.prioridad.length) {
     return (
-      <div className="bg-white p-8 rounded-2xl border border-black/5 text-center animate-in fade-in">
-        <div className="w-16 h-16 bg-[var(--tertiary-color)] rounded-full flex items-center justify-center mx-auto mb-4 text-black/20">
+      <div className="bg-white/40 backdrop-blur-md p-8 rounded-2xl border border-white/50 text-center animate-in fade-in shadow-sm">
+        <div className="w-16 h-16 bg-white/50 rounded-full flex items-center justify-center mx-auto mb-4 text-black/20">
           <BarChart3 size={32} />
         </div>
         <h3 className="text-black/50 font-medium">
@@ -160,69 +159,66 @@ export default function DashboardArea({ area }: DashboardProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* KPI GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Abiertos */}
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+        <div className="relative overflow-hidden p-4 rounded-2xl border border-white/40 shadow-sm backdrop-blur-md bg-gradient-to-br from-white/90 to-white/40 flex items-center gap-4 transition-all hover:scale-[1.02] hover:shadow-lg hover:border-white/60">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/20 to-transparent rounded-bl-full -mr-4 -mt-4 pointer-events-none"></div>
+          <div className="p-3 bg-amber-50/80 text-amber-600 rounded-xl backdrop-blur-sm">
             <Clock size={24} />
           </div>
-          <div>
+          <div className="relative z-10">
             <p className="text-2xl font-bold text-[var(--primary-color)]">
               {data.kpis.abiertos}
             </p>
-            <p className="text-xs text-black/50 font-medium">
+            <p className="text-xs text-black/60 font-medium">
               Pendientes Gestión
             </p>
           </div>
         </div>
 
-        {/* KPI 2: Urgentes */}
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+        <div className="relative overflow-hidden p-4 rounded-2xl border border-white/40 shadow-sm backdrop-blur-md bg-gradient-to-br from-white/90 to-white/40 flex items-center gap-4 transition-all hover:scale-[1.02] hover:shadow-lg hover:border-white/60">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/20 to-transparent rounded-bl-full -mr-4 -mt-4 pointer-events-none"></div>
+          <div className="p-3 bg-rose-50/80 text-rose-600 rounded-xl backdrop-blur-sm">
             <AlertTriangle size={24} />
           </div>
-          <div>
+          <div className="relative z-10">
             <p className="text-2xl font-bold text-[var(--primary-color)]">
               {data.kpis.urgentes}
             </p>
-            <p className="text-xs text-black/50 font-medium">
+            <p className="text-xs text-black/60 font-medium">
               Prioridad Crítica
             </p>
           </div>
         </div>
 
-        {/* KPI 3: Sin Asignar */}
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
-          <div className="p-3 bg-gray-100 text-gray-600 rounded-xl">
+        <div className="relative overflow-hidden p-4 rounded-2xl border border-white/40 shadow-sm backdrop-blur-md bg-gradient-to-br from-white/90 to-white/40 flex items-center gap-4 transition-all hover:scale-[1.02] hover:shadow-lg hover:border-white/60">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/20 to-transparent rounded-bl-full -mr-4 -mt-4 pointer-events-none"></div>
+          <div className="p-3 bg-gray-100/80 text-gray-600 rounded-xl backdrop-blur-sm">
             <Users size={24} />
           </div>
-          <div>
+          <div className="relative z-10">
             <p className="text-2xl font-bold text-[var(--primary-color)]">
               {data.kpis.sinAsignar}
             </p>
-            <p className="text-xs text-black/50 font-medium">Sin Agente</p>
+            <p className="text-xs text-black/60 font-medium">Sin Agente</p>
           </div>
         </div>
 
-        {/* KPI 4: Resueltos */}
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+        <div className="relative overflow-hidden p-4 rounded-2xl border border-white/40 shadow-sm backdrop-blur-md bg-gradient-to-br from-white/90 to-white/40 flex items-center gap-4 transition-all hover:scale-[1.02] hover:shadow-lg hover:border-white/60">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/20 to-transparent rounded-bl-full -mr-4 -mt-4 pointer-events-none"></div>
+          <div className="p-3 bg-emerald-50/80 text-emerald-600 rounded-xl backdrop-blur-sm">
             <CheckCircle2 size={24} />
           </div>
-          <div>
+          <div className="relative z-10">
             <p className="text-2xl font-bold text-[var(--primary-color)]">
               {data.kpis.resueltos}
             </p>
-            <p className="text-xs text-black/50 font-medium">Resueltos (Mes)</p>
+            <p className="text-xs text-black/60 font-medium">Resueltos (Mes)</p>
           </div>
         </div>
       </div>
 
-      {/* CHART GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* GRÁFICO 1: PRIORIDAD (Bar Chart) */}
-        <div className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm flex flex-col">
+        <div className="bg-white/60 p-6 rounded-2xl border border-white/40 shadow-sm flex flex-col backdrop-blur-md">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-[var(--primary-color)]">
@@ -232,14 +228,12 @@ export default function DashboardArea({ area }: DashboardProps) {
                 Clasificación por prioridad
               </p>
             </div>
-            <button className="p-1.5 hover:bg-black/5 rounded-lg transition-colors text-black/40">
+            <button className="p-1.5 hover:bg-white/50 rounded-lg transition-colors text-black/40">
               <TrendingUp size={18} />
             </button>
           </div>
 
           <div className="flex-1 w-full min-h-[300px]">
-            {" "}
-            {/* Altura aumentada para móvil */}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={data.prioridad}
@@ -248,24 +242,24 @@ export default function DashboardArea({ area }: DashboardProps) {
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#f0f0f0"
+                  stroke="#e5e5e5"
                 />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tick={{ fill: "#6b7280", fontSize: 12 }}
                   dy={10}
-                  interval={0} // Intenta mostrar todas las etiquetas
+                  interval={0}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tick={{ fill: "#6b7280", fontSize: 12 }}
                 />
                 <Tooltip
                   content={<CustomTooltip />}
-                  cursor={{ fill: "#f5f4f0" }}
+                  cursor={{ fill: "rgba(255,255,255,0.5)" }}
                 />
                 <Bar
                   dataKey="value"
@@ -289,8 +283,7 @@ export default function DashboardArea({ area }: DashboardProps) {
           </div>
         </div>
 
-        {/* GRÁFICO 2: ESTADO (Donut Chart) */}
-        <div className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm flex flex-col">
+        <div className="bg-white/60 p-6 rounded-2xl border border-white/40 shadow-sm flex flex-col backdrop-blur-md">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-[var(--primary-color)]">
@@ -306,16 +299,14 @@ export default function DashboardArea({ area }: DashboardProps) {
           </div>
 
           <div className="flex-1 w-full min-h-[300px] relative">
-            {" "}
-            {/* Altura aumentada */}
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data.estado}
                   cx="50%"
                   cy="50%"
-                  innerRadius="60%" // Porcentaje para escalar bien
-                  outerRadius="80%" // Porcentaje para escalar bien
+                  innerRadius="60%"
+                  outerRadius="80%"
                   paddingAngle={5}
                   dataKey="value"
                   stroke="none"
@@ -341,7 +332,7 @@ export default function DashboardArea({ area }: DashboardProps) {
                 />
               </PieChart>
             </ResponsiveContainer>
-            {/* Centro del Donut */}
+
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-10">
               <span className="text-3xl font-bold text-[var(--primary-color)]">
                 100%

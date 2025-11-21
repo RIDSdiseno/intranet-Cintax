@@ -487,11 +487,18 @@ export default function TareasPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-black/10 px-3 py-2 rounded-xl shadow-sm">
-            <Calendar size={16} className="text-black/40" />
-            <span className="text-sm font-medium text-[var(--primary-color)]">
-              {periodo}
-            </span>
+          <div className="flex items-center gap-3 bg-white border border-[#af9150]/30 px-4 py-2 rounded-xl shadow-[0_2px_8px_rgba(175,145,80,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(175,145,80,0.25)]">
+            <div className="p-2 bg-[#af9150]/10 rounded-lg">
+              <Calendar size={18} className="text-[#af9150]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-[#af9150] uppercase tracking-widest leading-none mb-0.5">
+                Periodo
+              </span>
+              <span className="text-sm font-bold text-[var(--primary-color)] leading-none">
+                {periodo}
+              </span>
+            </div>
           </div>
 
           {currentUser.role === "admin" && (
@@ -512,26 +519,8 @@ export default function TareasPage() {
               />
 
               <button
-                onClick={() => portfolioInputRef.current?.click()}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${
-                  isImportingPortfolio
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-                }`}
-                title="Cargar archivo de Analistas y Clientes"
-              >
-                {isImportingPortfolio ? (
-                  <RefreshCw size={16} className="animate-spin" />
-                ) : (
-                  <Users size={16} />
-                )}
-                Cargar Analistas
-              </button>
-
-              <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white shadow-md hover:opacity-90 transition-opacity active:scale-95"
-                style={{ background: "var(--secondary-color)" }}
+                className="bg-green-600 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white shadow-md hover:opacity-90 transition-opacity active:scale-95"
               >
                 <FileSpreadsheet size={16} />
                 Exportar Reporte

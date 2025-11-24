@@ -1,24 +1,35 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
-  UploadCloud,
-  FileSpreadsheet,
+  DndContext,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  MouseSensor,
+  TouchSensor,
+  DragEndEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { createPortal } from "react-dom";
+import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  ChevronDown,
-  ChevronRight,
   Search,
   Calendar,
-  Building2,
-  RefreshCw,
   User,
-  Shield,
-  Users,
-  FileUp,
+  PlayCircle,
+  XCircle,
+  GripVertical,
   Briefcase,
+  Activity,
+  ListTodo,
+  BarChart3,
 } from "lucide-react";
-import * as XLSX from "xlsx";
 
+// --- TIPOS DE DATOS ---
 type UserRole = "admin" | "analyst";
 
 type UserProfile = {
@@ -29,7 +40,13 @@ type UserProfile = {
   avatar: string;
 };
 
-type TareaEstado = "pendiente" | "completado" | "atrasado";
+type TareaEstado =
+  | "pendiente"
+  | "completado"
+  | "atrasado"
+  | "en_proceso"
+  | "no_realizada";
+type KanbanColumnId = "asignada" | "en_proceso" | "realizada" | "no_realizada";
 
 type Tarea = {
   id: string;
@@ -58,23 +75,50 @@ type Analista = {
   completadas: number;
 };
 
-type TareaFila = {
-  id: string;
-  nombre: string;
-  vencimiento: string;
-  estado: TareaEstado;
-  comentario?: string;
+// --- CONFIGURACIÓN DE COLUMNAS ---
+const KANBAN_COLUMNS: {
+  id: KanbanColumnId;
+  label: string;
+  color: string;
+  icon: React.ReactNode;
+  bg: string;
+  border: string;
+}[] = [
+  {
+    id: "asignada",
+    label: "Asignadas",
+    color: "text-gray-600",
+    icon: <Clock size={18} />,
+    bg: "bg-gray-50/50",
+    border: "border-gray-200",
+  },
+  {
+    id: "en_proceso",
+    label: "En Proceso",
+    color: "text-blue-600",
+    icon: <PlayCircle size={18} />,
+    bg: "bg-blue-50/30",
+    border: "border-blue-100",
+  },
+  {
+    id: "realizada",
+    label: "Realizadas",
+    color: "text-emerald-600",
+    icon: <CheckCircle2 size={18} />,
+    bg: "bg-emerald-50/30",
+    border: "border-emerald-100",
+  },
+  {
+    id: "no_realizada",
+    label: "No Realizadas",
+    color: "text-rose-600",
+    icon: <XCircle size={18} />,
+    bg: "bg-rose-50/30",
+    border: "border-rose-100",
+  },
+];
 
-  analistaId: string;
-  analistaNombre: string;
-  analistaEmail: string;
-
-  clienteId: string;
-  clienteNombre: string;
-  clienteRut: string;
-  clienteEmail?: string;
-};
-
+// --- ADMIN POR DEFECTO ---
 const ADMIN_USER: UserProfile = {
   id: "admin",
   name: "Administrador",
@@ -85,9 +129,10 @@ const ADMIN_USER: UserProfile = {
 
 const INITIAL_DATA: Analista[] = [];
 
-// 👇 BASE URL para tu backend
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  // @ts-ignore
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  "http://localhost:3000/api";
 
 const getCurrentPeriod = () => {
   const date = new Date();
@@ -96,6 +141,49 @@ const getCurrentPeriod = () => {
   return `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
 };
 
+// 🔐 Helper para token
+function getAccessToken(): string | null {
+  try {
+    return (
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token")
+    );
+  } catch {
+    return null;
+  }
+}
+
+// ✅ FETCH API
+async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
+  const params = new URLSearchParams();
+  if (role === "admin") {
+    params.set("todos", "true");
+  }
+
+  const base = API_BASE_URL.replace(/\/$/, "");
+  const url = `${base}/auth/tareas-asignadas?${params.toString()}`;
+
+  const token = getAccessToken();
+  if (!token) throw new Error("No hay token de sesión.");
+
+  const res = await fetch(url, {
+    credentials: "include",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("No autorizado");
+    throw new Error(`Error HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.analistas as Analista[];
+}
+
+// --- COMPONENTES UI ---
 const ProgressBar = ({
   value,
   colorClass = "bg-[var(--secondary-color)]",
@@ -103,149 +191,214 @@ const ProgressBar = ({
   value: number;
   colorClass?: string;
 }) => (
-  <div className="h-1.5 w-full bg-black/5 rounded-full overflow-hidden">
+  <div className="h-2 w-full bg-black/5 rounded-full overflow-hidden">
     <div
-      className={`h-full ${colorClass} transition-all duration-500`}
+      className={`h-full ${colorClass} transition-all duration-500 ease-out`}
       style={{ width: `${value}%` }}
     />
   </div>
 );
 
-const StatusBadge = ({
-  status,
-  date,
-}: {
-  status: TareaEstado;
-  date: string;
-}) => {
-  const vencimiento = new Date(date);
-  const hoy = new Date();
-  const isLate =
-    !isNaN(vencimiento.getTime()) &&
-    vencimiento < hoy &&
-    status !== "completado";
+// --- COMPONENTES DND ---
 
-  if (status === "completado")
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase border border-emerald-100">
-        <CheckCircle2 size={10} /> Listo
-      </span>
-    );
-  if (isLate || status === "atrasado")
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold uppercase border border-rose-100">
-        <AlertCircle size={10} /> Atrasado
-      </span>
-    );
+// 1. TARJETA ARRASTRABLE (Draggable)
+const DraggableTaskCard = ({
+  task,
+  isOverlay = false,
+  disabled = false,
+}: {
+  task: any;
+  isOverlay?: boolean;
+  disabled?: boolean;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: task.uniqueId,
+      data: task,
+      disabled: disabled,
+    });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: "none",
+  };
+
+  const isLate =
+    new Date(task.vencimiento) < new Date() && task.estado !== "completado";
+
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold uppercase border border-amber-100">
-      <Clock size={10} /> Pendiente
-    </span>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`
+        bg-white p-4 rounded-xl border shadow-sm transition-all relative group touch-none flex flex-col gap-2
+        ${
+          isOverlay
+            ? "shadow-2xl scale-105 rotate-2 cursor-grabbing z-50"
+            : "hover:shadow-md"
+        }
+        ${
+          disabled
+            ? "cursor-default opacity-80"
+            : "cursor-grab active:cursor-grabbing"
+        }
+        ${
+          isLate
+            ? "border-l-4 border-l-rose-500 border-gray-200"
+            : "border-gray-200"
+        }
+      `}
+    >
+      <div className="flex justify-between items-start">
+        <span className="text-[10px] font-bold text-black/50 uppercase tracking-wider bg-gray-100 px-2 py-0.5 rounded truncate max-w-[150px]">
+          {task.cliente}
+        </span>
+        {!disabled && (
+          <GripVertical
+            size={14}
+            className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+          />
+        )}
+      </div>
+
+      <h4 className="font-medium text-gray-800 leading-tight text-sm">
+        {task.nombre}
+      </h4>
+
+      <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 pt-2 mt-1">
+        <div
+          className={`flex items-center gap-1 ${
+            isLate ? "text-rose-600 font-bold" : ""
+          }`}
+        >
+          <Calendar size={12} />
+          {new Date(task.vencimiento).toLocaleDateString("es-CL", {
+            day: "numeric",
+            month: "short",
+          })}
+        </div>
+
+        {task.comentario && (
+          <div
+            className="flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded"
+            title={task.comentario}
+          >
+            <AlertCircle size={10} />
+            <span className="truncate max-w-[60px]">Obs</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
-// 🔐 helper para leer el accessToken (ajusta la key si usas otra)
-function getAccessToken(): string | null {
-  try {
-    return (localStorage.getItem("access_token") ||
-      sessionStorage.getItem("access_token"))
-  } catch {
-    return null;
-  }
-}
-
-// ✅ helper para pedir las tareas al backend con Authorization
-async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
-  const params = new URLSearchParams();
-  params.set("soloPendientes", "true"); // solo tareas pendientes/EN_PROCESO
-  if (role === "admin") {
-    params.set("todos", "true"); // admin ve todas las de todos
-  }
-
-  const base = API_BASE_URL.replace(/\/$/, "");
-  const url = `${base}/auth/tareas-asignadas?${params.toString()}`;
-
-  console.log("[Tareas] Fetch a:", url);
-
-  const token = getAccessToken();
-
-  if (!token) {
-    // No hay token =>  simulamos error de sesión expirada
-    throw new Error("No hay token de sesión. Inicia sesión nuevamente.");
-  }
-
-  const res = await fetch(url, {
-    credentials: "include", // envía cookies (refresh)
-    headers: {
-      Authorization: `Bearer ${token}`, // 👈 IMPORTANTE
-      "Content-Type": "application/json",
-    },
+// 2. COLUMNA (Droppable)
+const DroppableColumn = ({
+  col,
+  tasks,
+  disabled,
+}: {
+  col: any;
+  tasks: any[];
+  disabled: boolean;
+}) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: col.id,
   });
 
-  const contentType = res.headers.get("content-type") || "";
+  return (
+    <div
+      ref={setNodeRef}
+      className={`
+            flex-1 flex flex-col rounded-2xl border min-w-[280px] max-w-[400px] transition-colors
+            ${col.bg} ${col.border}
+            ${
+              isOver && !disabled
+                ? "ring-2 ring-[var(--secondary-color)] ring-opacity-50 bg-white shadow-lg"
+                : ""
+            }
+        `}
+    >
+      {/* Header Columna */}
+      <div className="p-4 border-b border-gray-200/50 flex items-center justify-between">
+        <div className="flex items-center gap-2 font-bold text-gray-700">
+          <div className={`p-1.5 rounded-lg bg-white/60 ${col.color}`}>
+            {col.icon}
+          </div>
+          {col.label}
+        </div>
+        <span className="bg-white px-2.5 py-0.5 rounded-md text-xs font-bold text-gray-500 shadow-sm border border-gray-100">
+          {tasks.length}
+        </span>
+      </div>
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(
-      "[Tareas] Respuesta NO OK:",
-      res.status,
-      res.statusText,
-      "Body:",
-      text.slice(0, 300)
-    );
+      {/* Contenedor de Tarjetas */}
+      <div className="flex-1 p-3 overflow-y-auto space-y-3 custom-scrollbar min-h-[200px]">
+        {tasks.map((task) => (
+          <DraggableTaskCard
+            key={task.uniqueId}
+            task={task}
+            disabled={disabled}
+          />
+        ))}
 
-    if (res.status === 401) {
-      throw new Error(
-        "No autorizado. Tu sesión puede haber expirado, vuelve a iniciar sesión."
-      );
-    }
-
-    throw new Error(
-      `Error HTTP ${res.status} al obtener tareas asignadas (${res.statusText})`
-    );
-  }
-
-  if (contentType.includes("text/html")) {
-    const text = await res.text();
-    console.error(
-      "[Tareas] El backend devolvió HTML (probablemente index.html o error):",
-      text.slice(0, 300)
-    );
-    throw new Error(
-      "El backend devolvió HTML en vez de JSON. Revisa la URL /api/tareas-asignadas o el proxy."
-    );
-  }
-
-  const data = await res.json();
-  return data.analistas as Analista[];
-}
+        {tasks.length === 0 && (
+          <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300/50 rounded-xl text-gray-400 bg-white/30">
+            <Briefcase size={20} className="mb-2 opacity-20" />
+            <span className="text-xs">Sin tareas</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default function TareasPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
   const [periodo, setPeriodo] = useState(getCurrentPeriod());
   const [analistas, setAnalistas] = useState<Analista[]>(INITIAL_DATA);
-
-  const [expandedAnalista, setExpandedAnalista] = useState<string | null>(null);
-  const [expandedCliente, setExpandedCliente] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-
-  const [isImportingPortfolio, setIsImportingPortfolio] = useState(false);
-  const [isImportingTasks, setIsImportingTasks] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const portfolioInputRef = useRef<HTMLInputElement>(null);
-  const tasksInputRef = useRef<HTMLInputElement>(null);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
+  );
+
+  const [activeTask, setActiveTask] = useState<any>(null);
+
+  useEffect(() => {
+    const cargarTareas = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMsg(null);
+        const data = await fetchAnalistasConTareas(currentUser.role);
+        setAnalistas(data);
+      } catch (err: any) {
+        console.error(err);
+        setErrorMsg(
+          "No se pudo conectar al servidor. Mostrando datos locales si existen."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    cargarTareas();
+  }, [currentUser.role]);
 
   const availableUsers = useMemo(() => {
     const users: UserProfile[] = [ADMIN_USER];
-    if (!analistas.find((a) => a.email === "administrador@cintax.cl")) {
+    if (!analistas.find((a) => a.email === "soporte@cintax.cl")) {
       users.push({
-        id: "a-admin",
-        name: "Administrador",
-        email: "administrador@cintax.cl",
+        id: "a-soporte",
+        name: "Soporte Cintax",
+        email: "soporte@cintax.cl",
         role: "analyst",
         avatar: "SC",
       });
@@ -264,66 +417,103 @@ export default function TareasPage() {
     );
   }, [analistas]);
 
-  // Carga tareas desde el backend cuando cambia el rol (admin / analyst)
-  useEffect(() => {
-    const cargarTareas = async () => {
-      try {
-        setIsLoading(true);
-        setErrorMsg(null);
-        const data = await fetchAnalistasConTareas(currentUser.role);
-        setAnalistas(data);
+  // --- PREPARACIÓN DE DATOS ---
+  const kanbanTasks = useMemo(() => {
+    const tasks: any[] = [];
+    let data = analistas;
 
-        if (currentUser.role === "analyst" && data.length > 0) {
-          setExpandedAnalista(data[0].id);
-        }
-      } catch (err: any) {
-        console.error(err);
-        setErrorMsg(
-          err?.message ||
-            "No se pudieron cargar las tareas desde el servidor. Intenta nuevamente."
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    cargarTareas();
-  }, [currentUser.role]);
-
-  // Para el modo "Probar vistas" dentro del front
-  useEffect(() => {
     if (currentUser.role === "analyst") {
-      const myAnalystProfile = analistas.find(
-        (a) => a.email === currentUser.email
-      );
-      if (myAnalystProfile) {
-        setExpandedAnalista(myAnalystProfile.id);
-      }
-    } else {
-      setExpandedAnalista(null);
+      data = analistas.filter((a) => a.email === currentUser.email);
     }
-  }, [currentUser, analistas]);
 
-  const toggleAnalista = (id: string) =>
-    setExpandedAnalista((prev) => (prev === id ? null : id));
-  const toggleCliente = (id: string) =>
-    setExpandedCliente((prev) => (prev === id ? null : id));
+    data.forEach((analista) => {
+      analista.clientes.forEach((cliente) => {
+        cliente.tareas.forEach((tarea) => {
+          if (
+            !searchTerm ||
+            tarea.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            cliente.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+          ) {
+            tasks.push({
+              ...tarea,
+              uniqueId: `${analista.id}-${cliente.id}-${tarea.id}`,
+              cliente: cliente.nombre,
+              rut: cliente.rut,
+              analistaId: analista.id,
+              clienteId: cliente.id,
+            });
+          }
+        });
+      });
+    });
+    return tasks;
+  }, [analistas, currentUser, searchTerm]);
 
-  const handleToggleTask = (
+  // --- KPIs DINÁMICOS ---
+  const stats = useMemo(() => {
+    const total = kanbanTasks.length;
+    const completed = kanbanTasks.filter(
+      (t) => t.estado === "completado"
+    ).length;
+    const inProgress = kanbanTasks.filter(
+      (t) => t.estado === "en_proceso"
+    ).length;
+    const pending = kanbanTasks.filter((t) => t.estado === "pendiente").length;
+    // Consideramos 'atrasado' y 'no_realizada' como problemas
+    const issues = kanbanTasks.filter(
+      (t) => t.estado === "atrasado" || t.estado === "no_realizada"
+    ).length;
+
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { total, completed, inProgress, pending, issues, percentage };
+  }, [kanbanTasks]);
+
+  const getColumnId = (estado: TareaEstado): KanbanColumnId => {
+    if (estado === "completado") return "realizada";
+    if (estado === "en_proceso") return "en_proceso";
+    if (estado === "atrasado") return "no_realizada";
+    return "asignada";
+  };
+
+  // --- HANDLERS DND ---
+  const handleDragStart = (event: DragStartEvent) => {
+    if (currentUser.role === "admin") return;
+    const { active } = event;
+    const task = kanbanTasks.find((t) => t.uniqueId === active.id);
+    setActiveTask(task);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTask(null);
+
+    if (!over) return;
+
+    const task = kanbanTasks.find((t) => t.uniqueId === active.id);
+    const targetColumn = over.id as KanbanColumnId;
+
+    if (task && getColumnId(task.estado) !== targetColumn) {
+      let nuevoEstado: TareaEstado = "pendiente";
+      if (targetColumn === "realizada") nuevoEstado = "completado";
+      else if (targetColumn === "en_proceso") nuevoEstado = "en_proceso";
+      else if (targetColumn === "no_realizada") nuevoEstado = "atrasado";
+
+      handleUpdateTaskStatus(
+        task.analistaId,
+        task.clienteId,
+        task.id,
+        nuevoEstado
+      );
+    }
+  };
+
+  const handleUpdateTaskStatus = (
     analistaId: string,
     clienteId: string,
-    tareaId: string
+    tareaId: string,
+    newStatus: TareaEstado
   ) => {
-    if (currentUser.role === "admin") {
-      alert("Modo Supervisión: Solo lectura.");
-      return;
-    }
-    const targetAnalyst = analistas.find((a) => a.id === analistaId);
-    if (targetAnalyst?.email !== currentUser.email) {
-      alert("No tienes permisos sobre las tareas de este analista.");
-      return;
-    }
-
     setAnalistas((prev) =>
       prev.map((a) => {
         if (a.id !== analistaId) return a;
@@ -331,16 +521,12 @@ export default function TareasPage() {
           ...a,
           clientes: a.clientes.map((c) => {
             if (c.id !== clienteId) return c;
+
             const updatedTareas = c.tareas.map((t) => {
               if (t.id !== tareaId) return t;
-              return {
-                ...t,
-                estado:
-                  t.estado === "completado"
-                    ? "pendiente"
-                    : ("completado" as TareaEstado),
-              };
+              return { ...t, estado: newStatus };
             });
+
             const completed = updatedTareas.filter(
               (t) => t.estado === "completado"
             ).length;
@@ -349,10 +535,10 @@ export default function TareasPage() {
             );
 
             const delta =
-              completed >
-              c.tareas.filter((x) => x.estado === "completado").length
+              (newStatus === "completado" ? 1 : 0) -
+              (c.tareas.find((t) => t.id === tareaId)?.estado === "completado"
                 ? 1
-                : -1;
+                : 0);
             a.completadas = Math.max(0, a.completadas + delta);
 
             return { ...c, tareas: updatedTareas, progreso: progress };
@@ -362,501 +548,187 @@ export default function TareasPage() {
     );
   };
 
-  const handlePortfolioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (currentUser.role !== "admin") return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsImportingPortfolio(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        processPortfolioData(jsonData as any[][]);
-      } catch (err) {
-        console.error(err);
-        setErrorMsg(
-          "Error al leer el archivo Excel. Asegúrese de que sea válido."
-        );
-      } finally {
-        setIsImportingPortfolio(false);
-        if (portfolioInputRef.current) portfolioInputRef.current.value = "";
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const processPortfolioData = (rows: any[][]) => {
-    if (rows.length < 2) {
-      setErrorMsg("El archivo está vacío.");
-      return;
-    }
-
-    const headers = rows[0].map((h) => String(h).trim().toLowerCase());
-    const idxRutFicha = headers.findIndex((h) => h.includes("rut ficha"));
-    const idxRazonSocial = headers.findIndex(
-      (h) => h.includes("razón social") || h.includes("razon social")
-    );
-    const idxCorreoCliente = headers.findIndex((h) =>
-      h.includes("correo cliente")
-    );
-    const idxNombreAnalista = headers.findIndex((h) =>
-      h.includes("nombre analista")
-    );
-    const idxCorreoAnalista = headers.findIndex((h) =>
-      h.includes("correo analista")
-    );
-
-    if (idxRutFicha === -1 || idxNombreAnalista === -1) {
-      setErrorMsg(
-        "No se encontraron las columnas requeridas (Rut Ficha, Nombre Analista). Verifique el formato."
-      );
-      return;
-    }
-
-    const mapAnalistas = new Map<string, Analista>();
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const rutCliente = row[idxRutFicha];
-      const nombreCliente = row[idxRazonSocial] || "Cliente Sin Nombre";
-      const correoCliente =
-        idxCorreoCliente !== -1 ? row[idxCorreoCliente] : "";
-      const nombreAnalista = row[idxNombreAnalista];
-      const correoAnalista =
-        idxCorreoAnalista !== -1 ? row[idxCorreoAnalista] : "";
-
-      if (!nombreAnalista || !rutCliente) continue;
-
-      const analistaKey = correoAnalista || nombreAnalista;
-
-      if (!mapAnalistas.has(analistaKey)) {
-        mapAnalistas.set(analistaKey, {
-          id: `a-${Math.random().toString(36).substr(2, 5)}`,
-          nombre: nombreAnalista,
-          email: correoAnalista,
-          avatar: String(nombreAnalista).charAt(0).toUpperCase(),
-          clientes: [],
-          cargaTotal: 0,
-          completadas: 0,
-        });
-      }
-      const analista = mapAnalistas.get(analistaKey)!;
-
-      const clienteExists = analista.clientes.some((c) => c.rut === rutCliente);
-
-      if (!clienteExists) {
-        analista.clientes.push({
-          id: `c-${String(rutCliente).replace(/\./g, "")}`,
-          nombre: nombreCliente,
-          rut: rutCliente,
-          email: correoCliente,
-          progreso: 0,
-          tareas: [],
-        });
-      }
-    }
-
-    if (mapAnalistas.size === 0) {
-      setErrorMsg("No se pudieron extraer datos válidos.");
-      return;
-    }
-
-    setAnalistas(Array.from(mapAnalistas.values()));
-    setSuccessMsg(
-      `Cartera cargada: ${mapAnalistas.size} analistas procesados.`
-    );
-  };
-
-  const handleTasksUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    alert(
-      "Funcionalidad de 'Cargar Tareas' pendiente de implementación en el siguiente paso."
-    );
-  };
-
-  const handleExport = () => {
-    if (currentUser.role !== "admin") return;
-
-    const wb = XLSX.utils.book_new();
-    const data = [
-      [
-        "Analista",
-        "Cliente",
-        "RUT",
-        "Tarea",
-        "Vencimiento",
-        "Estado",
-        "Observación",
-      ],
-    ];
-
-    analistas.forEach((a) => {
-      a.clientes.forEach((c) => {
-        c.tareas.forEach((t) => {
-          data.push([
-            a.nombre,
-            c.nombre,
-            c.rut,
-            t.nombre,
-            t.vencimiento,
-            t.estado,
-            t.comentario || "",
-          ]);
-        });
-      });
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-    XLSX.writeFile(wb, `Reporte_${periodo.replace(/ /g, "_")}.xlsx`);
-
-  };
-
-  // solo pendientes/atrasadas, más filtro por analista / búsqueda
-    // solo pendientes/atrasadas, + filtro por rol (admin/analyst)
-  const viewData = useMemo(() => {
-    let data = analistas;
-
-    // si es analista, solo sus tareas
-    if (currentUser.role === "analyst") {
-      data = analistas.filter((a) => a.email === currentUser.email);
-    }
-
-    // dejamos sólo tareas pendientes o atrasadas
-    data = data.map((a) => ({
-      ...a,
-      clientes: a.clientes.map((c) => ({
-        ...c,
-        tareas: c.tareas.filter(
-          (t) => t.estado === "pendiente" || t.estado === "atrasado"
-        ),
-      })),
-    }));
-
-    return data;
-  }, [analistas, currentUser]);
-
-  // 🔹 FLAT LIST: convertimos analista -> cliente -> tarea en filas planas
-  const tareasPlanas = useMemo<TareaFila[]>(() => {
-    const rows: TareaFila[] = [];
-
-    viewData.forEach((a) => {
-      a.clientes.forEach((c) => {
-        c.tareas.forEach((t) => {
-          rows.push({
-            id: t.id,
-            nombre: t.nombre,
-            vencimiento: t.vencimiento,
-            estado: t.estado,
-            comentario: t.comentario,
-
-            analistaId: a.id,
-            analistaNombre: a.nombre,
-            analistaEmail: a.email,
-
-            clienteId: c.id,
-            clienteNombre: c.nombre,
-            clienteRut: c.rut,
-            clienteEmail: c.email,
-          });
-        });
-      });
-    });
-
-    if (!searchTerm) return rows;
-
-    const lower = searchTerm.toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.analistaNombre.toLowerCase().includes(lower) ||
-        r.analistaEmail.toLowerCase().includes(lower) ||
-        r.clienteNombre.toLowerCase().includes(lower) ||
-        r.clienteRut.toLowerCase().includes(lower) ||
-        r.nombre.toLowerCase().includes(lower)
-    );
-  }, [viewData, searchTerm]);
-
-  const stats = useMemo(() => {
-    const total = tareasPlanas.length;
-    const atrasadas = tareasPlanas.filter(
-      (t) =>
-        new Date(t.vencimiento) < new Date() && t.estado !== "completado"
-    ).length;
-
-    // por ahora no tenemos completadas en esta vista (son solo pendientes/atrasadas)
-    const completadas = 0;
-    const nClientes = new Set(tareasPlanas.map((t) => t.clienteId)).size;
-
-    const cumplimiento =
-      total + completadas > 0
-        ? Math.round((completadas / (total + completadas)) * 100)
-        : 0;
-
-    return { total, completadas, atrasadas, nClientes, cumplimiento };
-  }, [tareasPlanas]);
-
-
-    return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      {/* Header sesión actual */}
-      <div className="bg-black text-white p-4 rounded-xl flex flex-wrap items-center justify-between text-sm shadow-lg mb-8 gap-4">
-        <div className="flex items-center gap-3">
-          <Shield size={18} className="text-[var(--secondary-color)]" />
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="p-4 md:p-8 max-w-[1800px] mx-auto h-full flex flex-col animate-in fade-in duration-500">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 shrink-0">
           <div>
-            <p className="text-xs opacity-60 uppercase font-bold tracking-wider">
-              Sesión Actual
-            </p>
-            <p className="font-medium text-lg">{currentUser.name}</p>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold ${
-                currentUser.role === "admin"
-                  ? "bg-purple-500 text-white"
-                  : "bg-blue-500 text-white"
-              }`}
-            >
-              {currentUser.role === "admin" ? "Super Admin" : "Analista"}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-1">
-          <p className="text-xs opacity-60 mr-1">Probar vistas:</p>
-          <div className="flex flex-wrap gap-2 justify-end">
-            {availableUsers.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => setCurrentUser(u)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
-                  currentUser.id === u.id
-                    ? "bg-[var(--secondary-color)] text-white shadow-sm ring-1 ring-white/20"
-                    : "bg-white/10 hover:bg-white/20 text-white/80"
-                }`}
-              >
-                {u.role === "admin" ? <Shield size={12} /> : <User size={12} />}
-                {u.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Título + periodo + acciones */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-black/5 pb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--primary-color)]">
-            {currentUser.role === "admin"
-              ? "Panel de Planificación"
-              : "Mis Tareas"}
-          </h1>
-          <p className="text-black/60 text-sm mt-1">
-            {currentUser.role === "admin"
-              ? "Gestión de Analistas y asignación de tareas mensuales."
-              : `Hola ${currentUser.name}, este es tu plan mensual.`}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 bg-white border border-[#af9150]/30 px-4 py-2 rounded-xl shadow-[0_2px_8px_rgba(175,145,80,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(175,145,80,0.25)]">
-            <div className="p-2 bg-[#af9150]/10 rounded-lg">
-              <Calendar size={18} className="text-[#af9150]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-[#af9150] uppercase tracking-widest leading-none mb-0.5">
-                Periodo
-              </span>
-              <span className="text-sm font-bold text-[var(--primary-color)] leading-none">
+            <h1 className="text-2xl font-bold text-[var(--primary-color)] flex items-center gap-2">
+              Tablero de Gestión{" "}
+              <span className="text-sm font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200">
                 {periodo}
               </span>
+            </h1>
+            <p className="text-black/60 text-sm mt-1">
+              {currentUser.role === "admin"
+                ? "Vista global de supervisión."
+                : "Arrastra las tarjetas para actualizar el estado."}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative hidden md:block">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                placeholder="Filtrar cliente/tarea..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[var(--secondary-color)]"
+              />
             </div>
+
+            <select
+              className="text-xs bg-white border border-gray-200 rounded-lg p-2 shadow-sm cursor-pointer"
+              onChange={(e) => {
+                const u = availableUsers.find((u) => u.id === e.target.value);
+                if (u) setCurrentUser(u);
+              }}
+              value={currentUser.id}
+            >
+              {availableUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
           </div>
-
-          {currentUser.role === "admin" && (
-            <>
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                ref={portfolioInputRef}
-                onChange={handlePortfolioUpload}
-                className="hidden"
-              />
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                ref={tasksInputRef}
-                onChange={handleTasksUpload}
-                className="hidden"
-              />
-
-              <button
-                onClick={handleExport}
-                className="bg-green-600 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white shadow-md hover:opacity-90 transition-opacity active:scale-95"
-              >
-                <FileSpreadsheet size={16} />
-                Exportar Reporte
-              </button>
-            </>
-          )}
         </div>
-      </div>
 
-      {/* Mensajes */}
-      {errorMsg && (
-        <div className="bg-rose-50 text-rose-700 p-4 rounded-xl flex items-center gap-2 text-sm">
-          <AlertCircle size={18} /> {errorMsg}
-        </div>
-      )}
-      {successMsg && (
-        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl flex items-center gap-2 text-sm">
-          <CheckCircle2 size={18} /> {successMsg}
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="text-center text-sm text-black/50 py-4">
-          Cargando tareas pendientes...
-        </div>
-      )}
-
-      {/* Contenido principal: vacío vs tabla */}
-      {analistas.length === 0 && !isLoading ? (
-        <div className="text-center py-16 border-2 border-dashed border-black/10 rounded-2xl bg-[var(--tertiary-color)]/20">
-          <Briefcase size={48} className="mx-auto text-black/20 mb-4" />
-          <h3 className="text-lg font-semibold text-black/60">
-            Sin tareas asignadas
-          </h3>
-          <p className="text-sm text-black/40 max-w-md mx-auto mt-1">
-            Aún no existen tareas asignadas para este periodo.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Buscador */}
-          <div className="relative">
-            <Search
-              size={18}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-black/40"
-            />
-            <input
-              type="text"
-              placeholder="Buscar por analista, cliente, RUT o tarea..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white border border-black/10 rounded-2xl outline-none focus:border-[var(--secondary-color)] shadow-sm"
-            />
-          </div>
-
-          {/* Tabla de tareas planas */}
-          <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 bg-gray-50/60">
+        {/* --- SECCIÓN DE KPIs DE PROGRESO --- */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
+          {/* KPI 1: Progreso General */}
+          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
+            <div className="flex justify-between items-start mb-2">
               <div>
-                <h2 className="text-sm font-semibold text-[var(--primary-color)]">
-                  Tareas pendientes / atrasadas
-                </h2>
-                <p className="text-xs text-black/40">
-                  {tareasPlanas.length === 0
-                    ? "No hay tareas pendientes para mostrar."
-                    : `${tareasPlanas.length} tareas encontradas (${stats.atrasadas} atrasadas)`}
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Progreso Global
                 </p>
+                <h3 className="text-3xl font-bold text-[var(--primary-color)] mt-1">
+                  {stats.percentage}%
+                </h3>
+              </div>
+              <div className="p-2 bg-[var(--tertiary-color)] rounded-lg text-[var(--secondary-color)]">
+                <BarChart3 size={20} />
               </div>
             </div>
+            <div>
+              <ProgressBar
+                value={stats.percentage}
+                colorClass={
+                  stats.percentage === 100
+                    ? "bg-emerald-500"
+                    : "bg-[var(--secondary-color)]"
+                }
+              />
+              <p className="text-[10px] text-gray-400 mt-2 text-right font-medium">
+                {stats.completed} de {stats.total} tareas finalizadas
+              </p>
+            </div>
+          </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs md:text-sm">
-                <thead>
-                  <tr className="border-b border-black/5 bg-black/5 text-[10px] uppercase tracking-wide text-black/50">
-                    <th className="px-3 py-2 text-left">Analista</th>
-                    <th className="px-3 py-2 text-left">Cliente</th>
-                    <th className="px-3 py-2 text-left">Tarea</th>
-                    <th className="px-3 py-2 text-left">Vencimiento</th>
-                    <th className="px-3 py-2 text-left">Estado</th>
-                    {currentUser.role === "analyst" && (
-                      <th className="px-3 py-2 text-right">Acciones</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {tareasPlanas.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={currentUser.role === "analyst" ? 7 : 6}
-                        className="px-4 py-4 text-center text-xs text-black/40"
-                      >
-                        No hay tareas pendientes que coincidan con el filtro.
-                      </td>
-                    </tr>
-                  ) : (
-                    tareasPlanas.map((t) => (
-                      <tr
-                        key={t.id}
-                        className="border-b border-black/5 hover:bg-gray-50/60 transition-colors"
-                      >
-                        <td className="px-3 py-2">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-[var(--primary-color)]">
-                              {t.analistaNombre}
-                            </span>
-                            <span className="text-[10px] text-black/40">
-                              {t.analistaEmail}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-black/80">
-                              {t.clienteNombre}
-                            </span>
-                            {t.clienteEmail && (
-                              <span className="text-[10px] text-black/40">
-                                {t.clienteEmail}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-black/80">
-                          {t.nombre}
-                        </td>
-                        <td className="px-3 py-2 text-black/70">
-                          {new Date(t.vencimiento).toLocaleDateString("es-CL")}
-                        </td>
-                        <td className="px-3 py-2">
-                          <StatusBadge
-                            status={t.estado}
-                            date={t.vencimiento}
-                          />
-                        </td>
-                        {currentUser.role === "analyst" && (
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              onClick={() =>
-                                handleToggleTask(
-                                  t.analistaId,
-                                  t.clienteId,
-                                  t.id
-                                )
-                              }
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-[var(--secondary-color)] text-white hover:opacity-90 active:scale-95"
-                            >
-                              <CheckCircle2 size={12} />
-                              Marcar lista
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+          {/* KPI 2: En Ejecución */}
+          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                En Ejecución
+              </p>
+              <h3 className="text-2xl font-bold text-blue-600 mt-1">
+                {stats.inProgress}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Tareas activas ahora</p>
+            </div>
+            <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+              <Activity size={24} />
+            </div>
+          </div>
+
+          {/* KPI 3: Por Iniciar */}
+          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Por Iniciar
+              </p>
+              <h3 className="text-2xl font-bold text-gray-600 mt-1">
+                {stats.pending}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">En cola de espera</p>
+            </div>
+            <div className="p-3 rounded-xl bg-gray-100 text-gray-500">
+              <ListTodo size={24} />
+            </div>
+          </div>
+
+          {/* KPI 4: Atención */}
+          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Atención
+              </p>
+              <h3 className="text-2xl font-bold text-rose-600 mt-1">
+                {stats.issues}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                Atrasadas / No realizadas
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-rose-50 text-rose-600">
+              <AlertCircle size={24} />
             </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {errorMsg && (
+          <div className="bg-rose-50 text-rose-700 px-4 py-2 rounded-lg text-sm mb-4 flex items-center gap-2 shrink-0">
+            <AlertCircle size={16} /> {errorMsg}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-black/40">
+            <div className="w-8 h-8 border-2 border-[var(--secondary-color)] border-t-transparent rounded-full animate-spin mb-2" />
+            <p className="text-sm">Cargando tablero...</p>
+          </div>
+        ) : (
+          /* TABLERO KANBAN */
+          <div className="flex-1 overflow-x-auto overflow-y-hidden pb-2">
+            <div className="flex gap-6 h-full min-w-[1000px]">
+              {KANBAN_COLUMNS.map((col) => {
+                const tasksInCol = kanbanTasks.filter(
+                  (t) => getColumnId(t.estado) === col.id
+                );
+                return (
+                  <DroppableColumn
+                    key={col.id}
+                    col={col}
+                    tasks={tasksInCol}
+                    disabled={currentUser.role === "admin"}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {createPortal(
+          <DragOverlay>
+            {activeTask ? (
+              <div className="w-[300px] cursor-grabbing">
+                <DraggableTaskCard task={activeTask} isOverlay />
+              </div>
+            ) : null}
+          </DragOverlay>,
+          document.body
+        )}
+      </div>
+    </DndContext>
   );
 }

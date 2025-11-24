@@ -9,6 +9,7 @@ import {
   Loader2,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,   // 👈 NUEVO
   Upload,
 } from "lucide-react";
 
@@ -18,10 +19,9 @@ type DriveFolder = {
   mimeType: string;
   modifiedTime?: string;
   categoria?: string | null;
-  pathNames?: string[];   // ← viene del backend
-  pathString?: string;    // ← "CINTAX / 2025 / CONTA / A01"
+  pathNames?: string[];
+  pathString?: string;
 };
-
 
 type DriveFile = {
   id: string;
@@ -37,16 +37,19 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 
 const currentYear = new Date().getFullYear().toString();
-const YEARS = [currentYear, currentYear + 1].map(String); // ['2025', '2026']
+const YEARS = [currentYear, currentYear + 1].map(String);
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-/** === Traductor de mimeType a tipo legible === */
+// carpetas panel izquierdo
+const FOLDERS_PER_PAGE = 10;
+// archivos tabla derecha
+const FILES_PER_PAGE = 10;
+
 function getFileTypeLabel(mimeType: string, isFolder: boolean): string {
   if (isFolder) return "Carpeta";
   if (!mimeType) return "Archivo";
 
-  // Google Docs / Sheets / Slides
   if (mimeType === "application/vnd.google-apps.document")
     return "Documento (Google Docs)";
   if (mimeType === "application/vnd.google-apps.spreadsheet")
@@ -54,7 +57,6 @@ function getFileTypeLabel(mimeType: string, isFolder: boolean): string {
   if (mimeType === "application/vnd.google-apps.presentation")
     return "Presentación (Slides)";
 
-  // Office
   if (
     mimeType ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -76,7 +78,6 @@ function getFileTypeLabel(mimeType: string, isFolder: boolean): string {
   )
     return "Presentación PowerPoint";
 
-  // Otros tipos comunes
   if (mimeType === "application/pdf") return "PDF";
   if (mimeType.startsWith("image/")) return "Imagen";
   if (mimeType.startsWith("video/")) return "Video";
@@ -87,7 +88,6 @@ function getFileTypeLabel(mimeType: string, isFolder: boolean): string {
   )
     return "Archivo ZIP";
 
-  // Fallback: mostramos el mimeType crudo
   return mimeType;
 }
 
@@ -103,22 +103,32 @@ export default function DrivePage() {
   );
   const [noAccess, setNoAccess] = useState(false);
 
-
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [files, setFiles] = useState<DriveFile[]>([]);
+
+  const PAGE_SIZE = 10;
+
+const [currentPage, setCurrentPage] = useState(0);      // 0-based
+const [hasMore, setHasMore] = useState(false);         // 👈 nuevo
+
+  // token de siguiente página de archivos (backend)
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  // página actual de archivos (front)
+  const [filePageIndex, setFilePageIndex] = useState(0);
+
+  // paginación de carpetas (panel izquierdo)
+  const [folderPage, setFolderPage] = useState(0);
 
   const [connecting, setConnecting] = useState(false);
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // pila de carpetas abiertas para breadcrumb: CINTAX / año / CONTA / A01 / ...
   const [folderPath, setFolderPath] = useState<{ id: string; name: string }[]>(
     []
   );
 
-  // === helper para obtener el token ===
   function getAccessToken(): string | null {
     return (
       localStorage.getItem("access_token") ||
@@ -128,7 +138,6 @@ export default function DrivePage() {
 
   const isFolder = (mime: string) => mime === FOLDER_MIME;
 
-  // Si viene ?connected=1 desde el callback, marcamos como conectado
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("connected") === "1") {
@@ -136,14 +145,16 @@ export default function DrivePage() {
     }
   }, [location.search]);
 
-  // === Cargar carpetas CINTAX / año ===
   const fetchFolders = async (yearToLoad: string) => {
     try {
       setLoadingFolders(true);
       setError(null);
       setSelectedFolder(null);
       setFiles([]);
-      setFolderPath([]); // limpiamos breadcrumb al cambiar de año
+      setFolderPath([]);
+      setNextPageToken(null);
+      setFilePageIndex(0);
+      setFolderPage(0);
 
       const token = getAccessToken();
       if (!token) {
@@ -154,9 +165,7 @@ export default function DrivePage() {
       const res = await axios.get(
         `${API_BASE_URL}/drive/cintax/${yearToLoad}`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
         }
       );
@@ -179,55 +188,77 @@ export default function DrivePage() {
     }
   };
 
-  // === Cargar archivos dentro de una carpeta (por id) ===
-  const fetchFiles = async (folderId: string, folderName: string) => {
-  try {
-    setLoadingFiles(true);
-    setError(null);
-    setNoAccess(false);
+  const fetchFiles = async (
+    folderId: string,
+    folderName: string,
+    options?: { pageToken?: string | null; append?: boolean }
+  ) => {
+    try {
+      setLoadingFiles(true);
+      setError(null);
+      setNoAccess(false);
 
-    setSelectedFolder({
-      id: folderId,
-      name: folderName,
-      mimeType: FOLDER_MIME,
-    } as DriveFolder);
-
-    const token = getAccessToken();
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    const res = await axios.get(
-      `${API_BASE_URL}/drive/folder/${folderId}/files`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        withCredentials: true,
+      if (!options?.append) {
+        setSelectedFolder({
+          id: folderId,
+          name: folderName,
+          mimeType: FOLDER_MIME,
+        } as DriveFolder);
+        setFilePageIndex(0); // nueva carpeta → empezamos en página 0
       }
-    );
 
-    setFiles(res.data.files || []);
-  } catch (err: any) {
-    console.error("Error cargando archivos:", err);
-    const status = err?.response?.status;
-    const msg =
-      err?.response?.data?.error || "Error cargando archivos de Drive";
+      const token = getAccessToken();
+      if (!token) {
+        navigate("/login");
+        return;
+      }
 
-    if (status === 403) {
-      // 👇 sin permisos sobre esta carpeta
-      setNoAccess(true);
-      setFiles([]);
-    } else {
-      setError(msg);
-    }
-  } finally {
-    setLoadingFiles(false);
+      const res = await axios.get(
+  `${API_BASE_URL}/drive/folder/${folderId}/files`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    withCredentials: true,
+    params: {
+      pageSize: PAGE_SIZE,
+      ...(options?.pageToken ? { pageToken: options.pageToken } : {}),
+    },
   }
-};
+);
 
-  // Abre una carpeta y actualiza la ruta (breadcrumb)
+const newFiles: DriveFile[] = res.data.files || [];
+const newNextToken: string | null = res.data.nextPageToken ?? null;
+
+if (options?.append) {
+  setFiles(prev => [...prev, ...newFiles]);
+} else {
+  setFiles(newFiles);
+}
+
+// 👇 aquí marcamos si hay más páginas
+setNextPageToken(newNextToken);
+setHasMore(!!newNextToken);
+
+
+    } catch (err: any) {
+      console.error("Error cargando archivos:", err);
+      const status = err?.response?.status;
+      const msg =
+        err?.response?.data?.error || "Error cargando archivos de Drive";
+
+      if (status === 403) {
+        setNoAccess(true);
+        setFiles([]);
+        setNextPageToken(null);
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
   const openFolder = async (
     folder: { id: string; name: string },
     resetPath: boolean
@@ -237,62 +268,67 @@ export default function DrivePage() {
     } else {
       setFolderPath((prev) => [...prev, { id: folder.id, name: folder.name }]);
     }
-    await fetchFiles(folder.id, folder.name);
+
+    setNextPageToken(null);
+    setFilePageIndex(0);
+    await fetchFiles(folder.id, folder.name, { append: false });
   };
 
-  // Clic en breadcrumb para volver hacia atrás
   const handleBreadcrumbClick = async (index: number) => {
     const node = folderPath[index];
     setFolderPath((prev) => prev.slice(0, index + 1));
-    await fetchFiles(node.id, node.name);
+    setNextPageToken(null);
+    setFilePageIndex(0);
+    await fetchFiles(node.id, node.name, { append: false });
   };
 
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  try {
-    if (!selectedFolder) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
+    try {
+      if (!selectedFolder) return;
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const token = getAccessToken();
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    setUploading(true);
-    setError(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    await axios.post(
-      `${API_BASE_URL}/drive/folder/${selectedFolder.id}/upload`,
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-        withCredentials: true,
+      const token = getAccessToken();
+      if (!token) {
+        navigate("/login");
+        return;
       }
-    );
 
-    // recargar el contenido de la carpeta actual
-    await fetchFiles(selectedFolder.id, selectedFolder.name);
-  } catch (err: any) {
-    console.error("Error subiendo archivo:", err);
-    const msg =
-      err?.response?.data?.error || "Error subiendo archivo a Drive";
-    setError(msg);
-  } finally {
-    setUploading(false);
-    // limpiar el input para poder subir el mismo archivo otra vez si se quiere
-    e.target.value = "";
-  }
-};
+      setUploading(true);
+      setError(null);
 
+      const formData = new FormData();
+      formData.append("file", file);
 
-  // === Conectar Google Drive (flujo OAuth) ===
+      await axios.post(
+        `${API_BASE_URL}/drive/folder/${selectedFolder.id}/upload`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+          withCredentials: true,
+        }
+      );
+
+      // recargar desde la primera página
+      setNextPageToken(null);
+      setFilePageIndex(0);
+      await fetchFiles(selectedFolder.id, selectedFolder.name, {
+        append: false,
+      });
+    } catch (err: any) {
+      console.error("Error subiendo archivo:", err);
+      const msg =
+        err?.response?.data?.error || "Error subiendo archivo a Drive";
+      setError(msg);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
   const handleConnectDrive = async () => {
     try {
       setConnecting(true);
@@ -305,14 +341,12 @@ export default function DrivePage() {
       }
 
       const res = await axios.get(`${API_BASE_URL}/drive/connect`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
 
       const url = res.data.url as string;
-      window.location.href = url; // redirige a Google
+      window.location.href = url;
     } catch (err: any) {
       console.error("Error conectando Drive:", err);
       const msg =
@@ -323,7 +357,6 @@ export default function DrivePage() {
     }
   };
 
-  // cargar carpetas al entrar a la página
   useEffect(() => {
     fetchFolders(year);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -338,19 +371,89 @@ export default function DrivePage() {
   const isLoading = loadingFolders || loadingFiles;
   const canUpload = Boolean(selectedFolder && driveConnected && !noAccess);
 
+  /* ============
+     PAGINACIÓN CARPETAS IZQ
+  ============ */
+  const totalFolderPages =
+    folders.length === 0
+      ? 1
+      : Math.ceil(folders.length / FOLDERS_PER_PAGE);
+
+  const pagedFolders = folders.slice(
+    folderPage * FOLDERS_PER_PAGE,
+    folderPage * FOLDERS_PER_PAGE + FOLDERS_PER_PAGE
+  );
+
+  const handleNextFolderPage = () => {
+    setFolderPage((prev) =>
+      prev + 1 < totalFolderPages ? prev + 1 : prev
+    );
+  };
+
+  const handlePrevFolderPage = () => {
+    setFolderPage((prev) => (prev - 1 >= 0 ? prev - 1 : prev));
+  };
+
+  /* ============
+     PAGINACIÓN ARCHIVOS DERECHA
+  ============ */
+  const totalLoadedFilePages =
+    files.length === 0 ? 1 : Math.ceil(files.length / FILES_PER_PAGE);
+
+  const pageFiles = files.slice(
+    filePageIndex * FILES_PER_PAGE,
+    filePageIndex * FILES_PER_PAGE + FILES_PER_PAGE
+  );
+
+  const canGoNextFiles =
+    !loadingFiles &&
+    ( // ya hay más archivos cargados
+      (filePageIndex + 1) * FILES_PER_PAGE < files.length ||
+      // o aún hay nextPageToken (backend)
+      !!nextPageToken
+    );
+
+  const handlePrevFilesPage = () => {
+    if (loadingFiles) return;
+    setFilePageIndex((prev) => (prev > 0 ? prev - 1 : prev));
+  };
+
+  const handleNextFilesPage = async () => {
+    if (!selectedFolder || !canGoNextFiles) return;
+
+    const nextIndex = filePageIndex + 1;
+    const alreadyLoaded = nextIndex * FILES_PER_PAGE < files.length;
+
+    if (alreadyLoaded) {
+      setFilePageIndex(nextIndex);
+      return;
+    }
+
+    // necesitamos pedir la siguiente página al backend
+    if (!nextPageToken) return;
+
+    await fetchFiles(selectedFolder.id, selectedFolder.name, {
+      pageToken: nextPageToken,
+      append: true,
+    });
+
+    setFilePageIndex(nextIndex);
+  };
+
   return (
     <div className="space-y-6 mt-6">
       {/* HEADER */}
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">
-          Google Drive <span className="text-[var(--secondary-color)]">Cintax</span>
+          Google Drive{" "}
+          <span className="text-[var(--secondary-color)]">Cintax</span>
         </h1>
         <p className="text-sm text-black/60">
           Acceso directo a la estructura compartida de la empresa.
         </p>
       </header>
 
-      {/* CARD DE ESTADO / FILTROS */}
+      {/* CARD ESTADO */}
       <section className="rounded-2xl bg-white border border-black/5 shadow-sm px-4 py-4 md:px-6 md:py-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 rounded-xl bg-[var(--tertiary-color)] p-2 text-[var(--secondary-color)]">
@@ -367,26 +470,23 @@ export default function DrivePage() {
             </p>
             <p className="text-xs text-black/55 mt-1">
               Ruta base:&nbsp;
-              <span className="font-mono">
-                Mi unidad / CINTAX / {year}
-              </span>
+              <span className="font-mono">Mi unidad / CINTAX / {year}</span>
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <select
-  value={year}
-  onChange={handleChangeYear}
-  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--secondary-color)]/40"
->
-  {YEARS.map((y) => (
-    <option key={y} value={y}>
-      {y}
-    </option>
-  ))}
-</select>
-
+            value={year}
+            onChange={handleChangeYear}
+            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--secondary-color)]/40"
+          >
+            {YEARS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
 
           {!driveConnected && (
             <button
@@ -414,20 +514,45 @@ export default function DrivePage() {
         </div>
       )}
 
-      {/* GRID PRINCIPAL */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,38%),minmax(0,62%)]">
-        {/* LISTA DE CARPETAS (nivel CINTAX / año) */}
+        {/* LISTA CARPETAS IZQUIERDA */}
         <section className="rounded-2xl bg-white border border-black/5 shadow-sm p-4 md:p-5 flex flex-col">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold tracking-wide uppercase text-black/70">
               Carpetas CINTAX / {year}
             </h2>
-            {loadingFolders && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-black/50">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Cargando…
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {folders.length > FOLDERS_PER_PAGE && (
+                <div className="flex items-center gap-1 text-[11px] text-black/60">
+                  <button
+                    type="button"
+                    onClick={handlePrevFolderPage}
+                    disabled={folderPage === 0}
+                    className="rounded-full border border-black/10 p-1 disabled:opacity-40"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <span>
+                    {folderPage + 1} / {totalFolderPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextFolderPage}
+                    disabled={folderPage + 1 >= totalFolderPages}
+                    className="rounded-full border border-black/10 p-1 disabled:opacity-40"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+              )}
+
+              {loadingFolders && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-black/50">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Cargando…
+                </span>
+              )}
+            </div>
           </div>
 
           {driveConnected === false && (
@@ -445,151 +570,141 @@ export default function DrivePage() {
           )}
 
           {folders.length > 0 && (
-  <ul className="mt-1 space-y-1">
-    {folders.map((folder) => {
-      const isActive = selectedFolder?.id === folder.id;
-      return (
-        <li key={folder.id}>
-          <button
-            onClick={() =>
-              openFolder(
-                {
-                  id: folder.id,
-                  name: folder.name,
-                  // le pasamos también la ruta completa (si está)
-                },
-                true
-              )
-            }
-            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
-              isActive
-                ? "bg-[var(--primary-color)] text-white shadow-sm"
-                : "hover:bg-black/5 text-black/80"
-            }`}
-          >
-            <span className="flex flex-col gap-0.5 min-w-0">
-              <span className="flex items-center gap-2">
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
-                    isActive
-                      ? "border-white/20 bg-white/10"
-                      : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
-                  }`}
-                >
-                  <FolderIcon size={16} />
-                </span>
-                <span className="truncate font-medium">
-                  {folder.name}
-                </span>
-              </span>
+            <ul className="mt-1 space-y-1">
+              {pagedFolders.map((folder) => {
+                const isActive = selectedFolder?.id === folder.id;
+                return (
+                  <li key={folder.id}>
+                    <button
+                      onClick={() =>
+                        openFolder(
+                          { id: folder.id, name: folder.name },
+                          true
+                        )
+                      }
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                        isActive
+                          ? "bg-[var(--primary-color)] text-white shadow-sm"
+                          : "hover:bg-black/5 text-black/80"
+                      }`}
+                    >
+                      <span className="flex flex-col gap-0.5 min-w-0">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
+                              isActive
+                                ? "border-white/20 bg-white/10"
+                                : "border-black/10 bg-[var(--tertiary-color)] text-[var(--secondary-color)]"
+                            }`}
+                          >
+                            <FolderIcon size={16} />
+                          </span>
+                          <span className="truncate font-medium">
+                            {folder.name}
+                          </span>
+                        </span>
 
-              {/* Ruta completa */}
-              <span
-                className={`text-[11px] truncate ${
-                  isActive ? "text-white/80" : "text-black/45"
-                }`}
-              >
-                {folder.pathString
-                  ? folder.pathString
-                  : `CINTAX / ${year} / ${folder.categoria ?? ""} / ${
-                      folder.name
-                    }`}
-              </span>
-            </span>
+                        <span
+                          className={`text-[11px] truncate ${
+                            isActive ? "text-white/80" : "text-black/45"
+                          }`}
+                        >
+                          {folder.pathString
+                            ? folder.pathString
+                            : `CINTAX / ${year} / ${
+                                folder.categoria ?? ""
+                              } / ${folder.name}`}
+                        </span>
+                      </span>
 
-            <span
-              className={`text-[11px] ${
-                isActive ? "text-white/70" : "text-black/45"
-              }`}
-            >
-              {folder.modifiedTime
-                ? new Date(folder.modifiedTime).toLocaleDateString()
-                : ""}
-            </span>
-          </button>
-        </li>
-      );
-    })}
-  </ul>
-)}
-
+                      <span
+                        className={`text-[11px] ${
+                          isActive ? "text-white/70" : "text-black/45"
+                        }`}
+                      >
+                        {folder.modifiedTime
+                          ? new Date(
+                              folder.modifiedTime
+                            ).toLocaleDateString()
+                          : ""}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
-        {/* LISTA DE ARCHIVOS / SUBCARPETAS */}
-      <section className="rounded-2xl bg-white border border-black/5 shadow-sm p-4 md:p-5 flex flex-col min-h-[260px]">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold tracking-wide uppercase text-black/70">
-              {selectedFolder
-                ? `Contenido de: ${selectedFolder.name}`
-                : "Selecciona una carpeta"}
-            </h2>
+        {/* LISTA ARCHIVOS / SUBCARPETAS */}
+        <section className="rounded-2xl bg-white border border-black/5 shadow-sm p-4 md:p-5 flex flex-col min-h-[260px]">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-black/70">
+                {selectedFolder
+                  ? `Contenido de: ${selectedFolder.name}`
+                  : "Selecciona una carpeta"}
+              </h2>
 
-            {/* Breadcrumb de ruta actual (Tu código existente) */}
-            {folderPath.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/50">
-                <span className="font-mono">CINTAX / {year}</span>
-                {folderPath.map((node, idx) => (
-                  <React.Fragment key={node.id}>
-                    <ChevronRight size={12} />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        idx === folderPath.length - 1
-                          ? null
-                          : handleBreadcrumbClick(idx)
-                      }
-                      className={
-                        idx === folderPath.length - 1
-                          ? "font-medium text-black/70 cursor-default"
-                          : "hover:text-[var(--secondary-color)]"
-                      }
-                    >
-                      {node.name}
-                    </button>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
+              {folderPath.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/50">
+                  <span className="font-mono">CINTAX / {year}</span>
+                  {folderPath.map((node, idx) => (
+                    <React.Fragment key={node.id}>
+                      <ChevronRight size={12} />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          idx === folderPath.length - 1
+                            ? null
+                            : handleBreadcrumbClick(idx)
+                        }
+                        className={
+                          idx === folderPath.length - 1
+                            ? "font-medium text-black/70 cursor-default"
+                            : "hover:text-[var(--secondary-color)]"
+                        }
+                      >
+                        {node.name}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {loadingFiles && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-black/50">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Cargando…
+                </span>
+              )}
+
+              {canUpload && (
+                <>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleUploadFile}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || loadingFiles}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--secondary-color)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {uploading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Upload size={14} />
+                    )}
+                    {uploading ? "Subiendo..." : "Subir archivo"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-
-          {/* === ZONA DE ACCIONES (Spinner de carga y Botón de Subir) === */}
-          <div className="flex items-center gap-3">
-            {loadingFiles && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-black/50">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Cargando…
-              </span>
-            )}
-
-            {/* Solo mostramos el botón subir si hay una carpeta seleccionada y drive está conectado */}
-            {canUpload && (
-  <>
-    <input
-      type="file"
-      ref={fileInputRef}
-      onChange={handleUploadFile}
-      className="hidden"
-    />
-    <button
-      onClick={() => fileInputRef.current?.click()}
-      disabled={uploading || loadingFiles}
-      className="inline-flex items-center gap-2 rounded-lg bg-[var(--secondary-color)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-    >
-      {uploading ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Upload size={14} />
-      )}
-      {uploading ? "Subiendo..." : "Subir archivo"}
-    </button>
-  </>
-)}
-
-          </div>
-        </div>
-
-        {/* ... El resto de tu tabla de archivos ... */}
 
           {!selectedFolder && (
             <div className="flex flex-1 items-center justify-center">
@@ -601,123 +716,152 @@ export default function DrivePage() {
           )}
 
           {selectedFolder && noAccess && !loadingFiles && (
-  <div className="flex flex-1 items-center justify-center">
-    <p className="text-sm text-black/50 text-center max-w-sm">
-      No tienes permisos para ver el contenido de esta carpeta.
-      <br />
-      Si crees que es un error, contacta al administrador de la intranet.
-    </p>
-  </div>
-)}
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-sm text-black/50 text-center max-w-sm">
+                No tienes permisos para ver el contenido de esta carpeta.
+                <br />
+                Si crees que es un error, contacta al administrador de la
+                intranet.
+              </p>
+            </div>
+          )}
 
-{selectedFolder && !noAccess && files.length === 0 && !loadingFiles && (
-  <div className="flex flex-1 items-center justify-center">
-    <p className="text-sm text-black/50">
-      Esta carpeta no tiene contenido.
-    </p>
-  </div>
-)}
+          {selectedFolder &&
+            !noAccess &&
+            pageFiles.length === 0 &&
+            !loadingFiles && (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-sm text-black/50">
+                  Esta carpeta no tiene contenido.
+                </p>
+              </div>
+            )}
 
-          {selectedFolder && files.length > 0 && (
-            <div className="overflow-x-auto mt-1">
-              <table className="min-w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-black/5 text-[11px] uppercase tracking-wide text-black/50">
-                    <th className="px-2 py-2">Nombre</th>
-                    <th className="px-2 py-2">Tipo</th>
-                    <th className="px-2 py-2">Modificado</th>
-                    <th className="px-2 py-2 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {files.map((file) => {
-                    const folderLike = isFolder(file.mimeType);
-                    const typeLabel = getFileTypeLabel(
-                      file.mimeType,
-                      folderLike
-                    );
+          {selectedFolder && !noAccess && pageFiles.length > 0 && (
+            <>
+              <div className="overflow-x-auto mt-1">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-black/5 text-[11px] uppercase tracking-wide text-black/50">
+                      <th className="px-2 py-2">Nombre</th>
+                      <th className="px-2 py-2">Tipo</th>
+                      <th className="px-2 py-2">Modificado</th>
+                      <th className="px-2 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageFiles.map((file) => {
+                      const folderLike = isFolder(file.mimeType);
+                      const typeLabel = getFileTypeLabel(
+                        file.mimeType,
+                        folderLike
+                      );
 
-                    return (
-                      <tr
-                        key={file.id}
-                        className="border-b border-black/5 last:border-0"
-                      >
-                        {/* Nombre + icono */}
-                        <td className="px-2 py-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              folderLike
-                                ? openFolder(
-                                    { id: file.id, name: file.name },
-                                    false
-                                  )
-                                : undefined
-                            }
-                            className={`flex w-full items-center gap-2 text-left ${
-                              folderLike
-                                ? "hover:text-[var(--secondary-color)]"
-                                : ""
-                            }`}
-                          >
-                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
-                              {folderLike ? (
-                                <FolderIcon size={15} />
-                              ) : (
-                                <FileText size={15} />
-                              )}
-                            </span>
-                            <span className="truncate">{file.name}</span>
-                          </button>
-                        </td>
-
-                        {/* Tipo amigable */}
-                        <td className="px-2 py-2 text-xs text-black/50">
-                          {typeLabel}
-                        </td>
-
-                        {/* Fecha */}
-                        <td className="px-2 py-2 text-xs text-black/50">
-                          {file.modifiedTime
-                            ? new Date(file.modifiedTime).toLocaleString()
-                            : ""}
-                        </td>
-
-                        {/* Acciones */}
-                        <td className="px-2 py-2 text-xs text-right space-x-2">
-                          {folderLike && (
+                      return (
+                        <tr
+                          key={file.id}
+                          className="border-b border-black/5 last:border-0"
+                        >
+                          <td className="px-2 py-2">
                             <button
                               type="button"
                               onClick={() =>
-                                openFolder(
-                                  { id: file.id, name: file.name },
-                                  false
-                                )
+                                folderLike
+                                  ? openFolder(
+                                      { id: file.id, name: file.name },
+                                      false
+                                    )
+                                  : undefined
                               }
-                              className="inline-flex items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-[11px] font-medium text-black/70 hover:bg-black/10"
+                              className={`flex w-full items-center gap-2 text-left ${
+                                folderLike
+                                  ? "hover:text-[var(--secondary-color)]"
+                                  : ""
+                              }`}
                             >
-                              Ver dentro
+                              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+                                {folderLike ? (
+                                  <FolderIcon size={15} />
+                                ) : (
+                                  <FileText size={15} />
+                                )}
+                              </span>
+                              <span className="truncate">{file.name}</span>
                             </button>
-                          )}
+                          </td>
 
-                          {!folderLike && file.webViewLink && (
-                            <a
-                              href={file.webViewLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-3 py-1 text-[11px] font-medium text-white hover:bg-black"
-                            >
-                              <ExternalLink size={12} />
-                              Abrir
-                            </a>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <td className="px-2 py-2 text-xs text-black/50">
+                            {typeLabel}
+                          </td>
+
+                          <td className="px-2 py-2 text-xs text-black/50">
+                            {file.modifiedTime
+                              ? new Date(
+                                  file.modifiedTime
+                                ).toLocaleString()
+                              : ""}
+                          </td>
+
+                          <td className="px-2 py-2 text-xs text-right space-x-2">
+                            {folderLike && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openFolder(
+                                    { id: file.id, name: file.name },
+                                    false
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-[11px] font-medium text-black/70 hover:bg-black/10"
+                              >
+                                Ver dentro
+                              </button>
+                            )}
+
+                            {!folderLike && file.webViewLink && (
+                              <a
+                                href={file.webViewLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-3 py-1 text-[11px] font-medium text-white hover:bg-black"
+                              >
+                                <ExternalLink size={12} />
+                                Abrir
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 🔁 Flechas de paginación de archivos (10 en 10) */}
+              <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-black/60">
+                <button
+                  type="button"
+                  onClick={handlePrevFilesPage}
+                  disabled={filePageIndex === 0 || loadingFiles}
+                  className="rounded-full border border-black/10 p-1 disabled:opacity-40"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+
+                <span>
+                  Página {filePageIndex + 1} / {totalLoadedFilePages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleNextFilesPage}
+                  disabled={!canGoNextFiles}
+                  className="rounded-full border border-black/10 p-1 disabled:opacity-40"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </>
           )}
         </section>
       </div>

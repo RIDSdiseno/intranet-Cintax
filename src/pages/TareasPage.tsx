@@ -58,6 +58,23 @@ type Analista = {
   completadas: number;
 };
 
+type TareaFila = {
+  id: string;
+  nombre: string;
+  vencimiento: string;
+  estado: TareaEstado;
+  comentario?: string;
+
+  analistaId: string;
+  analistaNombre: string;
+  analistaEmail: string;
+
+  clienteId: string;
+  clienteNombre: string;
+  clienteRut: string;
+  clienteEmail?: string;
+};
+
 const ADMIN_USER: UserProfile = {
   id: "admin",
   name: "Administrador",
@@ -67,6 +84,10 @@ const ADMIN_USER: UserProfile = {
 };
 
 const INITIAL_DATA: Analista[] = [];
+
+// 👇 BASE URL para tu backend
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
 const getCurrentPeriod = () => {
   const date = new Date();
@@ -123,6 +144,82 @@ const StatusBadge = ({
   );
 };
 
+// 🔐 helper para leer el accessToken (ajusta la key si usas otra)
+function getAccessToken(): string | null {
+  try {
+    return (localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token"))
+  } catch {
+    return null;
+  }
+}
+
+// ✅ helper para pedir las tareas al backend con Authorization
+async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
+  const params = new URLSearchParams();
+  params.set("soloPendientes", "true"); // solo tareas pendientes/EN_PROCESO
+  if (role === "admin") {
+    params.set("todos", "true"); // admin ve todas las de todos
+  }
+
+  const base = API_BASE_URL.replace(/\/$/, "");
+  const url = `${base}/auth/tareas-asignadas?${params.toString()}`;
+
+  console.log("[Tareas] Fetch a:", url);
+
+  const token = getAccessToken();
+
+  if (!token) {
+    // No hay token =>  simulamos error de sesión expirada
+    throw new Error("No hay token de sesión. Inicia sesión nuevamente.");
+  }
+
+  const res = await fetch(url, {
+    credentials: "include", // envía cookies (refresh)
+    headers: {
+      Authorization: `Bearer ${token}`, // 👈 IMPORTANTE
+      "Content-Type": "application/json",
+    },
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(
+      "[Tareas] Respuesta NO OK:",
+      res.status,
+      res.statusText,
+      "Body:",
+      text.slice(0, 300)
+    );
+
+    if (res.status === 401) {
+      throw new Error(
+        "No autorizado. Tu sesión puede haber expirado, vuelve a iniciar sesión."
+      );
+    }
+
+    throw new Error(
+      `Error HTTP ${res.status} al obtener tareas asignadas (${res.statusText})`
+    );
+  }
+
+  if (contentType.includes("text/html")) {
+    const text = await res.text();
+    console.error(
+      "[Tareas] El backend devolvió HTML (probablemente index.html o error):",
+      text.slice(0, 300)
+    );
+    throw new Error(
+      "El backend devolvió HTML en vez de JSON. Revisa la URL /api/tareas-asignadas o el proxy."
+    );
+  }
+
+  const data = await res.json();
+  return data.analistas as Analista[];
+}
+
 export default function TareasPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
   const [periodo, setPeriodo] = useState(getCurrentPeriod());
@@ -136,6 +233,8 @@ export default function TareasPage() {
   const [isImportingTasks, setIsImportingTasks] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const portfolioInputRef = useRef<HTMLInputElement>(null);
   const tasksInputRef = useRef<HTMLInputElement>(null);
@@ -165,6 +264,33 @@ export default function TareasPage() {
     );
   }, [analistas]);
 
+  // Carga tareas desde el backend cuando cambia el rol (admin / analyst)
+  useEffect(() => {
+    const cargarTareas = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMsg(null);
+        const data = await fetchAnalistasConTareas(currentUser.role);
+        setAnalistas(data);
+
+        if (currentUser.role === "analyst" && data.length > 0) {
+          setExpandedAnalista(data[0].id);
+        }
+      } catch (err: any) {
+        console.error(err);
+        setErrorMsg(
+          err?.message ||
+            "No se pudieron cargar las tareas desde el servidor. Intenta nuevamente."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    cargarTareas();
+  }, [currentUser.role]);
+
+  // Para el modo "Probar vistas" dentro del front
   useEffect(() => {
     if (currentUser.role === "analyst") {
       const myAnalystProfile = analistas.find(
@@ -389,48 +515,97 @@ export default function TareasPage() {
 
     const ws = XLSX.utils.aoa_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-    XLSX.writeFile(wb, `Reporte_${periodo.replace(/\s/g, "_")}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_${periodo.replace(/ /g, "_")}.xlsx`);
+
   };
 
+  // solo pendientes/atrasadas, más filtro por analista / búsqueda
+    // solo pendientes/atrasadas, + filtro por rol (admin/analyst)
   const viewData = useMemo(() => {
     let data = analistas;
+
+    // si es analista, solo sus tareas
     if (currentUser.role === "analyst") {
       data = analistas.filter((a) => a.email === currentUser.email);
     }
-    if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      data = data.filter(
-        (a) =>
-          a.nombre.toLowerCase().includes(lower) ||
-          a.clientes.some((c) => c.nombre.toLowerCase().includes(lower))
-      );
-    }
+
+    // dejamos sólo tareas pendientes o atrasadas
+    data = data.map((a) => ({
+      ...a,
+      clientes: a.clientes.map((c) => ({
+        ...c,
+        tareas: c.tareas.filter(
+          (t) => t.estado === "pendiente" || t.estado === "atrasado"
+        ),
+      })),
+    }));
+
     return data;
-  }, [analistas, currentUser, searchTerm]);
+  }, [analistas, currentUser]);
+
+  // 🔹 FLAT LIST: convertimos analista -> cliente -> tarea en filas planas
+  const tareasPlanas = useMemo<TareaFila[]>(() => {
+    const rows: TareaFila[] = [];
+
+    viewData.forEach((a) => {
+      a.clientes.forEach((c) => {
+        c.tareas.forEach((t) => {
+          rows.push({
+            id: t.id,
+            nombre: t.nombre,
+            vencimiento: t.vencimiento,
+            estado: t.estado,
+            comentario: t.comentario,
+
+            analistaId: a.id,
+            analistaNombre: a.nombre,
+            analistaEmail: a.email,
+
+            clienteId: c.id,
+            clienteNombre: c.nombre,
+            clienteRut: c.rut,
+            clienteEmail: c.email,
+          });
+        });
+      });
+    });
+
+    if (!searchTerm) return rows;
+
+    const lower = searchTerm.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.analistaNombre.toLowerCase().includes(lower) ||
+        r.analistaEmail.toLowerCase().includes(lower) ||
+        r.clienteNombre.toLowerCase().includes(lower) ||
+        r.clienteRut.toLowerCase().includes(lower) ||
+        r.nombre.toLowerCase().includes(lower)
+    );
+  }, [viewData, searchTerm]);
 
   const stats = useMemo(() => {
-    let total = 0,
-      completadas = 0,
-      atrasadas = 0,
-      nClientes = 0;
-    viewData.forEach((a) => {
-      total += a.cargaTotal;
-      completadas += a.completadas;
-      nClientes += a.clientes.length;
-      a.clientes.forEach((c) =>
-        c.tareas.forEach((t) => {
-          if (new Date(t.vencimiento) < new Date() && t.estado !== "completado")
-            atrasadas++;
-        })
-      );
-    });
-    const cumplimiento =
-      total > 0 ? Math.round((completadas / total) * 100) : 0;
-    return { total, completadas, atrasadas, nClientes, cumplimiento };
-  }, [viewData]);
+    const total = tareasPlanas.length;
+    const atrasadas = tareasPlanas.filter(
+      (t) =>
+        new Date(t.vencimiento) < new Date() && t.estado !== "completado"
+    ).length;
 
-  return (
+    // por ahora no tenemos completadas en esta vista (son solo pendientes/atrasadas)
+    const completadas = 0;
+    const nClientes = new Set(tareasPlanas.map((t) => t.clienteId)).size;
+
+    const cumplimiento =
+      total + completadas > 0
+        ? Math.round((completadas / (total + completadas)) * 100)
+        : 0;
+
+    return { total, completadas, atrasadas, nClientes, cumplimiento };
+  }, [tareasPlanas]);
+
+
+    return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+      {/* Header sesión actual */}
       <div className="bg-black text-white p-4 rounded-xl flex flex-wrap items-center justify-between text-sm shadow-lg mb-8 gap-4">
         <div className="flex items-center gap-3">
           <Shield size={18} className="text-[var(--secondary-color)]" />
@@ -472,6 +647,7 @@ export default function TareasPage() {
         </div>
       </div>
 
+      {/* Título + periodo + acciones */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-black/5 pb-6">
         <div>
           <h1 className="text-2xl font-bold text-[var(--primary-color)]">
@@ -530,6 +706,7 @@ export default function TareasPage() {
         </div>
       </div>
 
+      {/* Mensajes */}
       {errorMsg && (
         <div className="bg-rose-50 text-rose-700 p-4 rounded-xl flex items-center gap-2 text-sm">
           <AlertCircle size={18} /> {errorMsg}
@@ -541,27 +718,26 @@ export default function TareasPage() {
         </div>
       )}
 
-      {analistas.length === 0 ? (
+      {isLoading && (
+        <div className="text-center text-sm text-black/50 py-4">
+          Cargando tareas pendientes...
+        </div>
+      )}
+
+      {/* Contenido principal: vacío vs tabla */}
+      {analistas.length === 0 && !isLoading ? (
         <div className="text-center py-16 border-2 border-dashed border-black/10 rounded-2xl bg-[var(--tertiary-color)]/20">
           <Briefcase size={48} className="mx-auto text-black/20 mb-4" />
           <h3 className="text-lg font-semibold text-black/60">
-            Sin Analistas ni Clientes
+            Sin tareas asignadas
           </h3>
           <p className="text-sm text-black/40 max-w-md mx-auto mt-1">
-            Paso 1: Como Administrador, carga el documento de Analistas (Excel)
-            para asignar las empresas a sus analistas correspondientes.
+            Aún no existen tareas asignadas para este periodo.
           </p>
-          {currentUser.role === "admin" && (
-            <button
-              onClick={() => portfolioInputRef.current?.click()}
-              className="mt-6 px-6 py-2 bg-[var(--secondary-color)] text-white rounded-xl font-medium shadow-sm hover:opacity-90"
-            >
-              Cargar Analistas y Clientes
-            </button>
-          )}
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Buscador */}
           <div className="relative">
             <Search
               size={18}
@@ -569,82 +745,116 @@ export default function TareasPage() {
             />
             <input
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar por analista, cliente, RUT o tarea..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-white border border-black/10 rounded-2xl outline-none focus:border-[var(--secondary-color)] shadow-sm"
             />
           </div>
 
-          {viewData.map((analista) => (
-            <div
-              key={analista.id}
-              className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden"
-            >
-              <div
-                onClick={() =>
-                  currentUser.role === "admin" && toggleAnalista(analista.id)
-                }
-                className={`flex items-center justify-between p-4 transition-colors ${
-                  currentUser.role === "admin"
-                    ? "cursor-pointer hover:bg-gray-50"
-                    : "cursor-default bg-gray-50/30 border-b border-black/5"
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-[var(--tertiary-color)] flex items-center justify-center text-[var(--secondary-color)] font-bold border border-black/5">
-                    {analista.avatar}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-[var(--primary-color)]">
-                      {analista.nombre}
-                    </h3>
-                    <p className="text-xs text-black/50">
-                      {analista.clientes.length} Clientes Asignados
-                    </p>
-                    {analista.email && (
-                      <p className="text-[10px] text-black/30">
-                        {analista.email}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  {currentUser.role === "admin" &&
-                    (expandedAnalista === analista.id ? (
-                      <ChevronDown size={20} className="text-black/40" />
-                    ) : (
-                      <ChevronRight size={20} className="text-black/40" />
-                    ))}
-                </div>
+          {/* Tabla de tareas planas */}
+          <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 bg-gray-50/60">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--primary-color)]">
+                  Tareas pendientes / atrasadas
+                </h2>
+                <p className="text-xs text-black/40">
+                  {tareasPlanas.length === 0
+                    ? "No hay tareas pendientes para mostrar."
+                    : `${tareasPlanas.length} tareas encontradas (${stats.atrasadas} atrasadas)`}
+                </p>
               </div>
-
-              {expandedAnalista === analista.id && (
-                <div className="bg-white">
-                  {analista.clientes.map((cliente) => (
-                    <div
-                      key={cliente.id}
-                      className="border-b border-black/5 last:border-0 p-4 pl-8 flex justify-between items-center"
-                    >
-                      <div>
-                        <h4 className="text-sm font-medium text-black/80">
-                          {cliente.nombre}
-                        </h4>
-                        <p className="text-xs text-black/40">
-                          {cliente.rut} • {cliente.email}
-                        </p>
-                      </div>
-                      <span className="text-xs text-black/30 italic">
-                        {cliente.tareas.length === 0
-                          ? "Sin tareas asignadas este mes"
-                          : `${cliente.tareas.length} tareas`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          ))}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs md:text-sm">
+                <thead>
+                  <tr className="border-b border-black/5 bg-black/5 text-[10px] uppercase tracking-wide text-black/50">
+                    <th className="px-3 py-2 text-left">Analista</th>
+                    <th className="px-3 py-2 text-left">Cliente</th>
+                    <th className="px-3 py-2 text-left">Tarea</th>
+                    <th className="px-3 py-2 text-left">Vencimiento</th>
+                    <th className="px-3 py-2 text-left">Estado</th>
+                    {currentUser.role === "analyst" && (
+                      <th className="px-3 py-2 text-right">Acciones</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tareasPlanas.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={currentUser.role === "analyst" ? 7 : 6}
+                        className="px-4 py-4 text-center text-xs text-black/40"
+                      >
+                        No hay tareas pendientes que coincidan con el filtro.
+                      </td>
+                    </tr>
+                  ) : (
+                    tareasPlanas.map((t) => (
+                      <tr
+                        key={t.id}
+                        className="border-b border-black/5 hover:bg-gray-50/60 transition-colors"
+                      >
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-[var(--primary-color)]">
+                              {t.analistaNombre}
+                            </span>
+                            <span className="text-[10px] text-black/40">
+                              {t.analistaEmail}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-black/80">
+                              {t.clienteNombre}
+                            </span>
+                            {t.clienteEmail && (
+                              <span className="text-[10px] text-black/40">
+                                {t.clienteEmail}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-black/80">
+                          {t.nombre}
+                        </td>
+                        <td className="px-3 py-2 text-black/70">
+                          {new Date(t.vencimiento).toLocaleDateString("es-CL")}
+                        </td>
+                        <td className="px-3 py-2">
+                          <StatusBadge
+                            status={t.estado}
+                            date={t.vencimiento}
+                          />
+                        </td>
+                        {currentUser.role === "analyst" && (
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              onClick={() =>
+                                handleToggleTask(
+                                  t.analistaId,
+                                  t.clienteId,
+                                  t.id
+                                )
+                              }
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-[var(--secondary-color)] text-white hover:opacity-90 active:scale-95"
+                            >
+                              <CheckCircle2 size={12} />
+                              Marcar lista
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -746,8 +746,7 @@ export default function CintaxIntranetMockup() {
 
   return (
     <div
-      className="min-h-screen"
-      style={{ background: "var(--tertiary-color)" }}
+      className="min-h-screen overflow-hidden relative"
     >
       <style>{`
         :root{ 

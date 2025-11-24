@@ -27,7 +27,7 @@ export default function ConfigurarPage() {
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    nombre: "Rosalía",
+    nombre: "Jorge",
     cargo: "Administrador",
     email: "administrador@cintax.com",
     telefono: "+56 9 1234 5678",

@@ -37,6 +37,8 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
 
 const currentYear = new Date().getFullYear().toString();
+const YEARS = [currentYear, currentYear + 1].map(String); // ['2025', '2026']
+
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 /** === Traductor de mimeType a tipo legible === */
@@ -374,15 +376,17 @@ export default function DrivePage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <select
-            value={year}
-            onChange={handleChangeYear}
-            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--secondary-color)]/40"
-          >
-            <option value={currentYear}>{currentYear}</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-          </select>
+  value={year}
+  onChange={handleChangeYear}
+  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--secondary-color)]/40"
+>
+  {YEARS.map((y) => (
+    <option key={y} value={y}>
+      {y}
+    </option>
+  ))}
+</select>
+
 
           {!driveConnected && (
             <button

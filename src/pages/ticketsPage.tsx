@@ -396,7 +396,6 @@ export default function TicketsPage() {
   const endIndex = startIndex + pageSize;
   const pagedTickets = filtered.slice(startIndex, endIndex);
 
-
   return (
     <div className="mt-6">
       {/* Header */}
@@ -431,252 +430,6 @@ export default function TicketsPage() {
           >
             Crear ticket
           </button>
-
-          {isModalOpen && (
-
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-              onClick={() => setIsModalOpen(false)}
-            >
-              {/* --- Panel del Modal --- */}
-              {/* Cambiamos a flex-col y overflow-hidden para crear 
-      la cabecera/cuerpo/pie fijos.
-    */}
-              <div
-                className="w-full max-w-2xl rounded-xl bg-white shadow-xl flex flex-col overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-
-                {/* --- 1. Cabecera Fija --- */}
-                <div className="flex items-center justify-between p-6 border-b border-black/10">
-                  <h3
-                    className="text-xl font-semibold"
-                    style={{ color: "var(--primary-color)" }}
-                  >
-                    Crear nuevo ticket
-                  </h3>
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="text-black/50 hover:text-black"
-                    aria-label="Cerrar modal"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
-
-                {/* --- 2. Cuerpo Deslizable (El Formulario) --- */}
-                {/* 'overflow-y-auto' es la clave para la responsividad.
-        'p-6' añade el padding interno.
-      */}
-                <div className="overflow-y-auto p-6">
-                  <form action="" className="space-y-5">
-                    {/* Hice un grid más inteligente: 
-            - Campos principales (Asunto) van en 1 columna.
-            - Campos secundarios van en 2 columnas.
-          */}
-
-                    {/* Contacto (Full-width) */}
-                    <div>
-                      <label
-                        htmlFor="contacto"
-                        className="block text-sm font-medium text-black/70 mb-1.5"
-                      >
-                        Selecciona un contacto:
-                      </label>
-                      <input
-                        type="search"
-                        id="contacto"
-                        name="contacto"
-                        className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                      />
-                    </div>
-
-                    {/* Asunto (Full-width) */}
-                    <div>
-                      <label
-                        htmlFor="asunto"
-                        className="block text-sm font-medium text-black/70 mb-1.5"
-                      >
-                        Asunto:
-                      </label>
-                      <input
-                        type="text"
-                        id="asunto"
-                        name="asunto"
-                        className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                      />
-                    </div>
-
-                    {/* --- Grid de 2 Columnas --- */}
-                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                      {/* Tipo */}
-                      <div>
-                        <label
-                          htmlFor="tipo"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Tipo:
-                        </label>
-                        <input
-                          type="search"
-                          id="tipo"
-                          name="tipo"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        />
-                      </div>
-
-                      {/* Sub-tipo */}
-                      <div>
-                        <label
-                          htmlFor="tipo2"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Sub-tipo:
-                        </label>
-                        <input
-                          type="search"
-                          id="tipo2"
-                          name="tipo2"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        />
-                      </div>
-
-                      {/* Estado */}
-                      <div>
-                        <label
-                          htmlFor="estado"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Estado:
-                        </label>
-                        <select
-                          id="estado"
-                          name="estado"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        >
-                          <option value="abierto">Abierto</option>
-                          <option value="pendiente">Pendiente</option>
-                          <option value="resuelto">Resuelto</option>
-                          <option value="cerrado">Cerrado</option>
-                          <option value="en-espera-cliente">
-                            En espera del cliente
-                          </option>
-                          <option value="en-espera-tercero">
-                            En espera de un tercero
-                          </option>
-                        </select>
-                      </div>
-
-                      {/* Prioridad */}
-                      <div>
-                        <label
-                          htmlFor="prioridad"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Prioridad:
-                        </label>
-                        <select
-                          id="prioridad"
-                          name="prioridad"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        >
-                          <option value="baja">Baja</option>
-                          <option value="media">Media</option>
-                          <option value="alta">Alta</option>
-                          <option value="urgente">Urgente</option>
-                        </select>
-                      </div>
-
-                      {/* Grupo */}
-                      <div>
-                        <label
-                          htmlFor="grupo"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Grupo:
-                        </label>
-                        <input
-                          type="search"
-                          id="grupo"
-                          name="grupo"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        />
-                      </div>
-
-                      {/* Agente */}
-                      <div>
-                        <label
-                          htmlFor="agente"
-                          className="block text-sm font-medium text-black/70 mb-1.5"
-                        >
-                          Agente:
-                        </label>
-                        <input
-                          type="search"
-                          id="agente"
-                          name="agente"
-                          className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                        />
-                      </div>
-                    </div>
-                    {/* --- Fin del Grid --- */}
-
-
-                    {/* Descripción (Full-width) */}
-                    <div>
-                      <label
-                        htmlFor="descripcion"
-                        className="block text-sm font-medium text-black/70 mb-1.5"
-                      >
-                        Descripción:
-                      </label>
-                      <textarea
-                        id="descripcion"
-                        name="descripcion"
-                        rows={4}
-                        className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                      ></textarea>
-                    </div>
-
-                    {/* Etiquetas (Full-width) */}
-                    <div>
-                      <label
-                        htmlFor="etiquetas"
-                        className="block text-sm font-medium text-black/70 mb-1.5"
-                      >
-                        Etiquetas:
-                      </label>
-                      <input
-                        type="search"
-                        id="etiquetas"
-                        name="etiquetas"
-                        className="block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-black/40 outline-none focus:border-[var(--primary-color)] focus:ring-1 focus:ring-[var(--primary-color)]"
-                      />
-                    </div>
-                  </form>
-                </div>
-
-                {/* --- 3. Pie Fijo (Botones) --- */}
-                <div className="flex justify-end gap-3 p-4 bg-white border-t border-black/10">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="rounded-xl px-4 py-2 text-sm font-medium border border-black/10 bg-white text-black/80 hover:border-black/20"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit" // Este botón debería estar conectado al 'form'
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm"
-                    style={{ background: "var(--secondary-color)" }}
-                  >
-                    Crear Ticket
-                  </button>
-                </div>
-
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -686,7 +439,7 @@ export default function TicketsPage() {
             className="absolute inset-0 bg-black/40"
             onClick={() => setIsModalOpen(false)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-2xl p-4 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-md bg-white rounded-2xl p-4 shadow-lg z-10 max-h-[90vh] overflow-y-auto scroll-overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-medium">Crear ticket</h3>
               <button
@@ -714,13 +467,12 @@ export default function TicketsPage() {
                       Contacto <span className="text-rose-500">*</span>
                     </label>
                     <div className="text-xs text-[var(--secondary-color)] cursor-pointer flex gap-2">
-                      <span className="hover:underline">Agregar nuevo</span>
                     </div>
                   </div>
                   <input
                     className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white"
                     type="email"
-                    placeholder="ejemplo@correo.com"
+                    placeholder="ejemplo@cintax.cl"
                     required
                   />
                 </div>
@@ -936,10 +688,11 @@ export default function TicketsPage() {
           <button
             key={c}
             onClick={() => setCategoriaAndUrl(c)}
-            className={`rounded-full px-3 py-1.5 text-sm border transition ${categoria === c
-              ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-              : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-              }`}
+            className={`rounded-full px-3 py-1.5 text-sm border transition ${
+              categoria === c
+                ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
+                : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
+            }`}
           >
             {c}
             <span className="ml-1 text-xs opacity-80">

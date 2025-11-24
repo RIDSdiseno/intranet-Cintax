@@ -13,11 +13,12 @@ import {
   RefreshCw,
   User,
   Shield,
-  LogOut,
   Users,
+  FileUp,
+  Briefcase,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
-// --- TIPOS DE DATOS ---
 type UserRole = "admin" | "analyst";
 
 type UserProfile = {
@@ -42,6 +43,7 @@ type Cliente = {
   id: string;
   nombre: string;
   rut: string;
+  email?: string;
   progreso: number;
   tareas: Tarea[];
 };
@@ -49,25 +51,30 @@ type Cliente = {
 type Analista = {
   id: string;
   nombre: string;
+  email: string;
   avatar: string;
   clientes: Cliente[];
   cargaTotal: number;
   completadas: number;
 };
 
-// --- ADMIN POR DEFECTO ---
 const ADMIN_USER: UserProfile = {
   id: "admin",
   name: "Administrador",
-  email: "admin@cintax.cl",
+  email: "administrador@cintax.cl",
   role: "admin",
   avatar: "AD",
 };
 
-// --- DATOS INICIALES VACÍOS (REQUERIMIENTO) ---
 const INITIAL_DATA: Analista[] = [];
 
-// --- COMPONENTES UI ---
+const getCurrentPeriod = () => {
+  const date = new Date();
+  const month = date.toLocaleString("es-ES", { month: "long" });
+  const year = date.getFullYear();
+  return `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
+};
+
 const ProgressBar = ({
   value,
   colorClass = "bg-[var(--secondary-color)]",
@@ -92,7 +99,6 @@ const StatusBadge = ({
 }) => {
   const vencimiento = new Date(date);
   const hoy = new Date();
-  // Si vence hoy o antes y no está listo, es atrasado (o urgente)
   const isLate =
     !isNaN(vencimiento.getTime()) &&
     vencimiento < hoy &&
@@ -118,52 +124,65 @@ const StatusBadge = ({
 };
 
 export default function TareasPage() {
-  // Estado de Sesión
   const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
-
-  // Estados de Datos
-  const [periodo, setPeriodo] = useState("Marzo 2025");
+  const [periodo, setPeriodo] = useState(getCurrentPeriod());
   const [analistas, setAnalistas] = useState<Analista[]>(INITIAL_DATA);
 
-  // Estados UI
   const [expandedAnalista, setExpandedAnalista] = useState<string | null>(null);
   const [expandedCliente, setExpandedCliente] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isImporting, setIsImporting] = useState(false);
+
+  const [isImportingPortfolio, setIsImportingPortfolio] = useState(false);
+  const [isImportingTasks, setIsImportingTasks] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const portfolioInputRef = useRef<HTMLInputElement>(null);
+  const tasksInputRef = useRef<HTMLInputElement>(null);
 
-  // Generar lista de usuarios disponibles para simulación basada en los datos cargados
   const availableUsers = useMemo(() => {
     const users: UserProfile[] = [ADMIN_USER];
+    if (!analistas.find((a) => a.email === "administrador@cintax.cl")) {
+      users.push({
+        id: "a-admin",
+        name: "Administrador",
+        email: "administrador@cintax.cl",
+        role: "analyst",
+        avatar: "SC",
+      });
+    }
     analistas.forEach((a) => {
       users.push({
         id: a.id,
         name: a.nombre,
-        email: `${a.nombre.split(" ")[0].toLowerCase()}@cintax.cl`, // Generar email fake
+        email: a.email || `${a.nombre.split(" ")[0].toLowerCase()}@cintax.cl`,
         role: "analyst",
         avatar: a.avatar,
       });
     });
-    return users;
+    return users.filter(
+      (v, i, a) => a.findIndex((t) => t.email === v.email) === i
+    );
   }, [analistas]);
 
-  // Efecto de vista según rol
   useEffect(() => {
     if (currentUser.role === "analyst") {
-      setExpandedAnalista(currentUser.id);
+      const myAnalystProfile = analistas.find(
+        (a) => a.email === currentUser.email
+      );
+      if (myAnalystProfile) {
+        setExpandedAnalista(myAnalystProfile.id);
+      }
     } else {
       setExpandedAnalista(null);
     }
-  }, [currentUser]);
+  }, [currentUser, analistas]);
 
   const toggleAnalista = (id: string) =>
     setExpandedAnalista((prev) => (prev === id ? null : id));
   const toggleCliente = (id: string) =>
     setExpandedCliente((prev) => (prev === id ? null : id));
 
-  // --- LÓGICA: CHECK TAREA ---
   const handleToggleTask = (
     analistaId: string,
     clienteId: string,
@@ -173,7 +192,8 @@ export default function TareasPage() {
       alert("Modo Supervisión: Solo lectura.");
       return;
     }
-    if (currentUser.id !== analistaId) {
+    const targetAnalyst = analistas.find((a) => a.id === analistaId);
+    if (targetAnalyst?.email !== currentUser.email) {
       alert("No tienes permisos sobre las tareas de este analista.");
       return;
     }
@@ -216,132 +236,130 @@ export default function TareasPage() {
     );
   };
 
-  // --- IMPORTADOR CSV ---
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePortfolioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (currentUser.role !== "admin") return;
     const file = e.target.files?.[0];
     if (!file) return;
-    setIsImporting(true);
+
+    setIsImportingPortfolio(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        processCSV(event.target?.result as string);
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        processPortfolioData(jsonData as any[][]);
       } catch (err) {
-        setErrorMsg("Error procesando archivo.");
+        console.error(err);
+        setErrorMsg(
+          "Error al leer el archivo Excel. Asegúrese de que sea válido."
+        );
       } finally {
-        setIsImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        setIsImportingPortfolio(false);
+        if (portfolioInputRef.current) portfolioInputRef.current.value = "";
       }
     };
-    reader.readAsText(file, "ISO-8859-1");
+    reader.readAsArrayBuffer(file);
   };
 
-  const processCSV = (csvText: string) => {
-    const lines = csvText.split(/\r\n|\n/);
-    if (lines.length < 2) {
-      setErrorMsg("Archivo vacío");
+  const processPortfolioData = (rows: any[][]) => {
+    if (rows.length < 2) {
+      setErrorMsg("El archivo está vacío.");
       return;
     }
 
-    // Detectar separador (excel en español usa punto y coma)
-    const separator =
-      (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length
-        ? ";"
-        : ",";
+    const headers = rows[0].map((h) => String(h).trim().toLowerCase());
+    const idxRutFicha = headers.findIndex((h) => h.includes("rut ficha"));
+    const idxRazonSocial = headers.findIndex(
+      (h) => h.includes("razón social") || h.includes("razon social")
+    );
+    const idxCorreoCliente = headers.findIndex((h) =>
+      h.includes("correo cliente")
+    );
+    const idxNombreAnalista = headers.findIndex((h) =>
+      h.includes("nombre analista")
+    );
+    const idxCorreoAnalista = headers.findIndex((h) =>
+      h.includes("correo analista")
+    );
+
+    if (idxRutFicha === -1 || idxNombreAnalista === -1) {
+      setErrorMsg(
+        "No se encontraron las columnas requeridas (Rut Ficha, Nombre Analista). Verifique el formato."
+      );
+      return;
+    }
+
     const mapAnalistas = new Map<string, Analista>();
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const row = line
-        .split(separator)
-        .map((cell) => cell.replace(/^"|"$/g, "").trim());
-      if (row.length < 5) continue;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const rutCliente = row[idxRutFicha];
+      const nombreCliente = row[idxRazonSocial] || "Cliente Sin Nombre";
+      const correoCliente =
+        idxCorreoCliente !== -1 ? row[idxCorreoCliente] : "";
+      const nombreAnalista = row[idxNombreAnalista];
+      const correoAnalista =
+        idxCorreoAnalista !== -1 ? row[idxCorreoAnalista] : "";
 
-      // Formato esperado: Analista, Cliente, RUT, Tarea, Vencimiento
-      const [
-        nombreAnalista,
-        nombreCliente,
-        rutCliente,
-        nombreTarea,
-        fechaVencimiento,
-        estadoRaw,
-        obs,
-      ] = row;
+      if (!nombreAnalista || !rutCliente) continue;
 
-      if (!nombreAnalista || !nombreCliente) continue;
+      const analistaKey = correoAnalista || nombreAnalista;
 
-      // 1. Crear Analista si no existe
-      if (!mapAnalistas.has(nombreAnalista)) {
-        // Generamos un ID basado en el nombre para consistencia simple
-        const generatedId = `a-${nombreAnalista
-          .replace(/\s+/g, "")
-          .toLowerCase()}`;
-        mapAnalistas.set(nombreAnalista, {
-          id: generatedId,
+      if (!mapAnalistas.has(analistaKey)) {
+        mapAnalistas.set(analistaKey, {
+          id: `a-${Math.random().toString(36).substr(2, 5)}`,
           nombre: nombreAnalista,
-          avatar: nombreAnalista.charAt(0).toUpperCase(),
+          email: correoAnalista,
+          avatar: String(nombreAnalista).charAt(0).toUpperCase(),
           clientes: [],
           cargaTotal: 0,
           completadas: 0,
         });
       }
-      const analista = mapAnalistas.get(nombreAnalista)!;
+      const analista = mapAnalistas.get(analistaKey)!;
 
-      // 2. Crear Cliente
-      let cliente = analista.clientes.find((c) => c.nombre === nombreCliente);
-      if (!cliente) {
-        cliente = {
-          id: `c-${nombreCliente.replace(/\s+/g, "")}-${Math.random()}`,
+      const clienteExists = analista.clientes.some((c) => c.rut === rutCliente);
+
+      if (!clienteExists) {
+        analista.clientes.push({
+          id: `c-${String(rutCliente).replace(/\./g, "")}`,
           nombre: nombreCliente,
-          rut: rutCliente || "S/I",
+          rut: rutCliente,
+          email: correoCliente,
           progreso: 0,
           tareas: [],
-        };
-        analista.clientes.push(cliente);
+        });
       }
-
-      // 3. Tarea
-      const estadoNormalizado = estadoRaw?.toLowerCase().includes("completado")
-        ? "completado"
-        : "pendiente";
-      cliente.tareas.push({
-        id: `t-${Math.random()}`,
-        nombre: nombreTarea,
-        vencimiento: fechaVencimiento || new Date().toISOString(),
-        estado: estadoNormalizado as TareaEstado,
-        comentario: obs || "",
-      });
-
-      analista.cargaTotal++;
-      if (estadoNormalizado === "completado") analista.completadas++;
     }
 
-    // Recalcular progresos de clientes
-    mapAnalistas.forEach((analista) => {
-      analista.clientes.forEach((cliente) => {
-        const done = cliente.tareas.filter(
-          (t) => t.estado === "completado"
-        ).length;
-        cliente.progreso =
-          cliente.tareas.length > 0
-            ? Math.round((done / cliente.tareas.length) * 100)
-            : 0;
-      });
-    });
+    if (mapAnalistas.size === 0) {
+      setErrorMsg("No se pudieron extraer datos válidos.");
+      return;
+    }
 
     setAnalistas(Array.from(mapAnalistas.values()));
-    alert(
-      "Carga exitosa. Ahora puedes simular la sesión de los analistas importados."
+    setSuccessMsg(
+      `Cartera cargada: ${mapAnalistas.size} analistas procesados.`
     );
   };
 
-  // --- EXPORTAR ---
+  const handleTasksUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    alert(
+      "Funcionalidad de 'Cargar Tareas' pendiente de implementación en el siguiente paso."
+    );
+  };
+
   const handleExport = () => {
     if (currentUser.role !== "admin") return;
-    const rows = [
+
+    const wb = XLSX.utils.book_new();
+    const data = [
       [
         "Analista",
         "Cliente",
@@ -352,10 +370,11 @@ export default function TareasPage() {
         "Observación",
       ],
     ];
+
     analistas.forEach((a) => {
       a.clientes.forEach((c) => {
         c.tareas.forEach((t) => {
-          rows.push([
+          data.push([
             a.nombre,
             c.nombre,
             c.rut,
@@ -367,26 +386,16 @@ export default function TareasPage() {
         });
       });
     });
-    const csvContent = rows
-      .map((e) => e.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))
-      .join("\r\n");
-    const blob = new Blob(["\uFEFF" + csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "Tareas.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+    XLSX.writeFile(wb, `Reporte_${periodo.replace(/\s/g, "_")}.xlsx`);
   };
 
-  // Filtros de vista
   const viewData = useMemo(() => {
     let data = analistas;
     if (currentUser.role === "analyst") {
-      data = analistas.filter((a) => a.id === currentUser.id);
+      data = analistas.filter((a) => a.email === currentUser.email);
     }
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
@@ -399,7 +408,6 @@ export default function TareasPage() {
     return data;
   }, [analistas, currentUser, searchTerm]);
 
-  // Stats
   const stats = useMemo(() => {
     let total = 0,
       completadas = 0,
@@ -423,13 +431,12 @@ export default function TareasPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      {/* === SIMULADOR DE SESIÓN DINÁMICO === */}
       <div className="bg-black text-white p-4 rounded-xl flex flex-wrap items-center justify-between text-sm shadow-lg mb-8 gap-4">
         <div className="flex items-center gap-3">
           <Shield size={18} className="text-[var(--secondary-color)]" />
           <div>
             <p className="text-xs opacity-60 uppercase font-bold tracking-wider">
-              Usuario Actual
+              Sesión Actual
             </p>
             <p className="font-medium text-lg">{currentUser.name}</p>
             <span
@@ -445,7 +452,7 @@ export default function TareasPage() {
         </div>
 
         <div className="flex flex-col items-end gap-1">
-          <p className="text-xs opacity-60 mr-1">Cambiar perfil para probar:</p>
+          <p className="text-xs opacity-60 mr-1">Probar vistas:</p>
           <div className="flex flex-wrap gap-2 justify-end">
             {availableUsers.map((u) => (
               <button
@@ -465,7 +472,6 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* === HEADER === */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-black/5 pb-6">
         <div>
           <h1 className="text-2xl font-bold text-[var(--primary-color)]">
@@ -475,132 +481,87 @@ export default function TareasPage() {
           </h1>
           <p className="text-black/60 text-sm mt-1">
             {currentUser.role === "admin"
-              ? "Importa el CSV del CRM para asignar cargas."
+              ? "Gestión de Analistas y asignación de tareas mensuales."
               : `Hola ${currentUser.name}, este es tu plan mensual.`}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-black/10 px-3 py-2 rounded-xl shadow-sm">
-            <Calendar size={16} className="text-black/40" />
-            <span className="text-sm font-medium text-[var(--primary-color)]">
-              {periodo}
-            </span>
+          <div className="flex items-center gap-3 bg-white border border-[#af9150]/30 px-4 py-2 rounded-xl shadow-[0_2px_8px_rgba(175,145,80,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(175,145,80,0.25)]">
+            <div className="p-2 bg-[#af9150]/10 rounded-lg">
+              <Calendar size={18} className="text-[#af9150]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-[#af9150] uppercase tracking-widest leading-none mb-0.5">
+                Periodo
+              </span>
+              <span className="text-sm font-bold text-[var(--primary-color)] leading-none">
+                {periodo}
+              </span>
+            </div>
           </div>
 
           {currentUser.role === "admin" && (
             <>
               <input
                 type="file"
-                accept=".csv,.txt"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
+                accept=".xlsx, .xls, .csv"
+                ref={portfolioInputRef}
+                onChange={handlePortfolioUpload}
                 className="hidden"
               />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${
-                  isImporting
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-                }`}
-              >
-                {isImporting ? (
-                  <RefreshCw size={16} className="animate-spin" />
-                ) : (
-                  <UploadCloud size={16} />
-                )}
-                {analistas.length > 0
-                  ? "Actualizar Planificación"
-                  : "Cargar Planificación"}
-              </button>
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                ref={tasksInputRef}
+                onChange={handleTasksUpload}
+                className="hidden"
+              />
 
               <button
                 onClick={handleExport}
-                disabled={analistas.length === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white shadow-md hover:opacity-90 transition-opacity active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: "var(--secondary-color)" }}
+                className="bg-green-600 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white shadow-md hover:opacity-90 transition-opacity active:scale-95"
               >
-                <FileSpreadsheet size={16} /> Exportar reporte
+                <FileSpreadsheet size={16} />
+                Exportar Reporte
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* === ESTADÍSTICAS === */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
-          <p className="text-xs text-black/50 font-medium uppercase">
-            {currentUser.role === "admin" ? "Cumplimiento Global" : "Mi Avance"}
-          </p>
-          <div className="mt-1 text-3xl font-bold text-[var(--primary-color)]">
-            {stats.cumplimiento}%
-          </div>
-          <div className="mt-2">
-            <ProgressBar value={stats.cumplimiento} />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
-          <p className="text-xs text-black/50 font-medium uppercase">
-            Total Clientes
-          </p>
-          <p className="mt-1 text-3xl font-bold text-[var(--primary-color)]">
-            {stats.nClientes}
-          </p>
-          <p className="text-xs text-black/40 mt-1">Asignados</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
-          <p className="text-xs text-black/50 font-medium uppercase">
-            Pendientes
-          </p>
-          <p className="mt-1 text-3xl font-bold text-amber-600">
-            {stats.total - stats.completadas}
-          </p>
-          <p className="text-xs text-black/40 mt-1">Tareas en cola</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
-          <p className="text-xs text-black/50 font-medium uppercase">Atrasos</p>
-          <p
-            className={`mt-1 text-3xl font-bold ${
-              stats.atrasadas > 0 ? "text-rose-600" : "text-emerald-600"
-            }`}
-          >
-            {stats.atrasadas}
-          </p>
-          <p className="text-xs text-black/40 mt-1">Atención requerida</p>
-        </div>
-      </div>
-
-      {/* === CONTENIDO === */}
       {errorMsg && (
-        <div className="bg-rose-50 text-rose-700 p-4 rounded-xl flex items-center gap-2">
+        <div className="bg-rose-50 text-rose-700 p-4 rounded-xl flex items-center gap-2 text-sm">
           <AlertCircle size={18} /> {errorMsg}
+        </div>
+      )}
+      {successMsg && (
+        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl flex items-center gap-2 text-sm">
+          <CheckCircle2 size={18} /> {successMsg}
         </div>
       )}
 
       {analistas.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-black/10 rounded-2xl bg-[var(--tertiary-color)]/20">
-          <UploadCloud size={48} className="mx-auto text-black/20 mb-4" />
+          <Briefcase size={48} className="mx-auto text-black/20 mb-4" />
           <h3 className="text-lg font-semibold text-black/60">
-            Sin Planificación
+            Sin Analistas ni Clientes
           </h3>
           <p className="text-sm text-black/40 max-w-md mx-auto mt-1">
-            El panel está vacío. Como Administrador, carga el archivo CSV
-            generado por el CRM para comenzar el ciclo mensual.
+            Paso 1: Como Administrador, carga el documento de Analistas (Excel)
+            para asignar las empresas a sus analistas correspondientes.
           </p>
           {currentUser.role === "admin" && (
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => portfolioInputRef.current?.click()}
               className="mt-6 px-6 py-2 bg-[var(--secondary-color)] text-white rounded-xl font-medium shadow-sm hover:opacity-90"
             >
-              Subir Archivo CSV
+              Cargar Analistas y Clientes
             </button>
           )}
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Buscador */}
           <div className="relative">
             <Search
               size={18}
@@ -615,7 +576,6 @@ export default function TareasPage() {
             />
           </div>
 
-          {/* Listado de Analistas */}
           {viewData.map((analista) => (
             <div
               key={analista.id}
@@ -640,22 +600,16 @@ export default function TareasPage() {
                       {analista.nombre}
                     </h3>
                     <p className="text-xs text-black/50">
-                      {analista.clientes.length} Clientes
+                      {analista.clientes.length} Clientes Asignados
                     </p>
+                    {analista.email && (
+                      <p className="text-[10px] text-black/30">
+                        {analista.email}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
-                  <div className="hidden md:block text-right">
-                    <div className="w-32">
-                      <ProgressBar
-                        value={
-                          analista.cargaTotal > 0
-                            ? (analista.completadas / analista.cargaTotal) * 100
-                            : 0
-                        }
-                      />
-                    </div>
-                  </div>
                   {currentUser.role === "admin" &&
                     (expandedAnalista === analista.id ? (
                       <ChevronDown size={20} className="text-black/40" />
@@ -670,133 +624,21 @@ export default function TareasPage() {
                   {analista.clientes.map((cliente) => (
                     <div
                       key={cliente.id}
-                      className="border-b border-black/5 last:border-0"
+                      className="border-b border-black/5 last:border-0 p-4 pl-8 flex justify-between items-center"
                     >
-                      <div
-                        onClick={() => toggleCliente(cliente.id)}
-                        className="flex items-center justify-between px-4 py-3 pl-8 cursor-pointer hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Building2
-                            size={18}
-                            className={`text-black/30 ${
-                              expandedCliente === cliente.id
-                                ? "text-[var(--secondary-color)]"
-                                : ""
-                            }`}
-                          />
-                          <div>
-                            <h4
-                              className={`text-sm font-medium ${
-                                expandedCliente === cliente.id
-                                  ? "text-[var(--secondary-color)]"
-                                  : "text-black/70"
-                              }`}
-                            >
-                              {cliente.nombre}
-                            </h4>
-                            <p className="text-[10px] text-black/40 font-mono">
-                              {cliente.rut}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="w-20 hidden sm:block">
-                            <ProgressBar
-                              value={cliente.progreso}
-                              colorClass={
-                                cliente.progreso === 100
-                                  ? "bg-emerald-500"
-                                  : "bg-blue-500"
-                              }
-                            />
-                          </div>
-                          {expandedCliente === cliente.id ? (
-                            <ChevronDown size={16} className="text-black/30" />
-                          ) : (
-                            <ChevronRight size={16} className="text-black/30" />
-                          )}
-                        </div>
+                      <div>
+                        <h4 className="text-sm font-medium text-black/80">
+                          {cliente.nombre}
+                        </h4>
+                        <p className="text-xs text-black/40">
+                          {cliente.rut} • {cliente.email}
+                        </p>
                       </div>
-
-                      {expandedCliente === cliente.id && (
-                        <div className="bg-gray-50/50 px-4 py-2 pl-4 md:pl-12 pb-4 border-t border-black/5 animate-in slide-in-from-top-1">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-left text-[10px] uppercase text-black/40 border-b border-black/5">
-                                <th className="py-2 w-8">Ok</th>
-                                <th className="py-2">Tarea</th>
-                                <th className="py-2">Vence</th>
-                                <th className="py-2 hidden sm:table-cell">
-                                  Estado
-                                </th>
-                                {currentUser.role === "admin" && (
-                                  <th className="py-2 text-right">Obs</th>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-black/5">
-                              {cliente.tareas.map((t) => (
-                                <tr
-                                  key={t.id}
-                                  className={
-                                    t.estado === "completado"
-                                      ? "bg-emerald-50/20"
-                                      : ""
-                                  }
-                                >
-                                  <td className="py-2">
-                                    <button
-                                      onClick={() =>
-                                        handleToggleTask(
-                                          analista.id,
-                                          cliente.id,
-                                          t.id
-                                        )
-                                      }
-                                      disabled={currentUser.role === "admin"}
-                                      className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
-                                        t.estado === "completado"
-                                          ? "bg-emerald-500 border-emerald-500 text-white"
-                                          : currentUser.role === "admin"
-                                          ? "bg-gray-100 border-black/10 cursor-not-allowed"
-                                          : "bg-white border-black/20 hover:border-[var(--secondary-color)]"
-                                      }`}
-                                    >
-                                      {t.estado === "completado" && (
-                                        <CheckCircle2 size={12} />
-                                      )}
-                                    </button>
-                                  </td>
-                                  <td
-                                    className={`py-2 ${
-                                      t.estado === "completado"
-                                        ? "text-emerald-800 line-through opacity-70"
-                                        : ""
-                                    }`}
-                                  >
-                                    {t.nombre}
-                                  </td>
-                                  <td className="py-2 text-xs font-mono text-black/60">
-                                    {t.vencimiento}
-                                  </td>
-                                  <td className="py-2 hidden sm:table-cell">
-                                    <StatusBadge
-                                      status={t.estado}
-                                      date={t.vencimiento}
-                                    />
-                                  </td>
-                                  {currentUser.role === "admin" && (
-                                    <td className="py-2 text-right text-xs text-black/40 italic">
-                                      {t.comentario || "-"}
-                                    </td>
-                                  )}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      <span className="text-xs text-black/30 italic">
+                        {cliente.tareas.length === 0
+                          ? "Sin tareas asignadas este mes"
+                          : `${cliente.tareas.length} tareas`}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -31,7 +31,6 @@ import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
-import RecuperarContrasena from "./pages/RecuperarContrasena";
 
 const API_BASE_URL =
   // @ts-ignore
@@ -745,9 +744,7 @@ export default function CintaxIntranetMockup() {
   };
 
   return (
-    <div
-      className="min-h-screen overflow-hidden relative"
-    >
+    <div className="min-h-screen overflow-hidden relative">
       <style>{`
         :root{ 
           --primary-font: "Loew", sans-serif; 
@@ -1104,10 +1101,6 @@ export default function CintaxIntranetMockup() {
 
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/inicio" element={<Navigate to="/home" replace />} />
-            <Route
-              path="/recuperar-contrasena"
-              element={<RecuperarContrasena />}
-            />
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

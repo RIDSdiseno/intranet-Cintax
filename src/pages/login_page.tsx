@@ -216,13 +216,6 @@ export default function LoginPage() {
               />
               Recordarme
             </label>
-            <a
-              href="recuperar-contrasena"
-              className="text-sm underline"
-              style={{ color: "var(--secondary-color)" }}
-            >
-              ¿Olvidaste tu contraseña?
-            </a>
           </div>
 
           <button

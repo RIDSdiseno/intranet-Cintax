@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   DndContext,
   useDraggable,
@@ -201,7 +201,7 @@ const ProgressBar = ({
 
 // --- COMPONENTES DND ---
 
-// 1. TARJETA ARRASTRABLE (Draggable)
+// 1. TARJETA ARRASTRABLE (Draggable) - ESTILOS DINÁMICOS
 const DraggableTaskCard = ({
   task,
   isOverlay = false,
@@ -224,8 +224,46 @@ const DraggableTaskCard = ({
     touchAction: "none",
   };
 
+  // Lógica de Estado y Fechas
+  const dateObj = new Date(task.vencimiento);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalizar hoy a media noche para comparación justa
+
+  // Si la fecha de la tarea es menor a hoy (ayer o antes)
+  const isDatePast = dateObj < today;
+
+  const isCompleted =
+    task.estado === "completado" || task.estado === "realizada";
+  const isInProgress = task.estado === "en_proceso";
   const isLate =
-    new Date(task.vencimiento) < new Date() && task.estado !== "completado";
+    (isDatePast && !isCompleted) ||
+    task.estado === "atrasado" ||
+    task.estado === "no_realizada";
+
+  // Clases dinámicas según estado
+  let cardClasses = "bg-white border-gray-200 hover:border-gray-300";
+  let titleClasses = "text-gray-800";
+  let dateClasses = "text-gray-500";
+  let badgeClasses = "bg-gray-100 text-black/50";
+
+  if (isCompleted) {
+    cardClasses = "bg-emerald-50/50 border-emerald-200 shadow-sm";
+    titleClasses = "text-emerald-900 line-through decoration-emerald-900/30";
+    dateClasses = "text-emerald-600";
+    badgeClasses = "bg-emerald-100 text-emerald-700 font-medium";
+  } else if (isLate) {
+    cardClasses =
+      "bg-white border-rose-200 border-l-4 border-l-rose-500 shadow-sm";
+    titleClasses = "text-gray-900 font-semibold";
+    dateClasses = "text-rose-600 font-bold";
+    badgeClasses = "bg-rose-50 text-rose-700 font-bold";
+  } else if (isInProgress) {
+    cardClasses =
+      "bg-white border-blue-200 border-l-4 border-l-blue-500 shadow-md";
+    titleClasses = "text-blue-900 font-medium";
+    dateClasses = "text-blue-600 font-medium";
+    badgeClasses = "bg-blue-50 text-blue-700 font-medium";
+  }
 
   return (
     <div
@@ -234,10 +272,11 @@ const DraggableTaskCard = ({
       {...listeners}
       {...attributes}
       className={`
-        bg-white p-4 rounded-xl border shadow-sm transition-all relative group touch-none flex flex-col gap-2
+        p-3.5 rounded-xl border shadow-sm transition-all relative group touch-none flex flex-col gap-2
+        ${cardClasses}
         ${
           isOverlay
-            ? "shadow-2xl scale-105 rotate-2 cursor-grabbing z-50"
+            ? "shadow-2xl scale-105 -rotate-2 cursor-grabbing z-50"
             : "hover:shadow-md"
         }
         ${
@@ -245,15 +284,12 @@ const DraggableTaskCard = ({
             ? "cursor-default opacity-80"
             : "cursor-grab active:cursor-grabbing"
         }
-        ${
-          isLate
-            ? "border-l-4 border-l-rose-500 border-gray-200"
-            : "border-gray-200"
-        }
       `}
     >
       <div className="flex justify-between items-start">
-        <span className="text-[10px] font-bold text-black/50 uppercase tracking-wider bg-gray-100 px-2 py-0.5 rounded truncate max-w-[150px]">
+        <span
+          className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded truncate max-w-[150px] ${badgeClasses}`}
+        >
           {task.cliente}
         </span>
         {!disabled && (
@@ -264,16 +300,10 @@ const DraggableTaskCard = ({
         )}
       </div>
 
-      <h4 className="font-medium text-gray-800 leading-tight text-sm">
-        {task.nombre}
-      </h4>
+      <h4 className={`text-sm leading-snug ${titleClasses}`}>{task.nombre}</h4>
 
-      <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 pt-2 mt-1">
-        <div
-          className={`flex items-center gap-1 ${
-            isLate ? "text-rose-600 font-bold" : ""
-          }`}
-        >
+      <div className="flex items-center justify-between text-xs border-t border-black/5 pt-2 mt-1">
+        <div className={`flex items-center gap-1 ${dateClasses}`}>
           <Calendar size={12} />
           {new Date(task.vencimiento).toLocaleDateString("es-CL", {
             day: "numeric",
@@ -283,7 +313,7 @@ const DraggableTaskCard = ({
 
         {task.comentario && (
           <div
-            className="flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded"
+            className="flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100"
             title={task.comentario}
           >
             <AlertCircle size={10} />
@@ -313,7 +343,7 @@ const DroppableColumn = ({
     <div
       ref={setNodeRef}
       className={`
-            flex-1 flex flex-col rounded-2xl border min-w-[280px] max-w-[400px] transition-colors
+            flex-1 flex flex-col rounded-xl border min-w-[220px] max-w-[350px] transition-colors
             ${col.bg} ${col.border}
             ${
               isOver && !disabled
@@ -323,20 +353,20 @@ const DroppableColumn = ({
         `}
     >
       {/* Header Columna */}
-      <div className="p-4 border-b border-gray-200/50 flex items-center justify-between">
-        <div className="flex items-center gap-2 font-bold text-gray-700">
+      <div className="p-3 border-b border-gray-200/50 flex items-center justify-between">
+        <div className="flex items-center gap-2 font-bold text-gray-700 text-sm">
           <div className={`p-1.5 rounded-lg bg-white/60 ${col.color}`}>
             {col.icon}
           </div>
           {col.label}
         </div>
-        <span className="bg-white px-2.5 py-0.5 rounded-md text-xs font-bold text-gray-500 shadow-sm border border-gray-100">
+        <span className="bg-white px-2 py-0.5 rounded-md text-xs font-bold text-gray-500 shadow-sm border border-gray-100">
           {tasks.length}
         </span>
       </div>
 
       {/* Contenedor de Tarjetas */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-3 custom-scrollbar min-h-[200px]">
+      <div className="flex-1 p-2 overflow-y-auto space-y-2.5 custom-scrollbar min-h-[200px]">
         {tasks.map((task) => (
           <DraggableTaskCard
             key={task.uniqueId}
@@ -459,7 +489,6 @@ export default function TareasPage() {
       (t) => t.estado === "en_proceso"
     ).length;
     const pending = kanbanTasks.filter((t) => t.estado === "pendiente").length;
-    // Consideramos 'atrasado' y 'no_realizada' como problemas
     const issues = kanbanTasks.filter(
       (t) => t.estado === "atrasado" || t.estado === "no_realizada"
     ).length;
@@ -554,7 +583,7 @@ export default function TareasPage() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="p-4 md:p-8 max-w-[1800px] mx-auto h-full flex flex-col animate-in fade-in duration-500">
+      <div className="p-4 md:p-8 max-w-[1800px] mx-auto h-[calc(100vh-80px)] flex flex-col animate-in fade-in duration-500">
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 shrink-0">
           <div>

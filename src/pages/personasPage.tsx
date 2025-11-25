@@ -10,6 +10,7 @@ import {
   Phone,
   User,
   X,
+  Users,
 } from "lucide-react";
 
 type Categoria = "Contabilidad" | "Tributario" | "Entre otros";
@@ -99,7 +100,11 @@ const CATS: Array<"Todos" | Categoria> = [
 export default function PersonasPage() {
   // Estado para fila expandida
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ action: string; personaId: number; personaNombre: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    action: string;
+    personaId: number;
+    personaNombre: string;
+  } | null>(null);
 
   const toggleExpand = (id: number) => {
     setExpandedId(id === expandedId ? null : id);
@@ -140,10 +145,8 @@ export default function PersonasPage() {
     <div className="mt-4">
       {/* Header de la page */}
       <div className="mb-4">
-        <h2
-          className="text-2xl font-semibold"
-          style={{ color: "var(--primary-color)" }}
-        >
+        <h2 className="text-2xl font-semibold flex items-center gap-2">
+          <Users size={20} />
           Personas
         </h2>
         <p className="text-sm text-black/60">
@@ -343,15 +346,27 @@ export default function PersonasPage() {
                             </p>
                             <div className="flex flex-col gap-2 pt-1">
                               <button
-                                onClick={() => setConfirmModal({ action: "enable", personaId: p.id, personaNombre: p.nombre })}
+                                onClick={() =>
+                                  setConfirmModal({
+                                    action: "enable",
+                                    personaId: p.id,
+                                    personaNombre: p.nombre,
+                                  })
+                                }
                                 className="flex items-center justify-center gap-2 w-full py-2 text-sm font-medium text-white rounded-lg shadow-sm hover:opacity-90 transition-opacity"
                                 style={{ background: "var(--secondary-color)" }}
                               >
                                 <Check size={16} />
                                 Habilitar Cuenta
                               </button>
-                              <button 
-                                onClick={() => setConfirmModal({ action: "disable", personaId: p.id, personaNombre: p.nombre })}
+                              <button
+                                onClick={() =>
+                                  setConfirmModal({
+                                    action: "disable",
+                                    personaId: p.id,
+                                    personaNombre: p.nombre,
+                                  })
+                                }
                                 className="flex items-center justify-center gap-2 w-full py-2 text-sm font-medium text-rose-700 bg-white rounded-lg border border-rose-300 hover:bg-rose-50 transition-colors"
                               >
                                 <X size={16} />
@@ -384,12 +399,12 @@ export default function PersonasPage() {
             onClick={() => setConfirmModal(null)}
           />
           <div className="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-lg z-10">
-            <h3 
+            <h3
               className="text-lg font-semibold mb-2"
               style={{ color: "var(--primary-color)" }}
             >
-              {confirmModal.action === "enable" 
-                ? "¿Habilitar cuenta?" 
+              {confirmModal.action === "enable"
+                ? "¿Habilitar cuenta?"
                 : "¿Deshabilitar acceso?"}
             </h3>
             <p className="text-sm text-black/60 mb-6">
@@ -401,7 +416,10 @@ export default function PersonasPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  const action = confirmModal.action === "enable" ? "Cuenta habilitada" : "Acceso deshabilitado";
+                  const action =
+                    confirmModal.action === "enable"
+                      ? "Cuenta habilitada"
+                      : "Acceso deshabilitado";
                   alert(`${action} para ${confirmModal.personaNombre}`);
                   setConfirmModal(null);
                 }}
@@ -411,7 +429,9 @@ export default function PersonasPage() {
                     : "bg-rose-600 hover:bg-rose-700"
                 }`}
               >
-                {confirmModal.action === "enable" ? "Habilitar" : "Deshabilitar"}
+                {confirmModal.action === "enable"
+                  ? "Habilitar"
+                  : "Deshabilitar"}
               </button>
               <button
                 onClick={() => setConfirmModal(null)}

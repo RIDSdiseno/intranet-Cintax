@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronLeft,   // 👈 NUEVO
   Upload,
+  FolderTree,
 } from "lucide-react";
 
 type DriveFolder = {
@@ -444,8 +445,9 @@ setHasMore(!!newNextToken);
     <div className="space-y-6 mt-4">
       {/* HEADER */}
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">
-          Google Drive{" "}
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <FolderTree size={20} />
+          Google Drive
         </h1>
         <p className="text-sm text-black/60">
           Acceso directo a la estructura compartida de la empresa.

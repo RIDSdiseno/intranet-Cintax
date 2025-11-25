@@ -19,7 +19,6 @@ import {
   Clock,
   Search,
   Calendar,
-  User,
   PlayCircle,
   XCircle,
   GripVertical,
@@ -27,6 +26,7 @@ import {
   Activity,
   ListTodo,
   BarChart3,
+  Columns3,
 } from "lucide-react";
 
 // --- TIPOS DE DATOS ---
@@ -46,7 +46,7 @@ type TareaEstado =
   | "atrasado"
   | "en_proceso"
   | "no_realizada";
-type KanbanColumnId = "asignada" | "en_proceso" | "realizada" | "no_realizada";
+type KanbanColumnId = "asignada" | "no_realizada" | "en_proceso" | "realizada";
 
 type Tarea = {
   id: string;
@@ -89,15 +89,23 @@ const KANBAN_COLUMNS: {
     label: "Asignadas",
     color: "text-gray-600",
     icon: <Clock size={18} />,
-    bg: "bg-gray-50/50",
+    bg: "bg-gray-200/20",
     border: "border-gray-200",
+  },
+  {
+    id: "no_realizada",
+    label: "No Realizadas",
+    color: "text-rose-600",
+    icon: <XCircle size={18} />,
+    bg: "bg-rose-200/20",
+    border: "border-rose-100",
   },
   {
     id: "en_proceso",
     label: "En Proceso",
     color: "text-blue-600",
     icon: <PlayCircle size={18} />,
-    bg: "bg-blue-50/30",
+    bg: "bg-blue-200/20",
     border: "border-blue-100",
   },
   {
@@ -105,16 +113,8 @@ const KANBAN_COLUMNS: {
     label: "Realizadas",
     color: "text-emerald-600",
     icon: <CheckCircle2 size={18} />,
-    bg: "bg-emerald-50/30",
+    bg: "bg-emerald-200/20",
     border: "border-emerald-100",
-  },
-  {
-    id: "no_realizada",
-    label: "No Realizadas",
-    color: "text-rose-600",
-    icon: <XCircle size={18} />,
-    bg: "bg-rose-50/30",
-    border: "border-rose-100",
   },
 ];
 
@@ -247,7 +247,8 @@ const DraggableTaskCard = ({
   let badgeClasses = "bg-gray-100 text-black/50";
 
   if (isCompleted) {
-    cardClasses = "bg-emerald-50/50 border-emerald-200 shadow-sm";
+    cardClasses =
+      "bg-white border-emerald-200 border-l-4 border-l-emerald-500 shadow-sm";
     titleClasses = "text-emerald-900 line-through decoration-emerald-900/30";
     dateClasses = "text-emerald-600";
     badgeClasses = "bg-emerald-100 text-emerald-700 font-medium";
@@ -366,7 +367,7 @@ const DroppableColumn = ({
       </div>
 
       {/* Contenedor de Tarjetas */}
-      <div className="flex-1 p-2 overflow-y-auto space-y-2.5 custom-scrollbar min-h-[200px]">
+      <div className="flex-1 p-2 overflow-y-auto space-y-2.5 min-h-[200px]">
         {tasks.map((task) => (
           <DraggableTaskCard
             key={task.uniqueId}
@@ -588,7 +589,8 @@ export default function TareasPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 shrink-0">
           <div>
             <h1 className="text-2xl font-bold text-[var(--primary-color)] flex items-center gap-2">
-              Tablero de Gestión{" "}
+              <Columns3 size={20} />
+              Tablero de Gestión
               <span className="text-sm font-medium text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2">
                 <Calendar size={16} className="text-[var(--secondary-color)]" />
                 {periodo}
@@ -665,6 +667,24 @@ export default function TareasPage() {
             </div>
           </div>
 
+          {/* KPI 4: Atención */}
+          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Atención
+              </p>
+              <h3 className="text-2xl font-bold text-rose-600 mt-1">
+                {stats.issues}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                Atrasadas / No realizadas
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-rose-50 text-rose-600">
+              <AlertCircle size={24} />
+            </div>
+          </div>
+
           {/* KPI 2: En Ejecución */}
           <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
@@ -694,24 +714,6 @@ export default function TareasPage() {
             </div>
             <div className="p-3 rounded-xl bg-gray-100 text-gray-500">
               <ListTodo size={24} />
-            </div>
-          </div>
-
-          {/* KPI 4: Atención */}
-          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Atención
-              </p>
-              <h3 className="text-2xl font-bold text-rose-600 mt-1">
-                {stats.issues}
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Atrasadas / No realizadas
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-rose-50 text-rose-600">
-              <AlertCircle size={24} />
             </div>
           </div>
         </div>

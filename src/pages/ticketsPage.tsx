@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Search,
-  LifeBuoy,
   ChevronRight,
+  BookCheck,
   X,
   Bold,
   Italic,
@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Clock,
   MessageSquare,
+  Tickets,
 } from "lucide-react";
 import axios from "axios";
 
@@ -397,16 +398,16 @@ export default function TicketsPage() {
   const pagedTickets = filtered.slice(startIndex, endIndex);
 
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       {/* Header */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h2
-            className="text-lg font-semibold"
+            className="text-2xl font-semibold"
             style={{ color: "var(--primary-color)" }}
           >
             <span className="inline-flex items-center gap-2">
-              <LifeBuoy size={18} /> Tickets
+              <Tickets size={20} /> Tickets
             </span>
           </h2>
           <p className="text-sm text-black/60">

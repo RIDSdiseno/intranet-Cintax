@@ -14,6 +14,7 @@ import {
   X,
   BookCheck,
   ChevronDown,
+  HandHelping,
 } from "lucide-react";
 import {
   Routes,
@@ -1025,8 +1026,8 @@ export default function CintaxIntranetMockup() {
                 </NavLink>
                 <TicketsNav />
                 <SideLink
-                  icon={<LifeBuoy size={18} />}
-                  label="Soporte"
+                  icon={<HandHelping size={18} />}
+                  label="Soporte RIDS"
                   onClick={() => navigate("/soporte")}
                 />
               </nav>

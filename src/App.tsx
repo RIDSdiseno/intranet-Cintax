@@ -1043,9 +1043,9 @@ export default function CintaxIntranetMockup() {
           </>
         )}
 
-        <main className={hideChrome ? "p-0" : "p-5 lg:p-8 pt-16 lg:pt-5"}>
+        <main className={hideChrome ? "p-0" : "p-5 lg:p-6 pt-16 lg:pt-5"}>
           {!hideChrome && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
               <div>
                 <h1 className="text-2xl sm:text-[var(--title-xl)] font-semibold">
                   Intranet{" "}

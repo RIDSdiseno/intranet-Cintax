@@ -137,11 +137,11 @@ export default function PersonasPage() {
   }, [cat, query]);
 
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       {/* Header de la page */}
       <div className="mb-4">
         <h2
-          className="text-lg font-semibold"
+          className="text-2xl font-semibold"
           style={{ color: "var(--primary-color)" }}
         >
           Personas

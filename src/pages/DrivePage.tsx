@@ -441,12 +441,11 @@ setHasMore(!!newNextToken);
   };
 
   return (
-    <div className="space-y-6 mt-6">
+    <div className="space-y-6 mt-4">
       {/* HEADER */}
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">
           Google Drive{" "}
-          <span className="text-[var(--secondary-color)]">Cintax</span>
         </h1>
         <p className="text-sm text-black/60">
           Acceso directo a la estructura compartida de la empresa.

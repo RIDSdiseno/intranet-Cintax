@@ -583,13 +583,14 @@ export default function TareasPage() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="p-4 md:p-8 max-w-[1800px] mx-auto h-[calc(100vh-80px)] flex flex-col animate-in fade-in duration-500">
+      <div className="max-w-[1800px] mx-auto h-[calc(100vh-80px)] flex flex-col animate-in fade-in duration-500 mt-4">
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 shrink-0">
           <div>
             <h1 className="text-2xl font-bold text-[var(--primary-color)] flex items-center gap-2">
               Tablero de Gestión{" "}
-              <span className="text-sm font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200">
+              <span className="text-sm font-medium text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2">
+                <Calendar size={16} className="text-[var(--secondary-color)]" />
                 {periodo}
               </span>
             </h1>
@@ -635,7 +636,7 @@ export default function TareasPage() {
         {/* --- SECCIÓN DE KPIs DE PROGRESO --- */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
           {/* KPI 1: Progreso General */}
-          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start mb-2">
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -665,7 +666,7 @@ export default function TareasPage() {
           </div>
 
           {/* KPI 2: En Ejecución */}
-          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 En Ejecución
@@ -681,7 +682,7 @@ export default function TareasPage() {
           </div>
 
           {/* KPI 3: Por Iniciar */}
-          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 Por Iniciar
@@ -697,7 +698,7 @@ export default function TareasPage() {
           </div>
 
           {/* KPI 4: Atención */}
-          <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 Atención

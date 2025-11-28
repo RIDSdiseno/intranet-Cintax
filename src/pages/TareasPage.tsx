@@ -35,7 +35,10 @@ import {
   Loader2,
 } from "lucide-react";
 
-// --- TIPOS DE DATOS ---
+/* ==========================
+   TIPOS BÁSICOS
+========================== */
+
 type UserRole = "admin" | "analyst";
 
 type UserProfile = {
@@ -82,11 +85,13 @@ type Analista = {
   completadas: number;
 };
 
-// --- DRIVE / CARPETAS EJECUTIVO ---
+/* ==========================
+   DRIVE / CARPETAS
+========================== */
+
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const currentYear = new Date().getFullYear().toString();
 
-// Base usada para DRIVE (igual que en DrivePage)
 const DRIVE_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
@@ -104,11 +109,14 @@ type DriveFileItem = {
 type EjecutivoFolder = {
   id: string;
   name: string;
-  categoria?: string;
+  categoria?: string | null;
   pathString?: string;
 };
 
-// --- CONFIGURACIÓN DE COLUMNAS ---
+/* ==========================
+   CONFIG COLUMNS
+========================== */
+
 const KANBAN_COLUMNS: {
   id: KanbanColumnId;
   label: string;
@@ -151,7 +159,10 @@ const KANBAN_COLUMNS: {
   },
 ];
 
-// --- ADMIN POR DEFECTO ---
+/* ==========================
+   CONFIG GENERAL
+========================== */
+
 const ADMIN_USER: UserProfile = {
   id: "admin",
   name: "Administrador",
@@ -162,7 +173,6 @@ const ADMIN_USER: UserProfile = {
 
 const INITIAL_DATA: Analista[] = [];
 
-// API BASE para endpoints de la intranet (auth, tareas, etc.)
 const API_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
@@ -175,7 +185,6 @@ const getCurrentPeriod = () => {
   return `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
 };
 
-// 🔐 Helper para token
 function getAccessToken(): string | null {
   try {
     return (
@@ -187,7 +196,10 @@ function getAccessToken(): string | null {
   }
 }
 
-// ✅ FETCH API tareas/analistas
+/* ==========================
+   FETCHERS
+========================== */
+
 async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
   const params = new URLSearchParams();
   if (role === "admin") {
@@ -217,74 +229,36 @@ async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
   return data.analistas as Analista[];
 }
 
-// ✅ FETCH API carpetas de ejecutivo (A01, A02, etc.)
+/**
+ * Endpoint que estás usando para obtener las carpetas
+ * por ejecutivo / RUT (ya sea listMySharedFolders o listMyRutFolders).
+ */
 async function fetchEjecutivoFoldersApi(): Promise<EjecutivoFolder[]> {
   const token = getAccessToken();
   if (!token) throw new Error("No hay token de sesión.");
 
   const base = DRIVE_BASE_URL.replace(/\/$/, "");
 
-  // 1) Categorías visibles para el usuario (CONTA, RRHH, TRIBUTARIO...)
-  const resCategorias = await fetch(`${base}/drive/cintax/${currentYear}`, {
+  const res = await fetch(`${base}/drive/cintax/${currentYear}`, {
     credentials: "include",
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
 
-  if (!resCategorias.ok) {
-    throw new Error(`Error HTTP categorías: ${resCategorias.status}`);
+  if (!res.ok) {
+    throw new Error(`Error HTTP ejecutivos: ${res.status}`);
   }
 
-  const data = await resCategorias.json();
-  const categorias = data.folders || [];
-
-  const ejecutivoFolders: EjecutivoFolder[] = [];
-
-  // 2) Para cada categoría, traemos sus subcarpetas (A01, A02, etc.)
-  for (const cat of categorias) {
-    if (!cat.id) continue;
-
-    const resFiles = await fetch(
-      `${base}/drive/folder/${cat.id}/files?pageSize=100`,
-      {
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!resFiles.ok) {
-      console.warn(
-        "No se pudieron listar subcarpetas de categoría",
-        cat.name,
-        resFiles.status
-      );
-      continue;
-    }
-
-    const filesData = await resFiles.json();
-    const files = filesData.files || [];
-
-    const subFolders = files.filter(
-      (f: any) => f.mimeType === FOLDER_MIME
-    );
-
-    for (const sf of subFolders) {
-      ejecutivoFolders.push({
-        id: sf.id,
-        name: sf.name,
-        categoria: cat.name ?? "",
-        pathString: `CINTAX / ${currentYear} / ${cat.name} / ${sf.name}`,
-      });
-    }
-  }
-
-  return ejecutivoFolders;
+  const data = await res.json();
+  const folders = (data.folders || []) as EjecutivoFolder[];
+  return folders;
 }
 
-// --- COMPONENTES UI ---
+/* ==========================
+   COMPONENTES UI
+========================== */
+
 const ProgressBar = ({
   value,
   colorClass = "bg-[var(--secondary-color)]",
@@ -300,9 +274,8 @@ const ProgressBar = ({
   </div>
 );
 
-// --- COMPONENTES DND ---
+/* ---------- Tarjeta de tarea DnD ---------- */
 
-// 1. TARJETA ARRASTRABLE (Draggable)
 const DraggableTaskCard = ({
   task,
   isOverlay = false,
@@ -322,7 +295,7 @@ const DraggableTaskCard = ({
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.5 : 1,
-    touchAction: "none",
+    touchAction: "none" as const,
   };
 
   const dateObj = new Date(task.vencimiento);
@@ -424,7 +397,8 @@ const DraggableTaskCard = ({
   );
 };
 
-// 2. COLUMNA (Droppable) para columnas de tareas normales
+/* ---------- Columnas normales DnD ---------- */
+
 const DroppableColumn = ({
   col,
   tasks,
@@ -483,7 +457,8 @@ const DroppableColumn = ({
   );
 };
 
-// 3. TARJETA DE CARPETA EJECUTIVO (A01, A02...) con navegador embebido
+/* ---------- Card de carpeta con explorador interno ---------- */
+
 const EjecutivoFolderCard: React.FC<{ folder: EjecutivoFolder }> = ({
   folder,
 }) => {
@@ -506,7 +481,9 @@ const EjecutivoFolderCard: React.FC<{ folder: EjecutivoFolder }> = ({
 
       const base = DRIVE_BASE_URL.replace(/\/$/, "");
       const res = await fetch(
-        `${base}/drive/folder/${encodeURIComponent(nodeId)}/files?pageSize=50`,
+        `${base}/drive/folder/${encodeURIComponent(
+          nodeId
+        )}/files?pageSize=50`,
         {
           credentials: "include",
           headers: {
@@ -554,192 +531,176 @@ const EjecutivoFolderCard: React.FC<{ folder: EjecutivoFolder }> = ({
     });
   };
 
-  const totalFolders = files.filter((f) => isFolder(f.mimeType)).length;
-  const totalFiles = files.length - totalFolders;
-
   return (
-    <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 rounded-2xl p-[1px] shadow-sm hover:shadow-md transition-shadow">
-      <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
-        {/* CABECERA: carpeta A01 / A02 */}
-        <button
-          type="button"
-          onClick={toggleOpen}
-          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-50"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--tertiary-color)] text-[var(--secondary-color)] shadow-inner">
-              <FolderIcon size={18} />
+    <div className="bg-white border border-gray-100 rounded-2xl shadow-[0_8px_18px_rgba(15,23,42,0.04)]">
+      {/* CABECERA RUT */}
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="w-full flex items-center justify-between px-3.5 py-3 text-left rounded-2xl hover:bg-black/5 transition"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+            <FolderIcon size={18} />
+          </span>
+          <span className="flex flex-col min-w-0">
+            <span className="font-semibold text-sm truncate">
+              {folder.name}
             </span>
-            <span className="flex flex-col min-w-0">
-              <span className="font-semibold text-sm tracking-tight truncate">
-                {folder.name}
+            {folder.categoria && (
+              <span className="text-[10px] tracking-wide uppercase text-[var(--secondary-color)] font-bold">
+                {folder.categoria}
               </span>
-              <span className="flex items-center gap-2 text-[11px] text-black/55">
-                {folder.categoria && (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-[2px] text-[10px] font-medium text-slate-700">
-                    {folder.categoria}
-                  </span>
-                )}
-                {folder.pathString && (
-                  <span className="truncate font-mono text-[10px] text-black/45">
-                    {folder.pathString}
-                  </span>
-                )}
-              </span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {loading && (
-              <Loader2 className="h-4 w-4 animate-spin text-black/40" />
             )}
-            <span className="text-[11px] text-black/60 font-medium">
-              {open ? "Ocultar" : "Explorar"}
-            </span>
+            {folder.pathString && (
+              <span className="text-[10px] text-black/45 truncate">
+                {folder.pathString}
+              </span>
+            )}
+          </span>
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1 text-[11px] text-black/45">
+            {loading && (
+              <Loader2 className="h-3 w-3 animate-spin text-black/40" />
+            )}
+            <span>{open ? "Ocultar" : "Explorar"}</span>
             <ChevronRight
               size={14}
-              className={`text-black/40 transition-transform ${
+              className={`text-black/35 transition-transform ${
                 open ? "rotate-90" : ""
               }`}
             />
           </div>
-        </button>
+        </div>
+      </button>
 
-        {/* CONTENIDO DESPLEGABLE */}
-        {open && (
-          <div className="px-3 pb-3 pt-2 border-t border-black/5 bg-slate-50/40">
-            {/* Breadcrumb interno */}
-            <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/55 mb-2">
-              <span className="font-mono">CINTAX / {currentYear}</span>
-              {folder.categoria && (
-                <>
-                  <ChevronRight size={10} />
-                  <span>{folder.categoria}</span>
-                </>
-              )}
-              {stack.map((node, idx) => (
-                <React.Fragment key={`${node.id}-${idx}`}>
-                  <ChevronRight size={10} />
-                  <span
-                    className={
-                      idx === stack.length - 1
-                        ? "font-semibold text-black/80"
-                        : "text-black/55"
-                    }
-                  >
-                    {node.name}
-                  </span>
-                </React.Fragment>
-              ))}
-            </div>
-
-            {/* Barra de acciones / stats */}
-            <div className="flex items-center justify-between mb-2">
-              <button
-                type="button"
-                onClick={handleBack}
-                disabled={stack.length <= 1 || loading}
-                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-0.5 text-[11px] text-black/60 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <ChevronLeft size={10} />
-                Atrás
-              </button>
-
-              <div className="flex items-center gap-2 text-[10px] text-black/55">
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[1px]">
-                  <FolderIcon size={11} className="text-slate-500" />
-                  <span>{totalFolders} carpetas</span>
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[1px]">
-                  <FileText size={11} className="text-slate-500" />
-                  <span>{totalFiles} archivos</span>
-                </span>
-                <span className="text-black/45">
-                  ({files.length} elemento(s))
-                </span>
-              </div>
-            </div>
-
-            {/* Lista de archivos y subcarpetas */}
-            {files.length === 0 && !loading && (
-              <p className="text-[11px] text-black/50">
-                Esta carpeta no tiene contenido visible.
-              </p>
+      {/* CONTENIDO INTERNO */}
+      {open && (
+        <div className="px-3.5 pb-3 pt-2 border-t border-black/5">
+          {/* Breadcrumb interno */}
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/55 mb-2">
+            <span className="font-mono">CINTAX / {currentYear}</span>
+            {folder.categoria && (
+              <>
+                <ChevronRight size={10} />
+                <span>{folder.categoria}</span>
+              </>
             )}
-
-            {files.length > 0 && (
-              <div className="max-h-[420px] overflow-y-auto border border-black/5 rounded-lg bg-white shadow-inner scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                <table className="min-w-full text-left text-[12px]">
-                  <thead>
-                    <tr className="border-b border-black/5 bg-slate-50 text-[10px] uppercase tracking-wide text-black/50 sticky top-0">
-                      <th className="px-2 py-1.5">Nombre</th>
-                      <th className="px-2 py-1.5">Tipo</th>
-                      <th className="px-2 py-1.5 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {files.map((file, index) => {
-                      const folderLike = isFolder(file.mimeType);
-                      return (
-                        <tr
-                          key={`${file.id}-${index}`}
-                          className="border-b border-black/5 last:border-0 odd:bg-white even:bg-slate-50/40"
-                        >
-                          <td className="px-2 py-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                folderLike ? handleEnterFolder(file) : undefined
-                              }
-                              className={`flex w-full items-center gap-2 text-left ${
-                                folderLike
-                                  ? "hover:text-[var(--secondary-color)]"
-                                  : ""
-                              }`}
-                            >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
-                                {folderLike ? (
-                                  <FolderIcon size={13} />
-                                ) : (
-                                  <FileText size={13} />
-                                )}
-                              </span>
-                              <span className="truncate">{file.name}</span>
-                            </button>
-                          </td>
-                          <td className="px-2 py-1.5 text-[11px] text-black/50">
-                            {folderLike ? "Carpeta" : "Archivo"}
-                          </td>
-                          <td className="px-2 py-1.5 text-[11px] text-right space-x-2">
-                            {!folderLike && file.webViewLink && (
-                              <a
-                                href={file.webViewLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-2.5 py-0.5 text-[10px] font-medium text-white hover:bg-black"
-                              >
-                                <ExternalLink size={10} />
-                                Abrir
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {stack.map((node, idx) => (
+              <React.Fragment key={`${node.id}-${idx}`}>
+                <ChevronRight size={10} />
+                <span
+                  className={
+                    idx === stack.length - 1
+                      ? "font-medium text-black/80"
+                      : "text-black/55"
+                  }
+                >
+                  {node.name}
+                </span>
+              </React.Fragment>
+            ))}
           </div>
-        )}
-      </div>
+
+          {/* Barra superior pequeñas stats */}
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={stack.length <= 1 || loading}
+              className="inline-flex items-center gap-1 rounded-full border border-black/10 px-2.5 py-0.5 text-[11px] text-black/60 disabled:opacity-40"
+            >
+              <ChevronLeft size={10} />
+              Atrás
+            </button>
+
+            <span className="text-[11px] text-black/45">
+              {files.length} elemento(s)
+            </span>
+          </div>
+
+          {/* Lista archivos / subcarpetas */}
+          {files.length === 0 && !loading && (
+            <p className="text-[11px] text-black/50">
+              Esta carpeta no tiene contenido visible.
+            </p>
+          )}
+
+          {files.length > 0 && (
+            <div className="max-h-52 overflow-y-auto border border-black/5 rounded-xl bg-slate-50/40">
+              <table className="min-w-full text-left text-[12px]">
+                <thead>
+                  <tr className="border-b border-black/5 bg-white/70 text-[10px] uppercase tracking-wide text-black/50">
+                    <th className="px-2 py-1.5">Nombre</th>
+                    <th className="px-2 py-1.5">Tipo</th>
+                    <th className="px-2 py-1.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {files.map((file, index) => {
+                    const folderLike = file.mimeType === FOLDER_MIME;
+                    return (
+                      <tr
+                        key={`${file.id}-${index}`}
+                        className="border-b border-black/5 last:border-0 bg-white/80 hover:bg-white"
+                      >
+                        <td className="px-2 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              folderLike ? handleEnterFolder(file) : undefined
+                            }
+                            className={`flex w-full items-center gap-2 text-left ${
+                              folderLike
+                                ? "hover:text-[var(--secondary-color)]"
+                                : ""
+                            }`}
+                          >
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+                              {folderLike ? (
+                                <FolderIcon size={13} />
+                              ) : (
+                                <FileText size={13} />
+                              )}
+                            </span>
+                            <span className="truncate">{file.name}</span>
+                          </button>
+                        </td>
+                        <td className="px-2 py-1.5 text-[11px] text-black/50">
+                          {folderLike ? "Carpeta" : "Archivo"}
+                        </td>
+                        <td className="px-2 py-1.5 text-[11px] text-right space-x-2">
+                          {!folderLike && file.webViewLink && (
+                            <a
+                              href={file.webViewLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-2.5 py-0.5 text-[10px] font-medium text-white hover:bg-black"
+                            >
+                              <ExternalLink size={10} />
+                              Abrir
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-// ==============================
-//      PÁGINA PRINCIPAL
-// ==============================
+/* ==========================
+   PÁGINA PRINCIPAL
+========================== */
+
 export default function TareasPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
   const [periodo] = useState(getCurrentPeriod());
@@ -748,7 +709,7 @@ export default function TareasPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Carpetas de ejecutivo para columna "Asignadas"
+  // Carpetas (RUT) visibles para la columna Asignadas
   const [ejecutivoFolders, setEjecutivoFolders] = useState<EjecutivoFolder[]>(
     []
   );
@@ -783,7 +744,7 @@ export default function TareasPage() {
     cargarTareas();
   }, [currentUser.role]);
 
-  // Cargar carpetas de ejecutivo (A01, A02...)
+  // Cargar carpetas de ejecutivo / RUT
   useEffect(() => {
     const cargarCarpetas = async () => {
       try {
@@ -824,7 +785,7 @@ export default function TareasPage() {
     );
   }, [analistas]);
 
-  // --- PREPARACIÓN DE DATOS ---
+  // Tareas para columnas
   const kanbanTasks = useMemo(() => {
     const tasks: any[] = [];
     let data = analistas;
@@ -856,7 +817,7 @@ export default function TareasPage() {
     return tasks;
   }, [analistas, currentUser, searchTerm]);
 
-  // --- KPIs DINÁMICOS ---
+  // KPIs
   const stats = useMemo(() => {
     const total = kanbanTasks.length;
     const completed = kanbanTasks.filter(
@@ -882,7 +843,23 @@ export default function TareasPage() {
     return "asignada";
   };
 
-  // --- HANDLERS DND ---
+  // Agrupar carpetas por categoría para la columna Asignadas
+  const groupedFolders = useMemo(() => {
+    const groups: Record<string, EjecutivoFolder[]> = {};
+    for (const f of ejecutivoFolders) {
+      const key = f.categoria || "Sin categoría";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(f);
+    }
+
+    // orden alfabético por categoría
+    return Object.entries(groups).sort(([a], [b]) =>
+      a.localeCompare(b, "es")
+    );
+  }, [ejecutivoFolders]);
+
+  /* ---------- DnD Handlers ---------- */
+
   const handleDragStart = (event: DragStartEvent) => {
     if (currentUser.role === "admin") return;
     const { active } = event;
@@ -955,6 +932,8 @@ export default function TareasPage() {
   };
 
   const isGlobalLoading = isLoading;
+
+  /* ---------- RENDER ---------- */
 
   return (
     <DndContext
@@ -1111,27 +1090,30 @@ export default function TareasPage() {
                   (t) => getColumnId(t.estado) === col.id
                 );
 
-                // Columna ASIGNADAS → muestra carpetas de ejecutivo
+                // Columna ASIGNADAS → carpetas clientes agrupadas por categoría
                 if (col.id === "asignada") {
                   return (
                     <div
                       key={col.id}
                       className={`
-                        flex-1 flex flex-col rounded-2xl border min-w-[300px] max-w-[420px]
-                        ${col.border}
-                        bg-gradient-to-b from-slate-50 via-slate-50/60 to-slate-100
+                        flex-1 flex flex-col rounded-xl border min-w-[260px] max-w-[380px] transition-colors
+                        ${col.bg} ${col.border}
                       `}
                     >
-                      <div className="p-3 border-b border-gray-200/60 flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-gray-700 text-sm">
-                          <div className={`p-1.5 rounded-lg bg-white/80 ${col.color}`}>
-                            {col.icon}
+                      {/* header columna asignadas */}
+                      <div className="p-3 border-b border-gray-200/50 flex items-center justify-between">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2 font-bold text-gray-700 text-sm">
+                            <div
+                              className={`p-1.5 rounded-lg bg-white/60 ${col.color}`}
+                            >
+                              {col.icon}
+                            </div>
+                            {col.label}
                           </div>
-                          <div className="flex flex-col">
-                            <span>{col.label}</span>
-                            <span className="text-[11px] font-normal text-black/50">
-                              {currentYear} · Carpetas por ejecutivo
-                            </span>
+                          <div className="text-[11px] text-black/45 flex items-center gap-2">
+                            <span className="font-mono">{currentYear}</span>
+                            <span>· Carpetas por ejecutivo</span>
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
@@ -1144,9 +1126,9 @@ export default function TareasPage() {
                         </div>
                       </div>
 
-                      <div className="flex-1 p-3 pt-2 overflow-y-auto space-y-3 min-h-[260px]">
+                      <div className="flex-1 p-2 overflow-y-auto space-y-3 min-h-[200px]">
                         {loadingEjecutivos && (
-                          <div className="flex flex-col items-center justify-center text-black/40 text-xs py-6">
+                          <div className="flex flex-col items-center justify-center text-black/40 text-xs py-4">
                             <Loader2 className="h-4 w-4 animate-spin mb-1" />
                             Cargando carpetas de clientes...
                           </div>
@@ -1154,23 +1136,55 @@ export default function TareasPage() {
 
                         {!loadingEjecutivos &&
                           ejecutivoFolders.length === 0 && (
-                            <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300/60 rounded-2xl text-gray-400 bg-white/70">
-                              <FolderIcon size={22} className="mb-2 opacity-20" />
-                              <span className="text-xs text-center px-4">
-                                No se encontraron carpetas de clientes para tu usuario.
+                            <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300/50 rounded-xl text-gray-400 bg-white/30">
+                              <FolderIcon
+                                size={20}
+                                className="mb-2 opacity-20"
+                              />
+                              <span className="text-xs text-center px-3">
+                                No se encontraron carpetas de clientes para tu
+                                usuario.
                               </span>
                             </div>
                           )}
 
-                        {ejecutivoFolders.map((folder) => (
-                          <EjecutivoFolderCard key={folder.id} folder={folder} />
+                        {/* Agrupado por categoría */}
+                        {groupedFolders.map(([categoria, folders]) => (
+                          <div
+                            key={categoria}
+                            className="rounded-2xl bg-white/90 border border-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]"
+                          >
+                            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-black/5">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold uppercase tracking-wide text-black/70">
+                                  {categoria}
+                                </span>
+                                <span className="text-[10px] text-black/45">
+                                  {folders.length} carpeta
+                                  {folders.length !== 1 && "s"} de clientes
+                                </span>
+                              </div>
+                              <span className="rounded-full bg-[var(--tertiary-color)] px-2 py-0.5 text-[10px] font-semibold text-[var(--secondary-color)]">
+                                Sección
+                              </span>
+                            </div>
+
+                            <div className="px-2.5 py-2 space-y-2 max-h-72 overflow-y-auto">
+                              {folders.map((folder) => (
+                                <EjecutivoFolderCard
+                                  key={folder.id}
+                                  folder={folder}
+                                />
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
                   );
                 }
 
-                // Otras columnas → tareas normales (DND)
+                // Otras columnas → tareas normales
                 return (
                   <DroppableColumn
                     key={col.id}

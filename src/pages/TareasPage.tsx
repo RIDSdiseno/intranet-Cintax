@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   DndContext,
   useDraggable,
@@ -8,8 +8,8 @@ import {
   useSensors,
   MouseSensor,
   TouchSensor,
-  DragEndEvent,
-  DragStartEvent,
+  type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { createPortal } from "react-dom";
@@ -27,6 +27,12 @@ import {
   ListTodo,
   BarChart3,
   Columns3,
+  Folder as FolderIcon,
+  FileText,
+  ChevronRight,
+  ChevronLeft,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 
 // --- TIPOS DE DATOS ---
@@ -46,6 +52,7 @@ type TareaEstado =
   | "atrasado"
   | "en_proceso"
   | "no_realizada";
+
 type KanbanColumnId = "asignada" | "no_realizada" | "en_proceso" | "realizada";
 
 type Tarea = {
@@ -75,6 +82,32 @@ type Analista = {
   completadas: number;
 };
 
+// --- DRIVE / CARPETAS EJECUTIVO ---
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const currentYear = new Date().getFullYear().toString();
+
+// Base usada para DRIVE (igual que en DrivePage)
+const DRIVE_BASE_URL =
+  // @ts-ignore
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  "https://localhost:3000";
+
+type DriveFileItem = {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+  size?: string;
+  webViewLink?: string;
+};
+
+type EjecutivoFolder = {
+  id: string;
+  name: string;
+  categoria?: string;
+  pathString?: string;
+};
+
 // --- CONFIGURACIÓN DE COLUMNAS ---
 const KANBAN_COLUMNS: {
   id: KanbanColumnId;
@@ -86,7 +119,7 @@ const KANBAN_COLUMNS: {
 }[] = [
   {
     id: "asignada",
-    label: "Asignadas",
+    label: "Asignadas (Carpetas clientes)",
     color: "text-gray-600",
     icon: <Clock size={18} />,
     bg: "bg-gray-200/20",
@@ -129,6 +162,7 @@ const ADMIN_USER: UserProfile = {
 
 const INITIAL_DATA: Analista[] = [];
 
+// API BASE para endpoints de la intranet (auth, tareas, etc.)
 const API_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
@@ -153,7 +187,7 @@ function getAccessToken(): string | null {
   }
 }
 
-// ✅ FETCH API
+// ✅ FETCH API tareas/analistas
 async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
   const params = new URLSearchParams();
   if (role === "admin") {
@@ -183,6 +217,73 @@ async function fetchAnalistasConTareas(role: UserRole): Promise<Analista[]> {
   return data.analistas as Analista[];
 }
 
+// ✅ FETCH API carpetas de ejecutivo (A01, A02, etc.)
+async function fetchEjecutivoFoldersApi(): Promise<EjecutivoFolder[]> {
+  const token = getAccessToken();
+  if (!token) throw new Error("No hay token de sesión.");
+
+  const base = DRIVE_BASE_URL.replace(/\/$/, "");
+
+  // 1) Categorías visibles para el usuario (CONTA, RRHH, TRIBUTARIO...)
+  const resCategorias = await fetch(`${base}/drive/cintax/${currentYear}`, {
+    credentials: "include",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!resCategorias.ok) {
+    throw new Error(`Error HTTP categorías: ${resCategorias.status}`);
+  }
+
+  const data = await resCategorias.json();
+  const categorias = data.folders || [];
+
+  const ejecutivoFolders: EjecutivoFolder[] = [];
+
+  // 2) Para cada categoría, traemos sus subcarpetas (A01, A02, etc.)
+  for (const cat of categorias) {
+    if (!cat.id) continue;
+
+    const resFiles = await fetch(
+      `${base}/drive/folder/${cat.id}/files?pageSize=100`,
+      {
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!resFiles.ok) {
+      console.warn(
+        "No se pudieron listar subcarpetas de categoría",
+        cat.name,
+        resFiles.status
+      );
+      continue;
+    }
+
+    const filesData = await resFiles.json();
+    const files = filesData.files || [];
+
+    const subFolders = files.filter(
+      (f: any) => f.mimeType === FOLDER_MIME
+    );
+
+    for (const sf of subFolders) {
+      ejecutivoFolders.push({
+        id: sf.id,
+        name: sf.name,
+        categoria: cat.name ?? "",
+        pathString: `CINTAX / ${currentYear} / ${cat.name} / ${sf.name}`,
+      });
+    }
+  }
+
+  return ejecutivoFolders;
+}
+
 // --- COMPONENTES UI ---
 const ProgressBar = ({
   value,
@@ -201,7 +302,7 @@ const ProgressBar = ({
 
 // --- COMPONENTES DND ---
 
-// 1. TARJETA ARRASTRABLE (Draggable) - ESTILOS DINÁMICOS
+// 1. TARJETA ARRASTRABLE (Draggable)
 const DraggableTaskCard = ({
   task,
   isOverlay = false,
@@ -224,12 +325,10 @@ const DraggableTaskCard = ({
     touchAction: "none",
   };
 
-  // Lógica de Estado y Fechas
   const dateObj = new Date(task.vencimiento);
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalizar hoy a media noche para comparación justa
+  today.setHours(0, 0, 0, 0);
 
-  // Si la fecha de la tarea es menor a hoy (ayer o antes)
   const isDatePast = dateObj < today;
 
   const isCompleted =
@@ -240,7 +339,6 @@ const DraggableTaskCard = ({
     task.estado === "atrasado" ||
     task.estado === "no_realizada";
 
-  // Clases dinámicas según estado
   let cardClasses = "bg-white border-gray-200 hover:border-gray-300";
   let titleClasses = "text-gray-800";
   let dateClasses = "text-gray-500";
@@ -326,7 +424,7 @@ const DraggableTaskCard = ({
   );
 };
 
-// 2. COLUMNA (Droppable)
+// 2. COLUMNA (Droppable) para columnas de tareas normales
 const DroppableColumn = ({
   col,
   tasks,
@@ -344,16 +442,15 @@ const DroppableColumn = ({
     <div
       ref={setNodeRef}
       className={`
-            flex-1 flex flex-col rounded-xl border min-w-[220px] max-w-[350px] transition-colors
-            ${col.bg} ${col.border}
-            ${
-              isOver && !disabled
-                ? "ring-2 ring-[var(--secondary-color)] ring-opacity-50 bg-white shadow-lg"
-                : ""
-            }
-        `}
+        flex-1 flex flex-col rounded-xl border min-w-[220px] max-w-[350px] transition-colors
+        ${col.bg} ${col.border}
+        ${
+          isOver && !disabled
+            ? "ring-2 ring-[var(--secondary-color)] ring-opacity-50 bg-white shadow-lg"
+            : ""
+        }
+      `}
     >
-      {/* Header Columna */}
       <div className="p-3 border-b border-gray-200/50 flex items-center justify-between">
         <div className="flex items-center gap-2 font-bold text-gray-700 text-sm">
           <div className={`p-1.5 rounded-lg bg-white/60 ${col.color}`}>
@@ -366,7 +463,6 @@ const DroppableColumn = ({
         </span>
       </div>
 
-      {/* Contenedor de Tarjetas */}
       <div className="flex-1 p-2 overflow-y-auto space-y-2.5 min-h-[200px]">
         {tasks.map((task) => (
           <DraggableTaskCard
@@ -387,13 +483,276 @@ const DroppableColumn = ({
   );
 };
 
+// 3. TARJETA DE CARPETA EJECUTIVO (A01, A02...) con navegador embebido
+const EjecutivoFolderCard: React.FC<{ folder: EjecutivoFolder }> = ({
+  folder,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [files, setFiles] = useState<DriveFileItem[]>([]);
+  const [stack, setStack] = useState<{ id: string; name: string }[]>([
+    { id: folder.id, name: folder.name },
+  ]);
+
+  const currentNode = stack[stack.length - 1];
+
+  const isFolder = (mime: string) => mime === FOLDER_MIME;
+
+  const loadFolder = async (nodeId: string) => {
+    try {
+      setLoading(true);
+      const token = getAccessToken();
+      if (!token) throw new Error("No hay token de sesión.");
+
+      const base = DRIVE_BASE_URL.replace(/\/$/, "");
+      const res = await fetch(
+        `${base}/drive/folder/${encodeURIComponent(nodeId)}/files?pageSize=50`,
+        {
+          credentials: "include",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Error HTTP archivos: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const newFiles: DriveFileItem[] = data.files || [];
+      setFiles(newFiles);
+    } catch (err) {
+      console.error("Error cargando carpeta de ejecutivo:", err);
+      setFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && files.length === 0) {
+      loadFolder(currentNode.id);
+    }
+  };
+
+  const handleEnterFolder = (file: DriveFileItem) => {
+    if (!isFolder(file.mimeType)) return;
+    setStack((prev) => [...prev, { id: file.id, name: file.name }]);
+    loadFolder(file.id);
+  };
+
+  const handleBack = () => {
+    if (stack.length <= 1) return;
+    setStack((prev) => {
+      const newStack = prev.slice(0, prev.length - 1);
+      const top = newStack[newStack.length - 1];
+      loadFolder(top.id);
+      return newStack;
+    });
+  };
+
+  const totalFolders = files.filter((f) => isFolder(f.mimeType)).length;
+  const totalFiles = files.length - totalFolders;
+
+  return (
+    <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 rounded-2xl p-[1px] shadow-sm hover:shadow-md transition-shadow">
+      <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
+        {/* CABECERA: carpeta A01 / A02 */}
+        <button
+          type="button"
+          onClick={toggleOpen}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-50"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--tertiary-color)] text-[var(--secondary-color)] shadow-inner">
+              <FolderIcon size={18} />
+            </span>
+            <span className="flex flex-col min-w-0">
+              <span className="font-semibold text-sm tracking-tight truncate">
+                {folder.name}
+              </span>
+              <span className="flex items-center gap-2 text-[11px] text-black/55">
+                {folder.categoria && (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-[2px] text-[10px] font-medium text-slate-700">
+                    {folder.categoria}
+                  </span>
+                )}
+                {folder.pathString && (
+                  <span className="truncate font-mono text-[10px] text-black/45">
+                    {folder.pathString}
+                  </span>
+                )}
+              </span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {loading && (
+              <Loader2 className="h-4 w-4 animate-spin text-black/40" />
+            )}
+            <span className="text-[11px] text-black/60 font-medium">
+              {open ? "Ocultar" : "Explorar"}
+            </span>
+            <ChevronRight
+              size={14}
+              className={`text-black/40 transition-transform ${
+                open ? "rotate-90" : ""
+              }`}
+            />
+          </div>
+        </button>
+
+        {/* CONTENIDO DESPLEGABLE */}
+        {open && (
+          <div className="px-3 pb-3 pt-2 border-t border-black/5 bg-slate-50/40">
+            {/* Breadcrumb interno */}
+            <div className="flex flex-wrap items-center gap-1 text-[11px] text-black/55 mb-2">
+              <span className="font-mono">CINTAX / {currentYear}</span>
+              {folder.categoria && (
+                <>
+                  <ChevronRight size={10} />
+                  <span>{folder.categoria}</span>
+                </>
+              )}
+              {stack.map((node, idx) => (
+                <React.Fragment key={`${node.id}-${idx}`}>
+                  <ChevronRight size={10} />
+                  <span
+                    className={
+                      idx === stack.length - 1
+                        ? "font-semibold text-black/80"
+                        : "text-black/55"
+                    }
+                  >
+                    {node.name}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Barra de acciones / stats */}
+            <div className="flex items-center justify-between mb-2">
+              <button
+                type="button"
+                onClick={handleBack}
+                disabled={stack.length <= 1 || loading}
+                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-0.5 text-[11px] text-black/60 hover:bg-slate-50 disabled:opacity-40"
+              >
+                <ChevronLeft size={10} />
+                Atrás
+              </button>
+
+              <div className="flex items-center gap-2 text-[10px] text-black/55">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[1px]">
+                  <FolderIcon size={11} className="text-slate-500" />
+                  <span>{totalFolders} carpetas</span>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[1px]">
+                  <FileText size={11} className="text-slate-500" />
+                  <span>{totalFiles} archivos</span>
+                </span>
+                <span className="text-black/45">
+                  ({files.length} elemento(s))
+                </span>
+              </div>
+            </div>
+
+            {/* Lista de archivos y subcarpetas */}
+            {files.length === 0 && !loading && (
+              <p className="text-[11px] text-black/50">
+                Esta carpeta no tiene contenido visible.
+              </p>
+            )}
+
+            {files.length > 0 && (
+              <div className="max-h-[420px] overflow-y-auto border border-black/5 rounded-lg bg-white shadow-inner scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+                <table className="min-w-full text-left text-[12px]">
+                  <thead>
+                    <tr className="border-b border-black/5 bg-slate-50 text-[10px] uppercase tracking-wide text-black/50 sticky top-0">
+                      <th className="px-2 py-1.5">Nombre</th>
+                      <th className="px-2 py-1.5">Tipo</th>
+                      <th className="px-2 py-1.5 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {files.map((file, index) => {
+                      const folderLike = isFolder(file.mimeType);
+                      return (
+                        <tr
+                          key={`${file.id}-${index}`}
+                          className="border-b border-black/5 last:border-0 odd:bg-white even:bg-slate-50/40"
+                        >
+                          <td className="px-2 py-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                folderLike ? handleEnterFolder(file) : undefined
+                              }
+                              className={`flex w-full items-center gap-2 text-left ${
+                                folderLike
+                                  ? "hover:text-[var(--secondary-color)]"
+                                  : ""
+                              }`}
+                            >
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+                                {folderLike ? (
+                                  <FolderIcon size={13} />
+                                ) : (
+                                  <FileText size={13} />
+                                )}
+                              </span>
+                              <span className="truncate">{file.name}</span>
+                            </button>
+                          </td>
+                          <td className="px-2 py-1.5 text-[11px] text-black/50">
+                            {folderLike ? "Carpeta" : "Archivo"}
+                          </td>
+                          <td className="px-2 py-1.5 text-[11px] text-right space-x-2">
+                            {!folderLike && file.webViewLink && (
+                              <a
+                                href={file.webViewLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-2.5 py-0.5 text-[10px] font-medium text-white hover:bg-black"
+                              >
+                                <ExternalLink size={10} />
+                                Abrir
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==============================
+//      PÁGINA PRINCIPAL
+// ==============================
 export default function TareasPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(ADMIN_USER);
-  const [periodo, setPeriodo] = useState(getCurrentPeriod());
+  const [periodo] = useState(getCurrentPeriod());
   const [analistas, setAnalistas] = useState<Analista[]>(INITIAL_DATA);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Carpetas de ejecutivo para columna "Asignadas"
+  const [ejecutivoFolders, setEjecutivoFolders] = useState<EjecutivoFolder[]>(
+    []
+  );
+  const [loadingEjecutivos, setLoadingEjecutivos] = useState(false);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -404,6 +763,7 @@ export default function TareasPage() {
 
   const [activeTask, setActiveTask] = useState<any>(null);
 
+  // Cargar tareas
   useEffect(() => {
     const cargarTareas = async () => {
       try {
@@ -414,7 +774,7 @@ export default function TareasPage() {
       } catch (err: any) {
         console.error(err);
         setErrorMsg(
-          "No se pudo conectar al servidor. Mostrando datos locales si existen."
+          "No se pudo conectar al servidor de tareas. Mostrando datos locales si existen."
         );
       } finally {
         setIsLoading(false);
@@ -422,6 +782,22 @@ export default function TareasPage() {
     };
     cargarTareas();
   }, [currentUser.role]);
+
+  // Cargar carpetas de ejecutivo (A01, A02...)
+  useEffect(() => {
+    const cargarCarpetas = async () => {
+      try {
+        setLoadingEjecutivos(true);
+        const data = await fetchEjecutivoFoldersApi();
+        setEjecutivoFolders(data);
+      } catch (err) {
+        console.error("Error cargando carpetas de ejecutivo:", err);
+      } finally {
+        setLoadingEjecutivos(false);
+      }
+    };
+    cargarCarpetas();
+  }, []);
 
   const availableUsers = useMemo(() => {
     const users: UserProfile[] = [ADMIN_USER];
@@ -578,6 +954,8 @@ export default function TareasPage() {
     );
   };
 
+  const isGlobalLoading = isLoading;
+
   return (
     <DndContext
       sensors={sensors}
@@ -598,8 +976,8 @@ export default function TareasPage() {
             </h1>
             <p className="text-black/60 text-sm mt-1">
               {currentUser.role === "admin"
-                ? "Vista global de supervisión."
-                : "Arrastra las tarjetas para actualizar el estado."}
+                ? "Vista global de supervisión (tareas + carpetas de clientes)."
+                : "Arrastra las tarjetas de tareas para actualizar su estado."}
             </p>
           </div>
 
@@ -635,9 +1013,8 @@ export default function TareasPage() {
           </div>
         </div>
 
-        {/* --- SECCIÓN DE KPIs DE PROGRESO --- */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
-          {/* KPI 1: Progreso General */}
           <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start mb-2">
               <div>
@@ -667,7 +1044,6 @@ export default function TareasPage() {
             </div>
           </div>
 
-          {/* KPI 4: Atención */}
           <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -685,7 +1061,6 @@ export default function TareasPage() {
             </div>
           </div>
 
-          {/* KPI 2: En Ejecución */}
           <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -701,7 +1076,6 @@ export default function TareasPage() {
             </div>
           </div>
 
-          {/* KPI 3: Por Iniciar */}
           <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -724,19 +1098,79 @@ export default function TareasPage() {
           </div>
         )}
 
-        {isLoading ? (
+        {isGlobalLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center text-black/40">
             <div className="w-8 h-8 border-2 border-[var(--secondary-color)] border-t-transparent rounded-full animate-spin mb-2" />
             <p className="text-sm">Cargando tablero...</p>
           </div>
         ) : (
-          /* TABLERO KANBAN */
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-2">
             <div className="flex gap-6 h-full min-w-[1000px]">
               {KANBAN_COLUMNS.map((col) => {
                 const tasksInCol = kanbanTasks.filter(
                   (t) => getColumnId(t.estado) === col.id
                 );
+
+                // Columna ASIGNADAS → muestra carpetas de ejecutivo
+                if (col.id === "asignada") {
+                  return (
+                    <div
+                      key={col.id}
+                      className={`
+                        flex-1 flex flex-col rounded-2xl border min-w-[300px] max-w-[420px]
+                        ${col.border}
+                        bg-gradient-to-b from-slate-50 via-slate-50/60 to-slate-100
+                      `}
+                    >
+                      <div className="p-3 border-b border-gray-200/60 flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-bold text-gray-700 text-sm">
+                          <div className={`p-1.5 rounded-lg bg-white/80 ${col.color}`}>
+                            {col.icon}
+                          </div>
+                          <div className="flex flex-col">
+                            <span>{col.label}</span>
+                            <span className="text-[11px] font-normal text-black/50">
+                              {currentYear} · Carpetas por ejecutivo
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="bg-white px-2 py-0.5 rounded-md text-xs font-bold text-gray-500 shadow-sm border border-gray-100">
+                            {ejecutivoFolders.length}
+                          </span>
+                          <span className="text-[10px] text-black/40">
+                            Explorador integrado
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 p-3 pt-2 overflow-y-auto space-y-3 min-h-[260px]">
+                        {loadingEjecutivos && (
+                          <div className="flex flex-col items-center justify-center text-black/40 text-xs py-6">
+                            <Loader2 className="h-4 w-4 animate-spin mb-1" />
+                            Cargando carpetas de clientes...
+                          </div>
+                        )}
+
+                        {!loadingEjecutivos &&
+                          ejecutivoFolders.length === 0 && (
+                            <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300/60 rounded-2xl text-gray-400 bg-white/70">
+                              <FolderIcon size={22} className="mb-2 opacity-20" />
+                              <span className="text-xs text-center px-4">
+                                No se encontraron carpetas de clientes para tu usuario.
+                              </span>
+                            </div>
+                          )}
+
+                        {ejecutivoFolders.map((folder) => (
+                          <EjecutivoFolderCard key={folder.id} folder={folder} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Otras columnas → tareas normales (DND)
                 return (
                   <DroppableColumn
                     key={col.id}

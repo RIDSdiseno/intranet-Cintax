@@ -10,10 +10,8 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "allowJs": false,
-
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "bundler",
@@ -21,8 +19,9 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-
-    "types": ["vite/client"]
+    "types": [
+      "vite/client"
+    ]
   },
   "include": [
     "src",

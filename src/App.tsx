@@ -32,6 +32,7 @@ import TicketsPage from "./pages/ticketsPage";
 import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
+import TareasSupervisionPage from "./pages/TareasSupervisionPage";
 
 const API_BASE_URL =
   // @ts-ignore
@@ -67,7 +68,9 @@ const KpiCard: React.FC<{
     <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#af9150]/10 blur-2xl transition-all group-hover:bg-[#af9150]/20" />
     <div className="relative flex items-start justify-between">
       <div>
-        <p className="text-sm font-medium teack/50 tracking-wide">{title}</p>
+        <p className="text-sm font-medium text-black/50 tracking-wide">
+          {title}
+        </p>
         <h3
           className="mt-3 text-3xl font-bold"
           style={{ color: "var(--primary-color)" }}
@@ -707,6 +710,55 @@ function isAuthed() {
   return !!token;
 }
 
+/** Tipo aproximado del payload que manda tu backend */
+type JwtFrontendPayload = {
+  id: number;
+  email: string;
+  nombre?: string;
+  nombreUsuario?: string;
+  isSupervisorOrAdmin?: boolean;
+};
+
+/**
+ * Lee el payload del JWT guardado en el storage.
+ */
+function getAuthPayload(): JwtFrontendPayload | null {
+  const token =
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("auth_token") ||
+    sessionStorage.getItem("auth_token");
+
+  if (!token) return null;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => `%${("00" + c.charCodeAt(0).toString(16)).slice(-2)}`)
+        .join("")
+    );
+    return JSON.parse(jsonPayload) as JwtFrontendPayload;
+  } catch (e) {
+    console.error("[Auth] Error decodificando JWT:", e);
+    return null;
+  }
+}
+
+/**
+ * Ahora usamos el flag que viene directo del backend: payload.isSupervisorOrAdmin
+ */
+function isSupervisorOrAdmin(): boolean {
+  const payload = getAuthPayload();
+  if (!payload) return false;
+
+  return Boolean(payload.isSupervisorOrAdmin);
+}
+
 function PrivateRoute({ element }: { element: JSX.Element }) {
   return isAuthed() ? element : <Navigate to="/login" replace />;
 }
@@ -718,6 +770,9 @@ export default function CintaxIntranetMockup() {
     pathname.startsWith("/login") ||
     pathname.startsWith("/recuperar-contrasena");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  const authPayload = getAuthPayload();
+  const canSeeSupervisor = isSupervisorOrAdmin();
 
   const handleLogout = async () => {
     try {
@@ -834,6 +889,7 @@ export default function CintaxIntranetMockup() {
 
         {!hideChrome && (
           <>
+            {/* SIDEBAR MOBILE */}
             <aside
               className={`sidebar-mobile ${
                 sidebarOpen ? "open" : ""
@@ -914,6 +970,8 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
+
+                {/* LINK TAREAS (AGENTES) */}
                 <NavLink
                   to="/tareas"
                   className={({ isActive }) =>
@@ -930,6 +988,29 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Tareas</span>
                 </NavLink>
+
+                {/* LINK SUPERVISOR SOLO SI PUEDE VERLO */}
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/supervisor"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">
+                      Supervisión tareas
+                    </span>
+                  </NavLink>
+                )}
+
                 <TicketsNav onNavigate={() => setSidebarOpen(false)} />
                 <SideLink
                   icon={<LifeBuoy size={18} />}
@@ -954,6 +1035,7 @@ export default function CintaxIntranetMockup() {
               </div>
             </aside>
 
+            {/* SIDEBAR DESKTOP */}
             <aside className="hidden lg:flex bg-[var(--primary-color)] text-white px-4 py-5 flex-col gap-4 min-h-screen">
               <div className="flex items-center gap-2 px-3">
                 <img
@@ -1009,6 +1091,8 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
+
+                {/* LINK TAREAS (AGENTES) */}
                 <NavLink
                   to="/tareas"
                   className={({ isActive }) =>
@@ -1024,6 +1108,28 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Tareas</span>
                 </NavLink>
+
+                {/* LINK SUPERVISOR SOLO SI PUEDE VERLO */}
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/supervisor"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">
+                      Supervisión tareas
+                    </span>
+                  </NavLink>
+                )}
+
                 <TicketsNav />
                 <SideLink
                   icon={<HandHelping size={18} />}
@@ -1087,6 +1193,23 @@ export default function CintaxIntranetMockup() {
               path="/tickets/:cat"
               element={<PrivateRoute element={<TicketsPage />} />}
             />
+
+            {/* RUTA SUPERVISOR PROTEGIDA */}
+            <Route
+              path="/supervisor"
+              element={
+                <PrivateRoute
+                  element={
+                    isSupervisorOrAdmin() ? (
+                      <TareasSupervisionPage />
+                    ) : (
+                      <NotFoundPage />
+                    )
+                  }
+                />
+              }
+            />
+
             <Route
               path="/configurar"
               element={<PrivateRoute element={<ConfigurarPage />} />}

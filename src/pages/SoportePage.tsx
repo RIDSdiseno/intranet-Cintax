@@ -95,7 +95,18 @@ export default function SoportePage() {
               type="text"
               readOnly
               value={RIDS_CONTACT.phone}
-              className="flex-1 px-3 py-2 text-sm border border-black/10 rounded-l-lg bg-black/[0.03] text-[var(--primary-color)] font-medium outline-none cursor-default"
+              className="
+      flex-1 min-w-0
+      px-3 py-2 text-sm
+      border border-black/10
+      rounded-l-lg
+      bg-black/[0.03]
+      text-[var(--primary-color)]
+      font-medium
+      outline-none
+      cursor-default
+      truncate
+    "
             />
             <button
               onClick={handleCopyPhone}
@@ -109,6 +120,7 @@ export default function SoportePage() {
               {copied ? <Check size={16} /> : <Copy size={16} />}
             </button>
           </div>
+
           <p className="mt-2 text-xs text-black/50">
             {copied
               ? "¡Copiado al portapapeles!"

@@ -434,12 +434,30 @@ function HomePage() {
       </div>
 
       {activeModal && modals[activeModal] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="
+            fixed inset-0 z-50
+            flex items-center justify-center
+            md:items-start md:justify-start
+            px-4 md:px-8 pt-6 md:pt-12
+          "
+        >
+          {/* overlay */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setActiveModal(null)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
+
+          {/* card */}
+          <div
+            className="
+              relative w-full max-w-md
+              bg-white rounded-2xl p-6 shadow-lg
+              max-h-[90vh] overflow-y-auto
+              z-10
+              md:ml-[260px]
+            "
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3
@@ -851,13 +869,7 @@ export default function CintaxIntranetMockup() {
         }
       `}</style>
 
-      <div
-        className={
-          hideChrome
-            ? "min-h-screen"
-            : "grid lg:grid-cols-[260px_1fr] min-h-screen"
-        }
-      >
+      <div className={hideChrome ? "min-h-screen" : "min-h-screen lg:pl-[260px]"}>
         {!hideChrome && sidebarOpen && (
           <div
             className="sidebar-overlay open"
@@ -1035,8 +1047,19 @@ export default function CintaxIntranetMockup() {
               </div>
             </aside>
 
-            {/* SIDEBAR DESKTOP */}
-            <aside className="hidden lg:flex bg-[var(--primary-color)] text-white px-4 py-5 flex-col gap-4 min-h-screen">
+            {/* SIDEBAR DESKTOP FIJO */}
+            <aside
+              className="
+                hidden lg:flex
+                fixed inset-y-0 left-0
+                w-[260px]
+                bg-[var(--primary-color)] text-white
+                px-4 py-5
+                flex-col gap-4
+                z-40
+                overflow-y-auto
+              "
+            >
               <div className="flex items-center gap-2 px-3">
                 <img
                   src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"

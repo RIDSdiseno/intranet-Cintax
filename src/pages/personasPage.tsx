@@ -245,7 +245,7 @@ export default function PersonasPage() {
       </div>
 
       {/* Tabla */}
-      <div className="mt-4 bg-white rounded-2xl border border-black/5 shadow-lg overflow-x-auto">
+      <div className="mt-4 bg-white rounded-2xl border border-black/5 shadow-lg overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-black/50 text-xs uppercase tracking-wider border-b border-black/5">
@@ -491,6 +491,141 @@ export default function PersonasPage() {
               })}
           </tbody>
         </table>
+      </div>
+
+      {/* Vista mobile en formato tarjetas/accordion */}
+      <div className="mt-4 md:hidden flex flex-col gap-3">
+        {loading === "loading" && (
+          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4 text-center text-black/50">
+            Cargando usuarios...
+          </div>
+        )}
+
+        {loading === "error" && (
+          <div className="bg-white rounded-2xl border border-rose-100 text-rose-600 shadow-sm p-4 text-center">
+            Error cargando usuarios. Revisa la consola o el endpoint.
+          </div>
+        )}
+
+        {loading === "idle" && filtered.length === 0 && (
+          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4 text-center text-black/50">
+            No hay resultados con los filtros actuales.
+          </div>
+        )}
+
+        {loading === "idle" &&
+          filtered.map((p, i) => {
+            const isExpanded = expandedId === p.id;
+            return (
+              <div
+                key={p.id}
+                className="bg-white rounded-2xl border border-black/5 shadow-sm p-4 flex flex-col gap-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-black/50 font-mono">
+                      <span>#{String(i + 1).padStart(3, "0")}</span>
+                      <span>ID: {p.id}</span>
+                    </div>
+                    <p
+                      className="text-base font-semibold truncate"
+                      style={{ color: "var(--primary-color)" }}
+                    >
+                      {p.nombre}
+                    </p>
+                    <a
+                      href={`mailto:${p.email}`}
+                      className="text-sm text-[var(--secondary-color)] hover:underline truncate block"
+                    >
+                      {p.email}
+                    </a>
+                    <p className="text-xs text-black/60 mt-1">
+                      Rol: <span className="font-medium">{p.rol}</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        p.estado === "Activo"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {p.estado}
+                    </span>
+                    <button
+                      onClick={() => toggleExpand(p.id)}
+                      className="p-2 rounded-full border border-black/10 hover:border-black/30 transition"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={18} />
+                      ) : (
+                        <ChevronRight size={18} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="pt-2 border-t border-black/5 space-y-3 text-sm text-black/70">
+                    <div className="flex items-start gap-2">
+                      <Phone size={16} className="text-black/40 mt-0.5" />
+                      <div>
+                        <p className="text-black/50 text-xs">Correo principal</p>
+                        <p className="font-medium">{p.email}</p>
+                      </div>
+                    </div>
+                    {p.area && (
+                      <p className="text-xs text-black/60">
+                        Area: <span className="font-medium">{p.area}</span>
+                      </p>
+                    )}
+                    {p.areaInterna && (
+                      <p className="text-xs text-black/60">
+                        Area interna:{" "}
+                        <span className="font-medium">{p.areaInterna}</span>
+                      </p>
+                    )}
+                    {p.categoria && (
+                      <p className="text-xs text-black/60">
+                        Categoria:{" "}
+                        <span className="font-medium">{p.categoria}</span>
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() =>
+                          setConfirmModal({
+                            action: "enable",
+                            personaId: p.id,
+                            personaNombre: p.nombre,
+                          })
+                        }
+                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white rounded-lg shadow-sm hover:opacity-90 transition"
+                        style={{ background: "var(--secondary-color)" }}
+                      >
+                        <Check size={16} />
+                        Habilitar Cuenta
+                      </button>
+                      <button
+                        onClick={() =>
+                          setConfirmModal({
+                            action: "disable",
+                            personaId: p.id,
+                            personaNombre: p.nombre,
+                          })
+                        }
+                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-rose-700 bg-white rounded-lg border border-rose-300 hover:bg-rose-50 transition"
+                      >
+                        <X size={16} />
+                        Deshabilitar Acceso
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
       </div>
 
       {/* Modal de confirmación */}

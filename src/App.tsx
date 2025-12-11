@@ -36,6 +36,7 @@ import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
 import TareasSupervisionPage from "./pages/TareasSupervisionPage";
 import HomePage from "./pages/HomePage";
+import ReleaseNotesPage from "./pages/ReleaseNotesPage";
 
 import NotificationsBell from "./components/NotificationsBell";
 

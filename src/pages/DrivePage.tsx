@@ -954,7 +954,6 @@ setHasMore(!!newNextToken);
           )}
         </section>
       </div>
-
       {isLoading && (
         <p className="text-[11px] text-black/40">
           Actualizando contenido desde Google Drive…

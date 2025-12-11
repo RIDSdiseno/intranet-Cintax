@@ -31,7 +31,7 @@ type Categoria =
   | "Contabilidad"
   | "Comercial y Marketing"
   | "Gerencia"
-  | "Recursos Humanos" // Usamos el nombre largo para la UI
+  | "Recursos Humanos"
   | "Entre otros";
 
 type Estado =
@@ -52,7 +52,6 @@ type Ticket = {
   estado: Estado;
   prioridad: Prioridad;
   fecha: string;
-  // Campos simulados para el detalle expandido
   descripcion?: string;
   agente?: string;
   ultimaActualizacion?: string;
@@ -85,7 +84,6 @@ function mapCategoria(raw: string | null | undefined): Categoria {
   if (nombre === "Comercial y Marketing") return "Comercial y Marketing";
   if (nombre === "Gerencia") return "Gerencia";
 
-  // AQUÍ LA CLAVE: Si llega "RRHH", lo mostramos como "Recursos Humanos"
   if (nombre === "RRHH" || nombre === "Recursos Humanos") {
     return "Recursos Humanos";
   }
@@ -142,7 +140,7 @@ const CATS: Array<"Todos" | Categoria> = [
   "Contabilidad",
   "Comercial y Marketing",
   "Gerencia",
-  "Recursos Humanos", // Nombre largo
+  "Recursos Humanos",
   "Entre otros",
 ];
 
@@ -165,20 +163,18 @@ const PRIORIDADES: Array<"Todas" | Prioridad> = [
 ];
 
 export default function TicketsPage() {
-  // Estado para el Modal Nuevo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [expandedTicketId, setExpandedTicketId] = useState<number | null>(null);
 
   const params = useParams();
   const navigate = useNavigate();
 
-  // Sincroniza la URL con la pestaña activa
   const catFromUrl: "Todos" | Categoria = useMemo(() => {
     const p = params.cat;
     if (p === "contabilidad") return "Contabilidad";
     if (p === "comercial") return "Comercial y Marketing";
     if (p === "gerencia") return "Gerencia";
-    if (p === "rrhh") return "Recursos Humanos"; // Slug corto -> Nombre largo
+    if (p === "rrhh") return "Recursos Humanos";
     if (p === "otros") return "Entre otros";
     return "Todos";
   }, [params.cat]);
@@ -196,10 +192,10 @@ export default function TicketsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  // Efectos
   useEffect(() => {
     setPage(1);
   }, [categoria, estado, prioridad, query]);
+
   useEffect(() => {
     setCategoria(catFromUrl);
   }, [catFromUrl]);
@@ -220,10 +216,8 @@ export default function TicketsPage() {
       setLoading(true);
       setError(null);
 
-      // Intentamos obtener token, pero no bloqueamos si no existe para poder mostrar demo
       const token = getAccessToken();
 
-      // Intentamos llamar a la API real
       try {
         const res = await axios.get(`${API_BASE_URL}/auth/getTickets`, {
           withCredentials: true,
@@ -249,7 +243,6 @@ export default function TicketsPage() {
           "API no disponible, cargando datos de demostración...",
           apiError
         );
-        // FALLBACK: Datos simulados para que veas la interfaz funcionando
         setTickets([
           {
             id: 101,
@@ -330,15 +323,12 @@ export default function TicketsPage() {
     }
   };
 
-  // Carga inicial y polling
   useEffect(() => {
     fetchTickets();
     const id = setInterval(() => fetchTickets(), 5 * 60 * 1000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Manejo de cambio de pestaña y URL
   const setCategoriaAndUrl = (c: "Todos" | Categoria) => {
     setCategoria(c);
     if (c === "Todos") navigate("/tickets", { replace: true });
@@ -353,7 +343,6 @@ export default function TicketsPage() {
     }
   };
 
-  // Contadores dinámicos
   const counts = useMemo(() => {
     const base: Record<"Todos" | Categoria, number> = {
       Todos: tickets.length,
@@ -374,7 +363,6 @@ export default function TicketsPage() {
     return base;
   }, [tickets]);
 
-  // Filtrado
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tickets.filter((t) => {
@@ -390,7 +378,6 @@ export default function TicketsPage() {
     });
   }, [tickets, categoria, estado, prioridad, query]);
 
-  // Paginación
   const total = filtered.length;
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
   const startIndex = (page - 1) * pageSize;
@@ -398,7 +385,7 @@ export default function TicketsPage() {
   const pagedTickets = filtered.slice(startIndex, endIndex);
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 px-2 sm:px-0">
       {/* Header */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
@@ -434,6 +421,7 @@ export default function TicketsPage() {
         </div>
       </div>
 
+      {/* Modal Crear Ticket */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -460,15 +448,14 @@ export default function TicketsPage() {
               }}
               className="flex flex-col gap-4"
             >
-              {/* Sección Contacto y Asunto */}
+              {/* Contacto y Asunto */}
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs font-medium text-black/70">
                       Contacto <span className="text-rose-500">*</span>
                     </label>
-                    <div className="text-xs text-[var(--secondary-color)] cursor-pointer flex gap-2">
-                    </div>
+                    <div className="text-xs text-[var(--secondary-color)] cursor-pointer flex gap-2"></div>
                   </div>
                   <input
                     className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white"
@@ -490,7 +477,7 @@ export default function TicketsPage() {
                 </div>
               </div>
 
-              {/* Grid de Selectores */}
+              {/* Grid Selectores */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Tipo */}
                 <div>
@@ -605,17 +592,14 @@ export default function TicketsPage() {
                 </div>
               </div>
 
-              {/* Editor de Descripción */}
+              {/* Descripción */}
               <div>
                 <label className="text-xs font-medium text-black/70 mb-1 block">
                   Descripción <span className="text-rose-500">*</span>
                 </label>
                 <div className="border border-black/15 rounded-md bg-white focus-within:border-[var(--secondary-color)] overflow-hidden">
                   <div className="flex items-center gap-3 px-3 py-2 border-b border-black/5 bg-gray-50 text-black/50">
-                    <Bold
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
+                    <Bold size={16} className="cursor-pointer hover:text-black" />
                     <Italic
                       size={16}
                       className="cursor-pointer hover:text-black"
@@ -624,7 +608,7 @@ export default function TicketsPage() {
                       size={16}
                       className="cursor-pointer hover:text-black"
                     />
-                    <span className="w-px h-4 bg-black/10"></span>
+                    <span className="w-px h-4 bg-black/10" />
                     <List
                       size={16}
                       className="cursor-pointer hover:text-black"
@@ -633,7 +617,7 @@ export default function TicketsPage() {
                       size={16}
                       className="cursor-pointer hover:text-black"
                     />
-                    <span className="w-px h-4 bg-black/10"></span>
+                    <span className="w-px h-4 bg-black/10" />
                     <LinkIcon
                       size={16}
                       className="cursor-pointer hover:text-black"
@@ -702,11 +686,13 @@ export default function TicketsPage() {
           </button>
         ))}
       </div>
+
       {categoria !== "Todos" && categoria !== "Entre otros" && (
         <div className="mb-8">
           <DashboardArea area={categoria} />
         </div>
       )}
+
       {/* Filtros */}
       <div className="grid gap-3 md:grid-cols-[1fr_200px_200px] mb-4">
         <div className="flex items-center gap-2 bg-white rounded-xl border border-black/10 px-3 py-2">
@@ -741,222 +727,337 @@ export default function TicketsPage() {
           ))}
         </select>
       </div>
-      {/* Tabla */}
+
+      {/* Tabla / Cards */}
       <div className="bg-white rounded-2xl border border-black/5 shadow-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-black/50 text-xs border-b border-black/5 uppercase tracking-wider bg-gray-50">
-              <th className="py-3 px-4 font-semibold">#</th>
-              <th className="py-3 px-4 font-semibold">Asunto</th>
-              <th className="py-3 px-4 font-semibold">Solicitante</th>
-              <th className="py-3 px-4 font-semibold">Grupo</th>
-              <th className="py-3 px-4 font-semibold">Estado</th>
-              <th className="py-3 px-4 font-semibold">Prioridad</th>
-              <th className="py-3 px-4 font-semibold">Fecha</th>
-              <th className="py-3 px-4 font-semibold text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={8} className="py-12 text-center text-black/50">
-                  Cargando tickets...
-                </td>
+        {/* Desktop: tabla */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-black/50 text-xs border-b border-black/5 uppercase tracking-wider bg-gray-50">
+                <th className="py-3 px-4 font-semibold">#</th>
+                <th className="py-3 px-4 font-semibold">Asunto</th>
+                <th className="py-3 px-4 font-semibold">Solicitante</th>
+                <th className="py-3 px-4 font-semibold">Grupo</th>
+                <th className="py-3 px-4 font-semibold">Estado</th>
+                <th className="py-3 px-4 font-semibold">Prioridad</th>
+                <th className="py-3 px-4 font-semibold">Fecha</th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Acciones
+                </th>
               </tr>
-            )}
-            {!loading && total === 0 && (
-              <tr>
-                <td colSpan={8} className="py-12 text-center text-black/50">
-                  No se encontraron tickets.
-                </td>
-              </tr>
-            )}
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-black/50">
+                    Cargando tickets...
+                  </td>
+                </tr>
+              )}
+              {!loading && total === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-black/50">
+                    No se encontraron tickets.
+                  </td>
+                </tr>
+              )}
 
-            {!loading &&
-              pagedTickets.map((t) => {
-                const isExpanded = expandedTicketId === t.id;
-                return (
-                  <React.Fragment key={t.id}>
-                    {/* Fila Principal */}
-                    <tr
-                      onClick={() => toggleExpand(t.id)}
-                      className={`border-b border-black/5 last:border-0 transition-colors cursor-pointer group ${
-                        isExpanded
-                          ? "bg-[var(--tertiary-color)]/50"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <td className="py-4 px-4 text-black/70 font-mono">
-                        #{t.id}
-                      </td>
-                      <td className="py-4 px-4 font-medium text-[var(--primary-color)]">
-                        {t.asunto}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center">
-                          <span className="text-black/70 truncate max-w-[150px]">
-                            {t.solicitante}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="inline-block rounded-lg px-2.5 py-1 text-xs bg-white border border-black/10 text-black/70 font-medium shadow-sm">
-                          {t.categoria}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getEstadoClasses(
-                            t.estado
-                          )}`}
-                        >
-                          {t.estado === "Resuelto" && (
-                            <CheckCircle2 size={12} />
-                          )}
-                          {t.estado === "Abierto" && <AlertCircle size={12} />}
-                          {t.estado}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span
-                          className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
-                            t.prioridad === "Urgente"
-                              ? "bg-rose-50 text-rose-700 border border-rose-100"
-                              : t.prioridad === "Alta"
-                              ? "bg-orange-50 text-orange-700 border border-orange-100"
-                              : t.prioridad === "Media"
-                              ? "bg-amber-50 text-amber-700 border border-amber-100"
-                              : "bg-zinc-100 text-zinc-700 border border-zinc-200"
-                          }`}
-                        >
-                          {t.prioridad}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-black/70 text-xs whitespace-nowrap">
-                        {new Date(t.fecha).toLocaleDateString()}
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExpand(t.id);
-                          }}
-                          className={`inline-flex items-center gap-1 text-xs font-medium rounded-lg px-3 py-1.5 border transition-all shadow-sm ${
-                            isExpanded
-                              ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-                              : "bg-white border-black/10 hover:border-[var(--secondary-color)] hover:text-[var(--secondary-color)] text-black/60"
-                          }`}
-                        >
-                          {isExpanded ? "Ocultar" : "Ver detalles"}
-                          {isExpanded ? (
-                            <ChevronDown size={14} />
-                          ) : (
-                            <ChevronRight size={14} />
-                          )}
-                        </button>
-                      </td>
-                    </tr>
-
-                    {/* Fila Expandida (Detalles) */}
-                    {isExpanded && (
-                      <tr className="bg-[var(--tertiary-color)]/30 animate-in fade-in slide-in-from-top-2 duration-200">
-                        <td colSpan={8} className="p-0 border-b border-black/5">
-                          <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Columna 1: Descripción */}
-                            <div className="lg:col-span-2 space-y-3">
-                              <h4 className="text-sm font-bold text-[var(--primary-color)] flex items-center gap-2">
-                                <MessageSquare
-                                  size={16}
-                                  className="text-[var(--secondary-color)]"
-                                />
-                                Descripción de la solicitud
-                              </h4>
-                              <div className="bg-white p-4 rounded-xl border border-black/5 text-sm text-black/70 leading-relaxed shadow-sm">
-                                {t.descripcion ||
-                                  "No hay descripción detallada disponible."}
-                              </div>
-                              <div className="flex gap-2 mt-2">
-                                <button className="text-xs flex items-center gap-1 text-black/50 hover:text-[var(--secondary-color)] transition-colors">
-                                  <Paperclip size={14} /> Ver adjuntos (0)
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Columna 2: Meta Información */}
-                            <div className="space-y-4 border-l border-black/5 pl-6 lg:block hidden">
-                              <div>
-                                <h4 className="text-xs font-bold text-black/40 uppercase tracking-wider mb-2">
-                                  Detalles del Agente
-                                </h4>
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-[var(--secondary-color)] text-white flex items-center justify-center text-xs font-bold">
-                                    {(t.agente || "S").charAt(0)}
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-medium text-[var(--primary-color)]">
-                                      {t.agente}
-                                    </p>
-                                    <p className="text-xs text-black/50">
-                                      Soporte Nivel 1
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-xs text-black/60">
-                                  <Calendar
-                                    size={14}
-                                    className="text-black/40"
-                                  />
-                                  Creado:{" "}
-                                  <span className="font-medium">
-                                    {new Date(t.fecha).toLocaleString()}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-black/60">
-                                  <Clock size={14} className="text-black/40" />
-                                  Actualizado:{" "}
-                                  <span className="font-medium">
-                                    {new Date().toLocaleDateString()}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="pt-4 border-t border-black/5">
-                                <button className="w-full py-2 text-sm font-medium text-[var(--secondary-color)] bg-white border border-[var(--secondary-color)] rounded-lg hover:bg-[var(--secondary-color)] hover:text-white transition-colors shadow-sm">
-                                  Gestionar en Freshdesk
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Versión móvil de la columna 2 (si fuera necesario ajustar responsividad extrema) */}
-                            <div className="lg:hidden space-y-3 border-t border-black/10 pt-4">
-                              <p className="text-xs text-black/50">
-                                <strong>Agente:</strong> {t.agente}
-                              </p>
-                              <button className="text-xs text-[var(--secondary-color)] underline">
-                                Gestionar Ticket
-                              </button>
-                            </div>
+              {!loading &&
+                pagedTickets.map((t) => {
+                  const isExpanded = expandedTicketId === t.id;
+                  return (
+                    <React.Fragment key={t.id}>
+                      <tr
+                        onClick={() => toggleExpand(t.id)}
+                        className={`border-b border-black/5 last:border-0 transition-colors cursor-pointer group ${
+                          isExpanded
+                            ? "bg-[var(--tertiary-color)]/50"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <td className="py-4 px-4 text-black/70 font-mono">
+                          #{t.id}
+                        </td>
+                        <td className="py-4 px-4 font-medium text-[var(--primary-color)]">
+                          {t.asunto}
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex items-center">
+                            <span className="text-black/70 truncate max-w-[150px]">
+                              {t.solicitante}
+                            </span>
                           </div>
                         </td>
+                        <td className="py-4 px-4">
+                          <span className="inline-block rounded-lg px-2.5 py-1 text-xs bg-white border border-black/10 text-black/70 font-medium shadow-sm">
+                            {t.categoria}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getEstadoClasses(
+                              t.estado
+                            )}`}
+                          >
+                            {t.estado === "Resuelto" && (
+                              <CheckCircle2 size={12} />
+                            )}
+                            {t.estado === "Abierto" && (
+                              <AlertCircle size={12} />
+                            )}
+                            {t.estado}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span
+                            className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
+                              t.prioridad === "Urgente"
+                                ? "bg-rose-50 text-rose-700 border border-rose-100"
+                                : t.prioridad === "Alta"
+                                ? "bg-orange-50 text-orange-700 border border-orange-100"
+                                : t.prioridad === "Media"
+                                ? "bg-amber-50 text-amber-700 border border-amber-100"
+                                : "bg-zinc-100 text-zinc-700 border border-zinc-200"
+                            }`}
+                          >
+                            {t.prioridad}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-black/70 text-xs whitespace-nowrap">
+                          {new Date(t.fecha).toLocaleDateString()}
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(t.id);
+                            }}
+                            className={`inline-flex items-center gap-1 text-xs font-medium rounded-lg px-3 py-1.5 border transition-all shadow-sm ${
+                              isExpanded
+                                ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
+                                : "bg-white border-black/10 hover:border-[var(--secondary-color)] hover:text-[var(--secondary-color)] text-black/60"
+                            }`}
+                          >
+                            {isExpanded ? "Ocultar" : "Ver detalles"}
+                            {isExpanded ? (
+                              <ChevronDown size={14} />
+                            ) : (
+                              <ChevronRight size={14} />
+                            )}
+                          </button>
+                        </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-          </tbody>
-        </table>
+
+                      {isExpanded && (
+                        <tr className="bg-[var(--tertiary-color)]/30 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <td colSpan={8} className="p-0 border-b border-black/5">
+                            <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              <div className="lg:col-span-2 space-y-3">
+                                <h4 className="text-sm font-bold text-[var(--primary-color)] flex items-center gap-2">
+                                  <MessageSquare
+                                    size={16}
+                                    className="text-[var(--secondary-color)]"
+                                  />
+                                  Descripción de la solicitud
+                                </h4>
+                                <div className="bg-white p-4 rounded-xl border border-black/5 text-sm text-black/70 leading-relaxed shadow-sm">
+                                  {t.descripcion ||
+                                    "No hay descripción detallada disponible."}
+                                </div>
+                                <div className="flex gap-2 mt-2">
+                                  <button className="text-xs flex items-center gap-1 text-black/50 hover:text-[var(--secondary-color)] transition-colors">
+                                    <Paperclip size={14} /> Ver adjuntos (0)
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4 border-l border-black/5 pl-6 lg:block hidden">
+                                <div>
+                                  <h4 className="text-xs font-bold text-black/40 uppercase tracking-wider mb-2">
+                                    Detalles del Agente
+                                  </h4>
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-[var(--secondary-color)] text-white flex items-center justify-center text-xs font-bold">
+                                      {(t.agente || "S").charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-[var(--primary-color)]">
+                                        {t.agente}
+                                      </p>
+                                      <p className="text-xs text-black/50">
+                                        Soporte Nivel 1
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-xs text-black/60">
+                                    <Calendar
+                                      size={14}
+                                      className="text-black/40"
+                                    />
+                                    Creado:{" "}
+                                    <span className="font-medium">
+                                      {new Date(t.fecha).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-black/60">
+                                    <Clock
+                                      size={14}
+                                      className="text-black/40"
+                                    />
+                                    Actualizado:{" "}
+                                    <span className="font-medium">
+                                      {new Date().toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-black/5">
+                                  <button className="w-full py-2 text-sm font-medium text-[var(--secondary-color)] bg-white border border-[var(--secondary-color)] rounded-lg hover:bg-[var(--secondary-color)] hover:text-white transition-colors shadow-sm">
+                                    Gestionar en Freshdesk
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Versión móvil de la columna 2 */}
+                              <div className="lg:hidden space-y-3 border-t border-black/10 pt-4">
+                                <p className="text-xs text-black/50">
+                                  <strong>Agente:</strong> {t.agente}
+                                </p>
+                                <button className="text-xs text-[var(--secondary-color)] underline">
+                                  Gestionar Ticket
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: cards */}
+        <div className="md:hidden divide-y divide-black/5">
+          {loading && (
+            <div className="py-8 text-center text-black/50">
+              Cargando tickets...
+            </div>
+          )}
+
+          {!loading && total === 0 && (
+            <div className="py-8 text-center text-black/50">
+              No se encontraron tickets.
+            </div>
+          )}
+
+          {!loading &&
+            pagedTickets.map((t) => {
+              const isExpanded = expandedTicketId === t.id;
+              return (
+                <div
+                  key={t.id}
+                  className={`p-4 flex flex-col gap-3 ${
+                    isExpanded
+                      ? "bg-[var(--tertiary-color)]/40"
+                      : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs text-black/50 font-mono">
+                        #{t.id}
+                      </div>
+                      <div className="font-semibold text-[var(--primary-color)] leading-snug">
+                        {t.asunto}
+                      </div>
+                      <div className="mt-1 text-xs text-black/60">
+                        {t.solicitante}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleExpand(t.id)}
+                      className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-3 py-1 border shadow-sm ${
+                        isExpanded
+                          ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
+                          : "bg-white border-black/10 text-black/60"
+                      }`}
+                    >
+                      {isExpanded ? "Ocultar" : "Ver"}
+                      {isExpanded ? (
+                        <ChevronDown size={14} />
+                      ) : (
+                        <ChevronRight size={14} />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="inline-block rounded-lg px-2.5 py-1 bg-white border border-black/10 text-black/70 font-medium">
+                      {t.categoria}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium ${getEstadoClasses(
+                        t.estado
+                      )}`}
+                    >
+                      {t.estado === "Resuelto" && <CheckCircle2 size={12} />}
+                      {t.estado === "Abierto" && <AlertCircle size={12} />}
+                      {t.estado}
+                    </span>
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-1 font-medium ${
+                        t.prioridad === "Urgente"
+                          ? "bg-rose-50 text-rose-700 border border-rose-100"
+                          : t.prioridad === "Alta"
+                          ? "bg-orange-50 text-orange-700 border border-orange-100"
+                          : t.prioridad === "Media"
+                          ? "bg-amber-50 text-amber-700 border border-amber-100"
+                          : "bg-zinc-100 text-zinc-700 border border-zinc-200"
+                      }`}
+                    >
+                      {t.prioridad}
+                    </span>
+                    <span className="ml-auto text-[10px] text-black/50">
+                      {new Date(t.fecha).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="mt-2 space-y-2 text-xs">
+                      <div className="bg-gray-50 border border-black/5 rounded-lg p-3 text-black/70 leading-relaxed">
+                        {t.descripcion ||
+                          "No hay descripción detallada disponible."}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-black/50">
+                        <span>
+                          <strong>Agente:</strong> {t.agente || "Sin asignar"}
+                        </span>
+                        <span>
+                          <Calendar size={10} className="inline mr-1" />
+                          {new Date(t.fecha).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
 
         {/* Paginación */}
         {!loading && total > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-black/5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 bg-gray-50 border-t border-black/5">
             <span className="text-xs text-black/50 font-medium">
               Mostrando {startIndex + 1}-{Math.min(endIndex, total)} de {total}{" "}
               tickets
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}

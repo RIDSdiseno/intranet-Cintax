@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  // ... (tus otras importaciones de lucide-react)
   Home,
   Users,
   FileText,
@@ -33,13 +34,15 @@ import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
 import TareasSupervisionPage from "./pages/TareasSupervisionPage";
+import HomePage from "./pages/HomePage";
+
+import NotificationsBell from "./components/NotificationsBell";
 
 const API_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
-  "https://localhost:3000";
-
-const Chip: React.FC<{
+  "http://localhost:3000/api";
+export const Chip: React.FC<{
   children: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "danger";
 }> = ({ children, tone = "neutral" }) => {
@@ -58,7 +61,7 @@ const Chip: React.FC<{
   );
 };
 
-const KpiCard: React.FC<{
+export const KpiCard: React.FC<{
   title: string;
   value: string;
   helper?: string;
@@ -218,7 +221,7 @@ const TicketsNav: React.FC<{
   );
 };
 
-const TaskRow: React.FC<{
+export const TaskRow: React.FC<{
   idx: number;
   title: string;
   owner: string;
@@ -322,371 +325,6 @@ const ANNOUNCEMENTS = [
   },
 ];
 
-function HomePage() {
-  const [activeModal, setActiveModal] = React.useState<string | null>(null);
-
-  const modals: Record<
-    string,
-    {
-      title: string;
-      hint: string;
-      fields: Array<{ label: string; type: string; placeholder: string }>;
-    }
-  > = {
-    "Nueva solicitud": {
-      title: "Nueva solicitud",
-      hint: "Permisos, licencias",
-      fields: [
-        {
-          label: "Tipo de solicitud",
-          type: "select",
-          placeholder: "Selecciona...",
-        },
-        {
-          label: "Descripción",
-          type: "textarea",
-          placeholder: "Describe tu solicitud...",
-        },
-        { label: "Fecha requerida", type: "date", placeholder: "" },
-      ],
-    },
-    "Subir documento": {
-      title: "Subir documento",
-      hint: "PDF, DOCX, XLSX",
-      fields: [
-        {
-          label: "Nombre del documento",
-          type: "text",
-          placeholder: "ej: Reporte Q4 2025",
-        },
-        { label: "Categoría", type: "select", placeholder: "Selecciona..." },
-        { label: "Archivo", type: "file", placeholder: "" },
-      ],
-    },
-    "Crear proyecto": {
-      title: "Crear proyecto",
-      hint: "Kanban, tareas",
-      fields: [
-        {
-          label: "Nombre del proyecto",
-          type: "text",
-          placeholder: "ej: Onboarding 2026",
-        },
-        { label: "Tipo", type: "select", placeholder: "Kanban / Tareas" },
-        {
-          label: "Descripción",
-          type: "textarea",
-          placeholder: "Descripción del proyecto...",
-        },
-      ],
-    },
-    "Soporte TI": {
-      title: "Reporte de incidencia",
-      hint: "Incidencias",
-      fields: [
-        {
-          label: "Tipo de incidencia",
-          type: "select",
-          placeholder: "Hardware / Software / Red",
-        },
-        {
-          label: "Descripción del problema",
-          type: "textarea",
-          placeholder: "Describe el problema...",
-        },
-        {
-          label: "Prioridad",
-          type: "select",
-          placeholder: "Baja / Media / Alta",
-        },
-      ],
-    },
-  };
-
-  return (
-    <>
-      <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Nueva solicitud", hint: "Permisos, licencias" },
-          { label: "Subir documento", hint: "PDF, DOCX, XLSX" },
-          { label: "Crear proyecto", hint: "Kanban, tareas" },
-          { label: "Soporte TI", hint: "Incidencias" },
-        ].map((a) => (
-          <button
-            key={a.label}
-            onClick={() => setActiveModal(a.label)}
-            className="group flex items-center justify-between rounded-2xl bg-white border border-black/5 px-4 py-4 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-[transform,box-shadow] duration-300"
-          >
-            <div>
-              <p className="text-sm text-black/60">{a.hint}</p>
-              <p
-                className="font-medium"
-                style={{ color: "var(--primary-color)" }}
-              >
-                {a.label}
-              </p>
-            </div>
-            <div className="rounded-full p-2 bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
-              <ChevronRight size={18} />
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {activeModal && modals[activeModal] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setActiveModal(null)}
-          />
-          <div className="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3
-                  className="text-lg font-semibold"
-                  style={{ color: "var(--primary-color)" }}
-                >
-                  {modals[activeModal].title}
-                </h3>
-                <p className="text-xs text-black/50 mt-1">
-                  {modals[activeModal].hint}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="p-1 rounded hover:bg-black/5"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setActiveModal(null);
-                alert(`${activeModal} enviada exitosamente`);
-              }}
-              className="flex flex-col gap-4"
-            >
-              {modals[activeModal].fields.map((field) => (
-                <div key={field.label}>
-                  <label className="block text-xs font-medium text-black/70 mb-1.5">
-                    {field.label}
-                  </label>
-                  {field.type === "select" && (
-                    <select className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors bg-white">
-                      <option value="">{field.placeholder}</option>
-                      <option value="opt1">Opción 1</option>
-                      <option value="opt2">Opción 2</option>
-                    </select>
-                  )}
-                  {field.type === "textarea" && (
-                    <textarea
-                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors resize-none"
-                      rows={3}
-                      placeholder={field.placeholder}
-                      required
-                    />
-                  )}
-                  {field.type === "file" && (
-                    <input
-                      type="file"
-                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
-                      required
-                    />
-                  )}
-                  {field.type === "date" && (
-                    <input
-                      type="date"
-                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
-                      required
-                    />
-                  )}
-                  {field.type === "text" && (
-                    <input
-                      type="text"
-                      className="w-full border border-black/15 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
-                      placeholder={field.placeholder}
-                      required
-                    />
-                  )}
-                </div>
-              ))}
-
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium text-white transition"
-                  style={{ background: "var(--secondary-color)" }}
-                >
-                  Enviar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium border border-black/10 bg-white hover:border-black/20 transition"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          title="Colaboradores activos"
-          value="312"
-          helper="Últimos 30 días"
-          icon={<Users />}
-        />
-        <KpiCard
-          title="Documentos nuevos"
-          value="128"
-          helper="Esta semana"
-          icon={<FileText />}
-        />
-        <KpiCard
-          title="Proyectos en curso"
-          value="17"
-          helper="Área TI y Operaciones"
-          icon={<FolderKanban />}
-        />
-        <KpiCard
-          title="Tickets abiertos"
-          value="9"
-          helper="Soporte TI"
-          icon={<LifeBuoy />}
-        />
-      </div>
-
-      <div className="mt-6 grid xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 bg-white rounded-2xl border border-black/5 shadow-sm">
-          <header className="flex items-center justify-between px-4 py-4 border-b border-black/5">
-            <div>
-              <h2
-                className="text-lg font-semibold"
-                style={{ color: "var(--primary-color)" }}
-              >
-                Tareas pendientes
-              </h2>
-              <p className="text-xs text-black/50">
-                Lo más urgente para esta quincena
-              </p>
-            </div>
-            <button className="text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition">
-              Ver todas
-            </button>
-          </header>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-black/50 text-xs">
-                  <th className="py-3 px-3 font-medium">ID</th>
-                  <th className="py-3 px-3 font-medium">Tarea</th>
-                  <th className="py-3 px-3 font-medium">Estado</th>
-                  <th className="py-3 px-3 font-medium text-right">Vence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TASKS.map((t, i) => (
-                  <TaskRow
-                    key={t.title}
-                    idx={i + 1}
-                    title={t.title}
-                    owner={t.owner}
-                    status={t.status}
-                    due={t.due}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
-            <h2
-              className="text-lg font-semibold mb-3"
-              style={{ color: "var(--primary-color)" }}
-            >
-              Actividad reciente
-            </h2>
-            <div className="space-y-4">
-              <ActivityItem
-                title="María cargó “Política de Gastos v2.pdf”"
-                time="Hoy, 11:20"
-                icon={
-                  <FileText
-                    size={16}
-                    className="text-[var(--secondary-color)]"
-                  />
-                }
-                hint="Finanzas / Políticas"
-              />
-              <ActivityItem
-                title="Equipo TI cerró ticket #2381"
-                time="Ayer, 18:44"
-                icon={
-                  <LifeBuoy
-                    size={16}
-                    className="text-[var(--secondary-color)]"
-                  />
-                }
-                hint="Incidente VPN - resuelto"
-              />
-              <ActivityItem
-                title="Se creó el proyecto ‘Onboarding 2026’"
-                time="Ayer, 09:02"
-                icon={
-                  <FolderKanban
-                    size={16}
-                    className="text-[var(--secondary-color)]"
-                  />
-                }
-                hint="Personas / Capacitación"
-              />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
-            <h2
-              className="text-lg font-semibold mb-3"
-              style={{ color: "var(--primary-color)" }}
-            >
-              Anuncios
-            </h2>
-            <div className="space-y-3">
-              {ANNOUNCEMENTS.map((a) => (
-                <div
-                  key={a.title}
-                  className="flex items-start justify-between gap-3 rounded-xl p-3 bg-[var(--tertiary-color)]"
-                >
-                  <div>
-                    <p
-                      className="font-medium"
-                      style={{ color: "var(--primary-color)" }}
-                    >
-                      {a.title}
-                    </p>
-                    <p className="text-sm text-black/60">{a.copy}</p>
-                  </div>
-                  <button className="text-sm text-[var(--secondary-color)] hover:underline shrink-0">
-                    {a.cta}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-
 function NotFoundPage() {
   return (
     <section className="bg-white rounded-2xl border border-black/5 shadow-sm p-6 mt-6 text-center">
@@ -722,7 +360,7 @@ type JwtFrontendPayload = {
 /**
  * Lee el payload del JWT guardado en el storage.
  */
-function getAuthPayload(): JwtFrontendPayload | null {
+export function getAuthPayload(): JwtFrontendPayload | null {
   const token =
     localStorage.getItem("access_token") ||
     sessionStorage.getItem("access_token") ||
@@ -1163,6 +801,7 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <NotificationsBell />
                 <button
                   onClick={() => navigate("/configurar")}
                   className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition active:scale-95"

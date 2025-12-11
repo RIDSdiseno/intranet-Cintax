@@ -15,6 +15,7 @@ import {
   BookCheck,
   ChevronDown,
   HandHelping,
+  History, // 👈 NUEVO
 } from "lucide-react";
 import {
   Routes,
@@ -33,6 +34,7 @@ import ConfigurarPage from "./pages/ConfigurarPage";
 import SoportePage from "./pages/SoportePage";
 import TareasPage from "./pages/TareasPage";
 import TareasSupervisionPage from "./pages/TareasSupervisionPage";
+import ReleaseNotesPage from "./pages/ReleaseNotesPage"; // 👈 NUEVO
 
 const API_BASE_URL =
   // @ts-ignore
@@ -774,6 +776,13 @@ export default function CintaxIntranetMockup() {
   const authPayload = getAuthPayload();
   const canSeeSupervisor = isSupervisorOrAdmin();
 
+  // 👉 nombre que se va a mostrar en el header
+  const displayName =
+    authPayload?.nombre ||
+    authPayload?.nombreUsuario ||
+    (authPayload?.email ? authPayload.email.split("@")[0] : "") ||
+    "Usuario";
+
   const handleLogout = async () => {
     try {
       const token =
@@ -1011,6 +1020,24 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
+                {/* 👇 NUEVO LINK: Notas de versión (MOBILE) */}
+                <NavLink
+                  to="/notas-version"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <History size={18} />
+                  </span>
+                  <span className="truncate text-left">Notas de versión</span>
+                </NavLink>
+
                 <TicketsNav onNavigate={() => setSidebarOpen(false)} />
                 <SideLink
                   icon={<LifeBuoy size={18} />}
@@ -1130,6 +1157,23 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
+                {/* 👇 NUEVO LINK: Notas de versión (DESKTOP) */}
+                <NavLink
+                  to="/notas-version"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <History size={18} />
+                  </span>
+                  <span className="truncate text-left">Notas de versión</span>
+                </NavLink>
+
                 <TicketsNav />
                 <SideLink
                   icon={<HandHelping size={18} />}
@@ -1162,7 +1206,25 @@ export default function CintaxIntranetMockup() {
                   Resumen general y accesos rápidos
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* 👉 info del trabajador logeado + botón config */}
+              <div className="flex items-center gap-3">
+                {authPayload && (
+                  <div className="flex items-center gap-2 rounded-full bg-white border border-black/10 px-3 py-1.5 shadow-sm max-w-[220px] sm:max-w-xs">
+                    <div className="w-8 h-8 rounded-full bg-[var(--secondary-color)] text-white flex items-center justify-center text-sm font-semibold">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col leading-tight min-w-0">
+                      <span className="text-[11px] text-black/40">
+                        Conectado como
+                      </span>
+                      <span className="text-sm font-medium text-[var(--primary-color)] truncate">
+                        {displayName}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={() => navigate("/configurar")}
                   className="rounded-xl bg-white border border-black/5 p-2 shadow-sm hover:shadow transition active:scale-95"
@@ -1192,6 +1254,12 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/tickets/:cat"
               element={<PrivateRoute element={<TicketsPage />} />}
+            />
+
+            {/* 👇 NUEVA RUTA: Notas de versión */}
+            <Route
+              path="/notas-version"
+              element={<PrivateRoute element={<ReleaseNotesPage />} />}
             />
 
             {/* RUTA SUPERVISOR PROTEGIDA */}

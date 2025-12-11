@@ -1,247 +1,306 @@
-import React, { useState } from "react";
-import { User, Save, Camera, Trash2 } from "lucide-react";
+// src/pages/ConfigurarPage.tsx
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { User, Camera } from "lucide-react";
 
-type TabId = "perfil";
+const API_BASE_URL =
+  // @ts-ignore
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  "http://localhost:3000/api";
 
-export default function ConfigurarPage() {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+type Perfil = {
+  id_trabajador: number;
+  nombre: string;
+  email: string;
+  status: boolean;
+  areaInterna?: string | null;        // ADMIN | CONTA | RRHH | TRIBUTARIO
+  tipoRelacion?: string | null;
+  carpetaDriveCodigo?: string | null; // ej: "A01" (código interno)
+  codigoInterno?: string | null;      // alias opcional que puede venir del backend
+  createdAt: string;
+};
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("El archivo excede los 2MB permitidos.");
-        return;
-      }
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    }
+type LoadState = "idle" | "loading" | "success" | "error";
+
+const getAuthToken = () => {
+  return (
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("auth_token") ||
+    sessionStorage.getItem("auth_token")
+  );
+};
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getAuthToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+};
+
+// Mapea el enum de Prisma a etiquetas legibles
+const prettyArea = (area?: string | null): string => {
+  if (!area) return "Sin área asignada";
+  const map: Record<string, string> = {
+    ADMIN: "Administración",
+    CONTA: "Contabilidad",
+    RRHH: "Recursos Humanos",
+    TRIBUTARIO: "Tributario",
   };
+  return map[area] ?? area;
+};
 
-  const handleRemoveImage = () => {
-    setPreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-  const [activeTab, setActiveTab] = useState<TabId>("perfil");
-  const [loading, setLoading] = useState(false);
-
-  const [formData, setFormData] = useState({
-    nombre: "Jorge",
-    cargo: "Administrador",
-    email: "administrador@cintax.com",
-    telefono: "+56 9 1234 5678",
-    currentPass: "",
-    newPass: "",
-    confirmPass: "",
+const formatFechaCorta = (iso?: string): string => {
+  if (!iso) return "No registrado";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "No registrado";
+  return d.toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
+};
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      alert("Cambios guardados correctamente (Simulación)");
-    }, 1000);
-  };
+const ConfigurarPage: React.FC = () => {
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [loading, setLoading] = useState<LoadState>("idle");
+  const [error, setError] = useState<string | null>(null);
 
-  const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setLoading("loading");
+        setError(null);
 
-  const tabs = [
-    {
-      id: "perfil",
-      label: "Mi Perfil",
-      icon: User,
-      desc: "Gestiona tu información personal",
-    },
-  ];
+        const resp = await axios.get(`${API_BASE_URL}/auth/profile`, {
+          headers: getAuthHeaders(),
+          withCredentials: true,
+        });
+
+        const data: any = resp.data;
+        // Intentamos acomodarnos a varias posibles formas de respuesta
+        const t: Perfil | undefined =
+          data?.trabajador || data?.perfil || data?.user || data;
+
+        if (!t || typeof t.nombre !== "string") {
+          console.error(
+            "[ConfigurarPage] Respuesta inesperada de /auth/me:",
+            data
+          );
+          throw new Error("Formato de perfil no válido");
+        }
+
+        console.log("[ConfigurarPage] Perfil recibido:", t);
+
+        setPerfil(t);
+        setLoading("success");
+      } catch (err) {
+        console.error("Error cargando perfil", err);
+        setError("No se pudo cargar la información del perfil.");
+        setLoading("error");
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const initialLetter =
+    perfil?.nombre?.charAt(0).toUpperCase() ||
+    perfil?.email?.charAt(0).toUpperCase() ||
+    "U";
+
+  const cargoTexto = prettyArea(perfil?.areaInterna); // ej: "Contabilidad"
+
+  // 👇 Código interno: primero carpetaDriveCodigo, si no, el alias codigoInterno
+  const codigoTexto =
+    perfil?.carpetaDriveCodigo ??
+    perfil?.codigoInterno ??
+    "";
+
+  const fechaIngreso = formatFechaCorta(perfil?.createdAt);
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1
-          className="text-2xl font-bold mb-2"
-          style={{ color: "var(--primary-color)" }}
-        >
-          Configuración
-        </h1>
-        <p className="text-black/60 text-sm">
-          Administra tus preferencias personales y credenciales de acceso.
-        </p>
-      </div>
+    <div className="mt-6">
+      <h2 className="text-xl font-semibold mb-1">Configuración</h2>
+      <p className="text-sm text-black/60 mb-6">
+        Visualiza tus datos personales y de acceso. Por ahora, esta sección es
+        solo de lectura.
+      </p>
 
-      <div className="flex flex-col md:flex-row gap-6">
-        <nav className="w-full md:w-64 flex-shrink-0">
-          <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as TabId)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                    isActive
-                      ? "bg-white text-[var(--secondary-color)] shadow-sm border border-black/5"
-                      : "text-black/60 hover:bg-black/5 hover:text-black/80"
-                  }`}
-                >
-                  <Icon
-                    size={18}
-                    className={
-                      isActive ? "text-[var(--secondary-color)]" : "opacity-70"
-                    }
-                  />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+      <div className="flex flex-col gap-4 lg:flex-row">
+        {/* Tab lateral: Mi perfil (única opción por ahora) */}
+        <div className="w-full max-w-xs">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-4 py-3 rounded-xl bg-white border border-black/10 shadow-sm text-sm font-medium text-[var(--primary-color)]"
+          >
+            <User size={16} />
+            <span>Mi Perfil</span>
+          </button>
+        </div>
 
-        <main className="flex-1 bg-white rounded-2xl shadow-sm border border-black/5 p-6 min-h-[400px]">
-          <div className="mb-6 pb-4 border-b border-black/5 flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--primary-color)]">
-                {tabs.find((t) => t.id === activeTab)?.label}
-              </h2>
-              <p className="text-xs text-black/50 mt-1">
-                {tabs.find((t) => t.id === activeTab)?.desc}
-              </p>
+        {/* Panel principal de perfil */}
+        <div className="flex-1">
+          <div className="bg-white rounded-2xl border border-black/10 shadow-sm overflow-hidden">
+            {/* Header del panel */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-black/5">
+              <div>
+                <h3 className="text-base font-semibold text-[var(--primary-color)]">
+                  Mi Perfil
+                </h3>
+                <p className="text-xs text-black/50 mt-1">
+                  Información personal del colaborador conectado.
+                </p>
+              </div>
+
+              {/* Botón decorativo deshabilitado */}
+              <button
+                type="button"
+                disabled
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[var(--secondary-color)]/40 cursor-not-allowed"
+              >
+                Edición no disponible
+              </button>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 active:scale-95"
-              style={{ background: "var(--secondary-color)" }}
-            >
-              <Save size={16} />
-              {loading ? "Guardando..." : "Guardar cambios"}
-            </button>
-          </div>
 
-          {activeTab === "perfil" && (
-            <form className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex items-center gap-6 mb-8 p-4 border border-black/5 rounded-2xl bg-black/[0.02]">
-                  {/* Avatar con Previsualización */}
-                  <div className="relative shrink-0">
-                    <div className="w-24 h-24 rounded-full border-4 border-white shadow-sm overflow-hidden flex items-center justify-center bg-[var(--tertiary-color)]">
-                      {previewUrl ? (
-                        <img
-                          src={previewUrl}
-                          alt="Avatar preview"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-3xl font-bold text-[var(--secondary-color)]">
-                          {formData.nombre.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-                    {/* Botón flotante de cámara (opcional, decorativo) */}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow border border-black/10 text-black/60 hover:text-[var(--secondary-color)] transition-colors"
-                    >
-                      <Camera size={16} />
-                    </button>
+            <div className="px-5 py-6 space-y-6">
+              {/* Avatar + info extra */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="relative">
+                  <div className="h-20 w-20 rounded-full bg-[var(--tertiary-color)] flex items-center justify-center text-2xl font-semibold text-[var(--secondary-color)] border border-black/10">
+                    {initialLetter}
                   </div>
-
-                  {/* Controles */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm hover:opacity-90 transition-opacity"
-                        style={{ background: "var(--secondary-color)" }}
-                      >
-                        Subir nueva imagen
-                      </button>
-                      {previewUrl && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveImage}
-                          className="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          <Trash2 size={16} />
-                          Eliminar
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-black/50">
-                      Se recomienda una imagen cuadrada de al menos 400x400px.
-                      <br />
-                      Formatos permitidos: JPG o PNG. Máximo 2MB.
+                  <button
+                    type="button"
+                    disabled
+                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-white/70 border border-black/10 flex items-center justify-center shadow-sm text-black/30 cursor-not-allowed"
+                  >
+                    <Camera size={16} />
+                  </button>
+                </div>
+                <div className="text-xs text-black/50 space-y-1">
+                  <p>Próximamente podrás subir tu propia foto de perfil.</p>
+                  <p>Por ahora mostramos tus iniciales automáticamente.</p>
+                  {perfil && (
+                    <p className="mt-1">
+                      <span className="font-medium text-black/70">
+                        Colaborador desde:
+                      </span>{" "}
+                      <span>{fechaIngreso}</span>
                     </p>
-
-                    {/* Input oculto */}
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      accept="image/png, image/jpeg"
-                      onChange={handleImageChange}
-                    />
-                  </div>
+                  )}
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-black/70 mb-1">
+              {/* Datos solo lectura */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                {/* Nombre */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
                     Nombre
                   </label>
                   <input
                     type="text"
-                    value={formData.nombre}
-                    onChange={(e) => handleChange("nombre", e.target.value)}
-                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                    value={perfil?.nombre ?? ""}
+                    readOnly
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/80"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-black/70 mb-1">
-                    Cargo
+
+                {/* Código interno (A01, A04, etc.) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
+                    Código interno (cartera)
                   </label>
                   <input
                     type="text"
-                    value={formData.cargo}
+                    value={codigoTexto}
                     readOnly
-                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-black/[0.02] outline-none text-black/60 cursor-default"
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/80"
+                    placeholder=""
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-black/70 mb-1">
+
+                {/* Correo */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
                     Correo electrónico
                   </label>
                   <input
                     type="email"
+                    value={perfil?.email ?? ""}
                     readOnly
-                    value={formData.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-black/[0.02] outline-none text-black/60 cursor-default"
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/80"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-black/70 mb-1">
+
+                {/* Cargo / área (Contabilidad, etc.) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
+                    Cargo / área interna
+                  </label>
+                  <input
+                    type="text"
+                    value={cargoTexto}
+                    readOnly
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/80"
+                  />
+                </div>
+
+                {/* Teléfono (placeholder a futuro) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
                     Teléfono
                   </label>
                   <input
                     type="tel"
-                    value={formData.telefono}
-                    onChange={(e) => handleChange("telefono", e.target.value)}
-                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] transition-colors"
+                    value={""}
+                    readOnly
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/60 italic"
+                    placeholder="No registrado"
+                  />
+                </div>
+
+                {/* Estado (activo/inactivo) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-black/70">
+                    Estado
+                  </label>
+                  <input
+                    type="text"
+                    value={perfil?.status ? "Activo" : "Inactivo"}
+                    readOnly
+                    disabled
+                    className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm bg-[var(--tertiary-color)] cursor-not-allowed text-black/80"
                   />
                 </div>
               </div>
-            </form>
-          )}
-        </main>
+
+              {loading === "loading" && (
+                <p className="text-xs text-black/50">Cargando perfil...</p>
+              )}
+
+              {loading === "success" && !perfil && !error && (
+                <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  No se encontró información de perfil para este usuario.
+                </p>
+              )}
+
+              {error && (
+                <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">
+                  {error}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default ConfigurarPage;

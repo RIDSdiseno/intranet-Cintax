@@ -15,8 +15,9 @@ import {
 } from "@hello-pangea/dnd";
 import { EstadoTarea, TareaAsignada, TareaPlantilla } from "./tiposTareas";
 import XlsxPopulate from "xlsx-populate/browser/xlsx-populate";
-import CompletarTareaModal from "./CompletarTareaModal";
 import MultiCompletarTareasModal from "./MultiCompletarTareasModal";
+// 👇 Flujo de correo deshabilitado en esta vista
+// import EnviarCorreoTareaModal, { TareaCorreoResumen } from "./EnviarCorreoTareaModal";
 
 const API_BASE_URL =
   // @ts-ignore
@@ -82,24 +83,13 @@ type VistaPorTareaProps = {
   trabajadorIdFiltro?: number;
 };
 
-// ahora la subvista es tarjetas | tabla
+// subvista: tarjetas | tabla
 type SubVista = "tarjetas" | "tabla";
 
-// extendemos localmente la tarea para incluir la razón social
+// extendemos la tarea para incluir la razón social y correo del cliente
 type TareaAsignadaConCliente = TareaAsignada & {
   clienteRazonSocial?: string | null;
-};
-
-// resumen para el modal simple
-type TareaResumenModal = {
-  id_tarea_asignada: number;
-  rutCliente?: string | null;
-  clienteRazonSocial?: string | null;
-  fechaProgramada: string;
-  tareaPlantilla?: {
-    nombre: string | null;
-    codigoDocumento?: string | null;
-  } | null;
+  clienteEmail?: string | null;
 };
 
 // mapa tareaId -> archivo
@@ -108,6 +98,9 @@ type FilesMap = Record<number, File | null>;
 const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
   trabajadorIdFiltro,
 }) => {
+  // -----------------------------
+  // Estado base
+  // -----------------------------
   const [plantillas, setPlantillas] = useState<TareaPlantilla[]>([]);
   const [loadingPlantillas, setLoadingPlantillas] =
     useState<LoadState>("idle");
@@ -125,30 +118,22 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     string | null
   >(null);
 
-  // sub-vista: tablero de tarjetas vs vista tabla
   const [subVista, setSubVista] = useState<SubVista>("tarjetas");
-
-  // navbar de búsqueda (más general)
   const [busqueda, setBusqueda] = useState("");
 
-  // selección múltiple (solo tablero)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  // paginación de la tabla
   const [pagina, setPagina] = useState(1);
   const PAGE_SIZE = 10;
 
-  // Filtros de año/mes
   const now = new Date();
   const [anioFiltro, setAnioFiltro] = useState<number>(now.getFullYear());
-  const [mesFiltro, setMesFiltro] = useState<number>(now.getMonth() + 1); // 1–12
+  const [mesFiltro, setMesFiltro] = useState<number>(now.getMonth() + 1);
 
-  // filtro de estado en la vista tabla
   const [estadoFiltroTabla, setEstadoFiltroTabla] = useState<
     "TODOS" | EstadoTarea
   >("TODOS");
 
-  // plantilla seleccionada para usar en título del Excel
   const plantillaSeleccionada = useMemo(
     () =>
       typeof plantillaSeleccionadaId === "number"
@@ -159,17 +144,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     [plantillas, plantillaSeleccionadaId]
   );
 
-  // --- estado del modal de completar con archivo (1 tarea) ---
-  const [modalOpen, setModalOpen] = useState(false);
-  const [tareaParaCompletar, setTareaParaCompletar] =
-    useState<TareaResumenModal | null>(null);
-  const [archivoSeleccionado, setArchivoSeleccionado] =
-    useState<File | null>(null);
-  const [isSubmittingArchivo, setIsSubmittingArchivo] = useState(false);
-  const [errorModal, setErrorModal] = useState<string | null>(null);
-
-  // --- estado modal múltiple ---
-  
+  // -----------------------------
+  // Estado modal multi-completar
+  // -----------------------------
   const [multiModalOpen, setMultiModalOpen] = useState(false);
   const [tareasParaMultiCompletar, setTareasParaMultiCompletar] = useState<
     TareaAsignadaConCliente[]
@@ -178,6 +155,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
   const [isSubmittingMulti, setIsSubmittingMulti] = useState(false);
   const [multiError, setMultiError] = useState<string | null>(null);
 
+  // -----------------------------
+  // Helpers selección
+  // -----------------------------
   const isSelected = (id: number) => selectedIds.includes(id);
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) =>
@@ -191,7 +171,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     return t?.clienteRazonSocial ?? "";
   };
 
-  // --- derivado: filtramos por búsqueda (RUT, razón social, código, nombre, nota) ---
+  // -----------------------------
+  // Derivados: filtros / métricas
+  // -----------------------------
   const tareasFiltradas = useMemo(() => {
     if (!busqueda.trim()) return tareasPorPlantilla;
     const term = busqueda.trim().toLowerCase();
@@ -212,7 +194,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     });
   }, [tareasPorPlantilla, busqueda]);
 
-  // --- columnas tablero ---
   const tareasNoRealizadas = useMemo(
     () =>
       tareasFiltradas.filter(
@@ -234,7 +215,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
   const totalEnProceso = tareasEnProceso.length;
   const totalRealizadas = tareasRealizadas.length;
 
-  // --- derivado: tareas para la vista tabla (todas, filtradas por estado si aplica) ---
   const tareasTabla = useMemo(() => {
     const base = tareasFiltradas;
     const filtradasPorEstado =
@@ -263,7 +243,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     return tareasTabla.slice(start, end);
   }, [tareasTabla, pagina]);
 
-  // --- derivado: tareas pendientes/vencidas para exportar a Excel ---
   const tareasPendientesParaExcel = useMemo(
     () =>
       tareasFiltradas.filter(
@@ -272,19 +251,19 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     [tareasFiltradas]
   );
 
-  // reset de página cuando cambia plantilla / búsqueda / filtro estado
+  // reset página al cambiar filtros principales
   useEffect(() => {
     setPagina(1);
   }, [plantillaSeleccionadaId, busqueda, estadoFiltroTabla]);
 
-  // reset selección cuando cambia plantilla / vista
+  // reset selección al cambiar plantilla / subvista
   useEffect(() => {
     setSelectedIds([]);
   }, [plantillaSeleccionadaId, subVista]);
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------
   // Cargar plantillas
-  // ---------------------------------------------------------------------------
+  // -----------------------------
   useEffect(() => {
     const fetchPlantillas = async () => {
       setLoadingPlantillas("loading");
@@ -317,9 +296,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     fetchPlantillas();
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Función auxiliar para cargar tareas de una plantilla con filtros
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Cargar tareas por plantilla
+  // -----------------------------
   const fetchTareasPorPlantilla = async (
     idTareaPlantilla: number,
     anio: number,
@@ -366,9 +345,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     }
   };
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------
   // Seleccionar plantilla
-  // ---------------------------------------------------------------------------
+  // -----------------------------
   const handleSelectPlantilla = (value: string) => {
     if (!value) {
       setPlantillaSeleccionadaId("");
@@ -385,9 +364,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     fetchTareasPorPlantilla(id, anioFiltro, mesFiltro);
   };
 
-  // ---------------------------------------------------------------------------
-  // Si cambia mes/año y hay plantilla seleccionada, recargar tareas
-  // ---------------------------------------------------------------------------
+  // recargar al cambiar mes/año y haya plantilla escogida
   useEffect(() => {
     if (typeof plantillaSeleccionadaId === "number") {
       fetchTareasPorPlantilla(plantillaSeleccionadaId, anioFiltro, mesFiltro);
@@ -395,120 +372,23 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anioFiltro, mesFiltro, trabajadorIdFiltro]);
 
-  // ---------------------------------------------------------------------------
-  // HANDLERS MODAL COMPLETAR CON ARCHIVO (1 tarea)
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Modal completar (usa SIEMPRE el modal multi, aunque sea 1 tarea)
+  // -----------------------------
   const abrirModalCompletar = (t: TareaAsignadaConCliente) => {
-    setTareaParaCompletar({
-      id_tarea_asignada: t.id_tarea_asignada,
-      rutCliente: t.rutCliente,
-      clienteRazonSocial: t.clienteRazonSocial,
-      fechaProgramada: t.fechaProgramada,
-      tareaPlantilla: {
-        nombre: t.tareaPlantilla?.nombre ?? null,
-        codigoDocumento: t.tareaPlantilla?.codigoDocumento,
-      },
-    });
-    setArchivoSeleccionado(null);
-    setErrorModal(null);
-    setModalOpen(true);
+    const initialFiles: FilesMap = {
+      [t.id_tarea_asignada]: null,
+    };
+
+    setFilesMap(initialFiles);
+    setTareasParaMultiCompletar([t]);
+    setMultiError(null);
+    setMultiModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setModalOpen(false);
-    setTareaParaCompletar(null);
-    setArchivoSeleccionado(null);
-    setErrorModal(null);
-  };
-
-  const handleFileChangeModal = (file: File | null) => {
-    setArchivoSeleccionado(file);
-    if (file) setErrorModal(null);
-  };
-
-  const handleConfirmModal = async () => {
-    if (!tareaParaCompletar) return;
-    if (!archivoSeleccionado) {
-      setErrorModal("Debes seleccionar un archivo para completar la tarea.");
-      return;
-    }
-
-    const tareaId = tareaParaCompletar.id_tarea_asignada;
-
-    try {
-      setIsSubmittingArchivo(true);
-      setErrorModal(null);
-
-      // 1) Subir archivo
-      const formData = new FormData();
-      formData.append("archivo", archivoSeleccionado);
-
-      const uploadRes = await fetch(
-        `${API_BASE_URL}/tareas/${tareaId}/archivos`,
-        {
-          method: "POST",
-          headers: getAuthHeaders(), // solo Authorization
-          body: formData,
-        }
-      );
-
-      if (!uploadRes.ok) {
-        throw new Error(`Error subiendo archivo (${uploadRes.status})`);
-      }
-
-      // 2) Actualizar estado a COMPLETADA
-      const nowIso = new Date().toISOString();
-
-      const patchRes = await fetch(
-        `${API_BASE_URL}/tareas/${tareaId}/estado`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            estado: "COMPLETADA" as EstadoTarea,
-            fechaComplecion: nowIso,
-          }),
-        }
-      );
-
-      if (!patchRes.ok) {
-        throw new Error(`Error actualizando estado (${patchRes.status})`);
-      }
-
-      const updated: TareaAsignada = await patchRes.json();
-
-      // 3) Actualizar localmente
-      setTareasPorPlantilla((prev) =>
-        prev.map((t) =>
-          t.id_tarea_asignada === tareaId
-            ? {
-                ...t,
-                estado: updated.estado,
-                fechaComplecion:
-                  updated.fechaComplecion ?? t.fechaComplecion ?? nowIso,
-              }
-            : t
-        )
-      );
-
-      // 4) Cerrar modal
-      handleCloseModal();
-    } catch (err) {
-      console.error("[Front] Error completando tarea con archivo", err);
-      setErrorModal(
-        "No se pudo subir el archivo y completar la tarea. Intenta nuevamente."
-      );
-    } finally {
-      setIsSubmittingArchivo(false);
-    }
-  };
-
-  // ---------------------------------------------------------------------------
-  // HANDLERS MODAL MULTI-COMPLETAR
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Modal multi-completar
+  // -----------------------------
   const abrirModalMultiCompletar = (ids: number[]) => {
     const seleccionadas = tareasPorPlantilla.filter((t) =>
       ids.includes(t.id_tarea_asignada)
@@ -542,10 +422,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     if (file) setMultiError(null);
   };
 
-  const handleMultiConfirm = async () => {
+  const handleMultiConfirm = async (_sendEmail?: boolean) => {
     if (!tareasParaMultiCompletar.length) return;
 
-    // validar que todas tengan archivo
     const faltantes = tareasParaMultiCompletar.filter(
       (t) => !filesMap[t.id_tarea_asignada]
     );
@@ -611,7 +490,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
 
           const updated: TareaAsignada = await patchRes.json();
 
-          // actualizar en memoria
           setTareasPorPlantilla((prev) =>
             prev.map((tp) =>
               tp.id_tarea_asignada === tareaId
@@ -627,7 +505,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         })
       );
 
-      // limpiar selección y cerrar
       setSelectedIds([]);
       closeMultiModal();
     } catch (err) {
@@ -640,9 +517,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Drag & Drop tipo Trello
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Drag & Drop – tipo Trello
+  // -----------------------------
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -656,9 +533,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     );
     if (!tarea) return;
 
-    // Si la arrastran a "Completadas" => abrir modal (solo si no está ya completada)
     if (destination.droppableId === "col-realizadas") {
       if (tarea.estado !== "COMPLETADA") {
+        // 👉 Al arrastrar a "Completadas" se abre el modal multi (para esa 1 tarea)
         abrirModalCompletar(tarea);
       }
       return;
@@ -677,7 +554,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         return;
     }
 
-    // Actualizar localmente
     setTareasPorPlantilla((prev) =>
       prev.map((t) =>
         t.id_tarea_asignada === idTarea
@@ -689,7 +565,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
       )
     );
 
-    // PATCH backend (solo estado)
     try {
       const headers: HeadersInit = {
         "Content-Type": "application/json",
@@ -703,22 +578,35 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         }),
       });
     } catch (err) {
-      console.error("[Front] Error actualizando estado en backend", err);
+      console.error("[Front] Error actualizando estado en.backend", err);
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Acciones masivas (multi-select)
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Acciones masivas
+  // -----------------------------
   const bulkUpdateEstado = async (nuevoEstado: EstadoTarea) => {
     if (!selectedIds.length) return;
 
+    // 🟡 CASO ESPECIAL: COMPLETADA
     if (nuevoEstado === "COMPLETADA") {
-      // abrir modal MULTI ARCHIVOS en lugar de alert
+      // Si solo hay 1 tarea seleccionada, usamos el mismo modal multi pero con 1
+      if (selectedIds.length === 1) {
+        const tarea = tareasPorPlantilla.find(
+          (t) => t.id_tarea_asignada === selectedIds[0]
+        );
+        if (tarea) {
+          abrirModalCompletar(tarea);
+        }
+        return;
+      }
+
+      // Si hay 2 o más, usamos el modal MULTI
       abrirModalMultiCompletar(selectedIds);
       return;
     }
 
+    // 🔵 Para otros estados (PENDIENTE / EN_PROCESO) sí es masivo directo
     setTareasPorPlantilla((prev) =>
       prev.map((t) =>
         selectedIds.includes(t.id_tarea_asignada)
@@ -754,9 +642,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Exportar pendientes a Excel (solo PENDIENTE/VENCIDA)
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Exportar pendientes a Excel
+  // -----------------------------
   const exportPendientesToExcel = async () => {
     if (!tareasPendientesParaExcel.length) return;
 
@@ -783,7 +671,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
       fontSize: 14,
       horizontalAlignment: "center",
       verticalAlignment: "center",
-      fill: "FFD966",
+      fill: "FFD966", // dorado suave
     });
 
     sheet.cell("A2").value(`Generado el ${hoy}`);
@@ -881,9 +769,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // ---------------------------------------------------------------------------
-  // RENDER
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // Render
+  // -----------------------------
   const nombreMes = (mes: number) =>
     [
       "",
@@ -903,7 +791,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
 
   const anioActual = now.getFullYear();
   const opcionesAnios = [anioActual - 1, anioActual, anioActual + 1];
-  const canConfirm = !!archivoSeleccionado;
 
   return (
     <div className="flex flex-col gap-4">
@@ -913,13 +800,13 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
           <div>
             <h2
               className="text-lg font-semibold"
-              style={{ color: "var(--primary-color)" }}
+              style={{ color: "#1C1C1C" }} // negro
             >
               Tarea repetida por RUT
             </h2>
             <p className="text-xs text-black/50">
-              Elige una tarea y verás todas las asignaciones, en un tablero
-              tipo Trello o en vista tabla.
+              Elige una tarea y verás todas las asignaciones en tablero tipo
+              Kanban o en vista tabla.
             </p>
           </div>
 
@@ -942,7 +829,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
               <select
                 value={plantillaSeleccionadaId}
                 onChange={(e) => handleSelectPlantilla(e.target.value)}
-                className="w-full border border-black/15 rounded-lg px-3 py-2 text-xs outline-none focus:border-[var(--secondary-color)]"
+                className="w-full border border-black/15 rounded-lg px-3 py-2 text-xs outline-none focus:border-[#D4AF37] bg-white"
               >
                 <option value="">Selecciona una tarea…</option>
                 {plantillas.map((p) => {
@@ -972,7 +859,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         {plantillaSeleccionadaId && (
           <>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-2">
-              <div className="text-[11px] text-black/60 bg-[var(--tertiary-color)] rounded-xl px-3 py-2">
+              <div className="text-[11px] text-black/70 bg-[#F5F5F5] rounded-xl px-3 py-2 border border-black/5">
                 <p>
                   Mostrando asignaciones de la tarea seleccionada para{" "}
                   <span className="font-semibold">
@@ -983,8 +870,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                 </p>
               </div>
 
-              {/* selector sub-vista */}
-              <div className="inline-flex bg-black/5 rounded-full p-0.5 text-[11px]">
+              <div className="inline-flex bg-black/5 rounded-full p-0.5 text-[11px] self-start sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setSubVista("tarjetas")}
@@ -994,7 +880,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                       : "text-black/60"
                   }`}
                 >
-                  Vista tarjetas (tablero)
+                  Vista tarjetas
                 </button>
                 <button
                   type="button"
@@ -1010,9 +896,17 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
               </div>
             </div>
 
+            {/* ⚠️ Mensaje sobre correo en esta vista */}
+            <div className="mt-2 text-[11px] text-[#7C5A0B] bg-[#FFF7D6] border border-[#D4AF37]/60 rounded-xl px-3 py-2">
+              Desde <span className="font-semibold">"Vista por tarea"</span> por
+              el momento solo puedes subir archivos y completar tareas. El envío
+              de correos al cliente se realiza desde la vista{" "}
+              <span className="font-semibold">"Por RUT"</span>.
+            </div>
+
             {/* filtros de mes/año */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 mt-2">
-              <div className="flex items-center gap-2 text-[11px]">
+              <div className="flex items-center gap-3 text-[11px]">
                 <div>
                   <label className="block font-semibold text-black/70 mb-1">
                     Mes
@@ -1020,7 +914,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                   <select
                     value={mesFiltro}
                     onChange={(e) => setMesFiltro(Number(e.target.value))}
-                    className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[var(--secondary-color)]"
+                    className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                       <option key={m} value={m}>
@@ -1036,7 +930,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                   <select
                     value={anioFiltro}
                     onChange={(e) => setAnioFiltro(Number(e.target.value))}
-                    className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[var(--secondary-color)]"
+                    className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                   >
                     {opcionesAnios.map((y) => (
                       <option key={y} value={y}>
@@ -1050,25 +944,25 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
           </>
         )}
 
-        {/* navbar de búsqueda */}
+        {/* búsqueda */}
         {plantillaSeleccionadaId && tareasPorPlantilla.length > 0 && (
           <div className="mt-2">
             <label className="block text-[11px] font-semibold text-black/70 mb-1">
               Buscar tareas (RUT, razón social, código, nombre, nota…)
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col xs:flex-row xs:items-center gap-2">
               <input
                 type="text"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Ej: 76.511.417-9, PANEXPRESS, A01, 'convenio'..."
-                className="flex-1 border border-black/15 rounded-lg px-3 py-2 text-xs outline-none focus:border-[var(--secondary-color)]"
+                className="flex-1 border border-black/15 rounded-lg px-3 py-2 text-xs outline-none focus:border-[#D4AF37] bg-white"
               />
               {busqueda && (
                 <button
                   type="button"
                   onClick={() => setBusqueda("")}
-                  className="text-[11px] px-2 py-1 rounded border border-black/10 hover:bg-black/5"
+                  className="text-[11px] px-3 py-1.5 rounded-lg border border-black/10 hover:bg-black/5 self-start xs:self-auto"
                 >
                   Limpiar
                 </button>
@@ -1104,20 +998,20 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
           loadingTareasPlantilla === "success" &&
           tareasPorPlantilla.length === 0 && (
             <p className="text-sm text-black/50">
-              Ningún cliente tiene asignada esta tarea en{" "}
-              {nombreMes(mesFiltro)} {anioFiltro}.
+              Ningún cliente tiene asignada esta tarea en {nombreMes(mesFiltro)}{" "}
+              {anioFiltro}.
             </p>
           )}
 
-        {/* SUBVISTA: TABLERO / TARJETAS */}
+        {/* SUBVISTA: TABLERO */}
         {plantillaSeleccionadaId &&
           subVista === "tarjetas" &&
           loadingTareasPlantilla === "success" &&
           tareasFiltradas.length > 0 && (
             <>
-              {/* métricas + barra de acciones masivas */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3 text-[11px]">
-                <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
+              {/* métricas + acciones masivas */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3 text-[11px]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
                   <div className="flex items-center gap-2 bg-amber-50/80 border border-amber-100 rounded-xl px-3 py-2">
                     <ListTodo className="w-4 h-4 text-amber-600" />
                     <div>
@@ -1152,9 +1046,9 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                 </div>
 
                 {totalTareas > 0 && (
-                  <div className="flex-1 md:flex-none flex flex-col md:flex-row md:items-center md:justify-end gap-2 bg-black/[0.02] border border-black/5 rounded-xl px-3 py-2">
+                  <div className="flex-1 md:flex-none flex flex-col md:flex-row md:items-center md:justify-end gap-2 bg-[#F5F5F5] border border-black/5 rounded-xl px-3 py-2">
                     <div>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-black/80">
                         Seleccionadas: {selectedIds.length}
                       </span>
                       <span className="text-black/50">
@@ -1204,7 +1098,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                 )}
               </div>
 
-              {/* tablero tipo Trello */}
+              {/* Tablero Kanban */}
               <DragDropContext onDragEnd={handleDragEnd}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
                   {/* NO REALIZADAS */}
@@ -1213,7 +1107,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`flex flex-col rounded-2xl border border-black/5 bg-black/[0.02] p-2 min-h-[220px] ${
+                        className={`flex flex-col rounded-2xl border border-black/5 bg-[#F5F5F5] p-2 min-h-[220px] ${
                           snapshot.isDraggingOver
                             ? "ring-2 ring-amber-200 bg-amber-50/40"
                             : ""
@@ -1233,6 +1127,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                               key={t.id_tarea_asignada}
                               draggableId={String(t.id_tarea_asignada)}
                               index={index}
+                              isDragDisabled={t.estado === "COMPLETADA"}
                             >
                               {(dragProvided, dragSnapshot) => (
                                 <article
@@ -1317,7 +1212,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`flex flex-col rounded-2xl border border-black/5 bg-black/[0.02] p-2 min-h-[220px] ${
+                        className={`flex flex-col rounded-2xl border border-black/5 bg-[#F5F5F5] p-2 min-h-[220px] ${
                           snapshot.isDraggingOver
                             ? "ring-2 ring-sky-200 bg-sky-50/40"
                             : ""
@@ -1337,6 +1232,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                               key={t.id_tarea_asignada}
                               draggableId={String(t.id_tarea_asignada)}
                               index={index}
+                              isDragDisabled={t.estado === "COMPLETADA"}
                             >
                               {(dragProvided, dragSnapshot) => (
                                 <article
@@ -1352,7 +1248,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                                       : ""
                                   }`}
                                 >
-                                  <div className="pt-1 flex flex-col items-center gap-1">
+                                  <div className="pt-1 flex flex-col.items-center gap-1">
                                     <input
                                       type="checkbox"
                                       checked={isSelected(
@@ -1421,7 +1317,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`flex flex-col rounded-2xl border border-black/5 bg-black/[0.02] p-2 min-h-[220px] ${
+                        className={`flex flex-col rounded-2xl border border-black/5 bg-[#F5F5F5] p-2 min-h-[220px] ${
                           snapshot.isDraggingOver
                             ? "ring-2 ring-emerald-200 bg-emerald-50/40"
                             : ""
@@ -1441,6 +1337,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                               key={t.id_tarea_asignada}
                               draggableId={String(t.id_tarea_asignada)}
                               index={index}
+                              isDragDisabled={true}
                             >
                               {(dragProvided, dragSnapshot) => (
                                 <article
@@ -1450,36 +1347,12 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                                   style={{
                                     ...dragProvided.draggableProps.style,
                                   }}
-                                  className={`border border-black/5 rounded-xl p-2 shadow-sm bg-white flex gap-2 transition-transform text-[11px] ${
+                                  className={`border border-black/5 rounded-xl p-2 shadow-sm bg-white transition-transform text-[11px] ${
                                     dragSnapshot.isDragging
                                       ? "ring-2 ring-emerald-300 scale-[1.02]"
                                       : ""
                                   }`}
                                 >
-                                  <div className="pt-1 flex flex-col items-center gap-1">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected(
-                                        t.id_tarea_asignada
-                                      )}
-                                      onChange={(e) => {
-                                        e.stopPropagation();
-                                        toggleSelect(t.id_tarea_asignada);
-                                      }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="w-3 h-3 cursor-pointer"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        abrirModalCompletar(t);
-                                      }}
-                                      className="text-[9px] text-emerald-700 underline"
-                                    >
-                                      Ver / subir otro
-                                    </button>
-                                  </div>
                                   <div className="flex flex-col gap-1">
                                     <p className="font-mono text-[10px] text-black/50">
                                       {t.rutCliente}
@@ -1529,7 +1402,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
             </>
           )}
 
-        {/* SUBVISTA: VISTA TABLA (todas las tareas del período) */}
+        {/* SUBVISTA: TABLA */}
         {plantillaSeleccionadaId &&
           subVista === "tabla" &&
           loadingTareasPlantilla === "success" && (
@@ -1556,7 +1429,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap.items-center gap-2">
                   <div className="flex items-center gap-1 text-[11px]">
                     <span className="text-black/60">Estado:</span>
                     <select
@@ -1566,10 +1439,12 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                           e.target.value as "TODOS" | EstadoTarea
                         )
                       }
-                      className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[var(--secondary-color)] bg-white"
+                      className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                     >
                       <option value="TODOS">Todos</option>
-                      <option value="PENDIENTE">No realizado (pendiente)</option>
+                      <option value="PENDIENTE">
+                        No realizado (pendiente)
+                      </option>
                       <option value="VENCIDA">No realizado (vencida)</option>
                       <option value="EN_PROCESO">En proceso</option>
                       <option value="COMPLETADA">Completada</option>
@@ -1580,7 +1455,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
                     <button
                       type="button"
                       onClick={exportPendientesToExcel}
-                      className="self-start md:self-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 bg-[var(--primary-color)] text-white hover:brightness-105"
+                      className="self-start md:self-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 bg-[#D4AF37] text-white hover:brightness-105"
                     >
                       Exportar pendientes a Excel
                     </button>
@@ -1693,19 +1568,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
           )}
       </section>
 
-      {/* MODAL COMPLETAR (1 tarea) */}
-      <CompletarTareaModal
-        open={modalOpen}
-        tarea={tareaParaCompletar}
-        isSubmitting={isSubmittingArchivo}
-        errorMessage={errorModal}
-        onClose={handleCloseModal}
-        onFileChange={handleFileChangeModal}
-        onConfirm={handleConfirmModal}
-        canConfirm={canConfirm}
-      />
-
-      {/* MODAL MULTI COMPLETAR */}
+      {/* MODAL MULTI COMPLETAR (1 o N tareas) */}
       <MultiCompletarTareasModal
         open={multiModalOpen}
         tareas={tareasParaMultiCompletar}
@@ -1717,8 +1580,22 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         onConfirm={handleMultiConfirm}
         getRazonSocial={getRazonSocialByRut}
         formatFecha={formatFecha}
+        // 👇 En esta vista no queremos ni carga masiva ni checkbox de correo
+        enableSmartAttach={false}
+        enableSendEmail={false}
       />
 
+      {/* ⚠️ MODAL ENVIAR CORREO DESHABILITADO EN ESTA VISTA */}
+      {/* 
+      <EnviarCorreoTareaModal
+        open={correoModalOpen}
+        tarea={tareaParaCorreo}
+        isSubmitting={isSendingCorreo}
+        errorMessage={correoError}
+        onClose={cerrarModalCorreo}
+        onSend={handleSendCorreo}
+      />
+      */}
     </div>
   );
 };

@@ -22,6 +22,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  type PieLabelRenderProps,
 } from "recharts";
 
 type VistaTareas = "porRut" | "porTarea";
@@ -308,16 +309,18 @@ const TareasSupervisionPage: React.FC = () => {
 
   return (
     <div className="mt-6 flex flex-col gap-5">
-      {/* HEADER */}
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-black/80 flex items-center gap-2">
-          <BarChart2 className="w-5 h-5 text-[var(--secondary-color)]" />
-          Supervisión de tareas
-        </h1>
-        <p className="text-xs text-black/50">
-          Monitoriza el desempeño de los agentes, compara por área (ej.
-          Contabilidad) y revisa sus tareas en detalle.
-        </p>
+      {/* HEADER (sin crear/asignar tareas) */}
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold text-black/80 flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-[var(--secondary-color)]" />
+            Supervisión de tareas
+          </h1>
+          <p className="text-xs text-black/50">
+            Monitoriza el desempeño de los agentes, compara por área (ej.
+            Contabilidad) y revisa sus tareas en detalle.
+          </p>
+        </div>
       </header>
 
       {/* PANEL PRINCIPAL: FILTROS + KPIs + GRÁFICOS */}
@@ -600,9 +603,10 @@ const TareasSupervisionPage: React.FC = () => {
                       outerRadius={70}
                       innerRadius={40}
                       paddingAngle={2}
-                      label={(entry: any) => {
-                        const percent = entry.percent ?? 0; // si viene undefined, usa 0
-                        return `${entry.name} (${(percent * 100).toFixed(0)}%)`;
+                      label={(props: PieLabelRenderProps) => {
+                        const name = props.name ?? "";
+                        const percent = props.percent ?? 0;
+                        return `${name} (${(percent * 100).toFixed(0)}%)`;
                       }}
                     >
                       {dataPieEstados.map((entry, index) => (

@@ -16,6 +16,7 @@ import {
   BookCheck,
   ChevronDown,
   HandHelping,
+  History, // 👈 NUEVO
 } from "lucide-react";
 import {
   Routes,
@@ -412,6 +413,13 @@ export default function CintaxIntranetMockup() {
   const authPayload = getAuthPayload();
   const canSeeSupervisor = isSupervisorOrAdmin();
 
+  // 👉 nombre que se va a mostrar en el header
+  const displayName =
+    authPayload?.nombre ||
+    authPayload?.nombreUsuario ||
+    (authPayload?.email ? authPayload.email.split("@")[0] : "") ||
+    "Usuario";
+
   const handleLogout = async () => {
     try {
       const token =
@@ -489,13 +497,7 @@ export default function CintaxIntranetMockup() {
         }
       `}</style>
 
-      <div
-        className={
-          hideChrome
-            ? "min-h-screen"
-            : "grid lg:grid-cols-[260px_1fr] min-h-screen"
-        }
-      >
+      <div className={hideChrome ? "min-h-screen" : "min-h-screen lg:pl-[260px]"}>
         {!hideChrome && sidebarOpen && (
           <div
             className="sidebar-overlay open"
@@ -649,6 +651,24 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
+                {/* 👇 NUEVO LINK: Notas de versión (MOBILE) */}
+                <NavLink
+                  to="/notas-version"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <History size={18} />
+                  </span>
+                  <span className="truncate text-left">Notas de versión</span>
+                </NavLink>
+
                 <TicketsNav onNavigate={() => setSidebarOpen(false)} />
                 <SideLink
                   icon={<LifeBuoy size={18} />}
@@ -673,8 +693,19 @@ export default function CintaxIntranetMockup() {
               </div>
             </aside>
 
-            {/* SIDEBAR DESKTOP */}
-            <aside className="hidden lg:flex bg-[var(--primary-color)] text-white px-4 py-5 flex-col gap-4 min-h-screen">
+            {/* SIDEBAR DESKTOP FIJO */}
+            <aside
+              className="
+                hidden lg:flex
+                fixed inset-y-0 left-0
+                w-[260px]
+                bg-[var(--primary-color)] text-white
+                px-4 py-5
+                flex-col gap-4
+                z-40
+                overflow-y-auto
+              "
+            >
               <div className="flex items-center gap-2 px-3">
                 <img
                   src="https://cintax.cl/wp-content/themes/cintax/assets/images/logo-cintax.svg"
@@ -768,6 +799,23 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
+                {/* 👇 NUEVO LINK: Notas de versión (DESKTOP) */}
+                <NavLink
+                  to="/notas-version"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <History size={18} />
+                  </span>
+                  <span className="truncate text-left">Notas de versión</span>
+                </NavLink>
+
                 <TicketsNav />
                 <SideLink
                   icon={<HandHelping size={18} />}
@@ -831,6 +879,12 @@ export default function CintaxIntranetMockup() {
             <Route
               path="/tickets/:cat"
               element={<PrivateRoute element={<TicketsPage />} />}
+            />
+
+            {/* 👇 NUEVA RUTA: Notas de versión */}
+            <Route
+              path="/notas-version"
+              element={<PrivateRoute element={<ReleaseNotesPage />} />}
             />
 
             {/* RUTA SUPERVISOR PROTEGIDA */}

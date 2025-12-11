@@ -17,8 +17,10 @@ import {
 } from "@hello-pangea/dnd";
 
 import type { EstadoTarea, TareaAsignada } from "./tiposTareas";
-import CompletarTareaModal from "./CompletarTareaModal";
 import MultiCompletarTareasModal from "./MultiCompletarTareasModal";
+import EnviarCorreoTareaModal, {
+  TareaCorreoResumen,
+} from "./EnviarCorreoTareaModal";
 
 const API_BASE_URL =
   // @ts-ignore
@@ -39,18 +41,6 @@ type RutConNombre = {
 type SubVista = "tablero" | "tabla";
 
 const PAGE_SIZE_TABLA = 10;
-
-// Resumen para el modal simple
-type TareaResumenModal = {
-  id_tarea_asignada: number;
-  rutCliente?: string | null;
-  clienteRazonSocial?: string | null;
-  fechaProgramada: string;
-  tareaPlantilla?: {
-    nombre: string | null;
-    codigoDocumento?: string | null;
-  } | null;
-};
 
 const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const [ruts, setRuts] = useState<RutConNombre[]>([]);
@@ -76,9 +66,9 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const [loadingTodas, setLoadingTodas] = useState<LoadState>("idle");
   const [errorTodas, setErrorTodas] = useState<string | null>(null);
   const [paginaTabla, setPaginaTabla] = useState(1);
-  const [estadoFiltroTabla, setEstadoFiltroTabla] = useState<"TODOS" | EstadoTarea>(
-    "TODOS"
-  );
+  const [estadoFiltroTabla, setEstadoFiltroTabla] = useState<
+    "TODOS" | EstadoTarea
+  >("TODOS");
 
   // selección múltiple (solo tablero)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -88,13 +78,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const [anioFiltro, setAnioFiltro] = useState<number>(now.getFullYear());
   const [mesFiltro, setMesFiltro] = useState<number>(now.getMonth() + 1); // 1–12
 
-  // --- estado modal completar con archivo (1 tarea) ---
-  const [modalTarea, setModalTarea] = useState<TareaResumenModal | null>(null);
-  const [modalFile, setModalFile] = useState<File | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-
-  // --- llave para forzar recargas desde acciones (completar tarea, etc.) ---
+  // --- llave para forzar recargas desde acciones ---
   const [reloadKey, setReloadKey] = useState(0);
 
   // --- estado modal masivo (N tareas con N archivos) ---
@@ -107,6 +91,14 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const [multiTareasSeleccionadas, setMultiTareasSeleccionadas] = useState<
     TareaAsignada[]
   >([]);
+
+  // --- estado modal correo ---
+  const [correoModalOpen, setCorreoModalOpen] = useState(false);
+  const [tareaCorreo, setTareaCorreo] = useState<TareaCorreoResumen | null>(
+    null
+  );
+  const [correoLoading, setCorreoLoading] = useState(false);
+  const [correoError, setCorreoError] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // helpers auth
@@ -143,14 +135,12 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       case "PENDIENTE":
         return (
           <span className={`${base} bg-amber-50 text-amber-700`}>
-            No realizada
+            No realizado
           </span>
         );
       case "VENCIDA":
         return (
-          <span className={`${base} bg-rose-50 text-rose-700`}>
-            No realizada (vencida)
-          </span>
+          <span className={`${base} bg-rose-50 text-rose-700`}>Vencida</span>
         );
       case "EN_PROCESO":
         return (
@@ -159,7 +149,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       case "COMPLETADA":
         return (
           <span className={`${base} bg-emerald-50 text-emerald-700`}>
-            Realizada
+            Completada
           </span>
         );
       default:
@@ -196,9 +186,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const coincidePeriodo = (fechaIso: string | null | undefined) => {
     if (!fechaIso) return false;
     const d = new Date(fechaIso);
-    return (
-      d.getFullYear() === anioFiltro && d.getMonth() + 1 === mesFiltro
-    );
+    return d.getFullYear() === anioFiltro && d.getMonth() + 1 === mesFiltro;
   };
 
   // ---------------------------------------------------------------------------
@@ -443,7 +431,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
     const term = busquedaTarea.trim().toLowerCase();
 
     return todasTareas.filter((t) => {
-      // nos aseguramos que quede filtrado por mes/año
+      // filtrado por mes/año
       if (!coincidePeriodo(t.fechaProgramada)) return false;
 
       if (!term) return true;
@@ -501,136 +489,20 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   }, [todasTareasOrdenadas]);
 
   // ---------------------------------------------------------------------------
-  // helpers modal completar (1 tarea, subir archivo)
+  // helpers MODAL MULTI-COMPLETAR
   // ---------------------------------------------------------------------------
-  const abrirModalCompletar = (t: TareaAsignada) => {
-    const resumen: TareaResumenModal = {
-      id_tarea_asignada: t.id_tarea_asignada,
-      rutCliente: t.rutCliente,
-      clienteRazonSocial: getRazonSocial(t.rutCliente),
-      fechaProgramada: t.fechaProgramada,
-      tareaPlantilla: t.tareaPlantilla
-        ? {
-            nombre: t.tareaPlantilla.nombre,
-            codigoDocumento: t.tareaPlantilla.codigoDocumento ?? undefined,
-          }
-        : null,
-    };
-    setModalTarea(resumen);
-    setModalFile(null);
-    setModalError(null);
-  };
+  const abrirModalCompletarConTareas = (lista: TareaAsignada[]) => {
+    if (!lista.length) return;
 
-  const cerrarModalCompletar = () => {
-    if (modalLoading) return;
-    setModalTarea(null);
-    setModalFile(null);
-    setModalError(null);
-  };
+    const initialMap: Record<number, File | null> = {};
+    lista.forEach((t) => {
+      initialMap[t.id_tarea_asignada] = null;
+    });
 
-  const handleModalFileChange = (file: File | null) => {
-    setModalFile(file);
-    if (file) setModalError(null);
-  };
-
-  const handleConfirmCompletar = async () => {
-    if (!modalTarea) return;
-    if (!modalFile) {
-      setModalError("Debes seleccionar un archivo para completar la tarea.");
-      return;
-    }
-
-    const tareaId = modalTarea.id_tarea_asignada;
-
-    try {
-      setModalLoading(true);
-      setModalError(null);
-
-      // 1) Subir archivo a /tareas/:id/archivos
-      const formData = new FormData();
-      formData.append("archivo", modalFile);
-
-      const uploadRes = await fetch(
-        `${API_BASE_URL}/tareas/${tareaId}/archivos`,
-        {
-          method: "POST",
-          headers: getAuthHeaders(), // solo Authorization
-          body: formData,
-        }
-      );
-
-      if (!uploadRes.ok) {
-        throw new Error(`Error subiendo archivo (${uploadRes.status})`);
-      }
-
-      // 2) Actualizar estado a COMPLETADA
-      const nowIso = new Date().toISOString();
-
-      const patchRes = await fetch(
-        `${API_BASE_URL}/tareas/${tareaId}/estado`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            estado: "COMPLETADA" as EstadoTarea,
-            fechaComplecion: nowIso,
-          }),
-        }
-      );
-
-      if (!patchRes.ok) {
-        throw new Error(`Error actualizando estado (${patchRes.status})`);
-      }
-
-      const updated: TareaAsignada = await patchRes.json();
-
-      // 3) Actualizar lista de tareas del tablero
-      setTareas((prev) =>
-        prev.map((t) =>
-          t.id_tarea_asignada === tareaId
-            ? {
-                ...t,
-                estado: updated.estado,
-                fechaComplecion:
-                  updated.fechaComplecion ?? t.fechaComplecion ?? nowIso,
-              }
-            : t
-        )
-      );
-
-      // 4) Actualizar también la lista de todasTareas (vista tabla), si ya está cargada
-      setTodasTareas((prev) =>
-        prev.map((t) =>
-          t.id_tarea_asignada === tareaId
-            ? {
-                ...t,
-                estado: updated.estado,
-                fechaComplecion:
-                  updated.fechaComplecion ?? t.fechaComplecion ?? nowIso,
-              }
-            : t
-        )
-      );
-
-      // por si estaba seleccionada antes de completar
-      setSelectedIds((prev) => prev.filter((id) => id !== tareaId));
-
-      // 5) Forzar recarga desde el backend
-      setReloadKey((prev) => prev + 1);
-
-      // 6) Cerrar modal
-      cerrarModalCompletar();
-    } catch (err) {
-      console.error("[Front] Error completando tarea con archivo", err);
-      setModalError(
-        "No se pudo subir el archivo y completar la tarea. Intenta nuevamente."
-      );
-    } finally {
-      setModalLoading(false);
-    }
+    setMultiTareasSeleccionadas(lista);
+    setMultiFilesMap(initialMap);
+    setMultiModalError(null);
+    setMultiModalOpen(true);
   };
 
   // ---------------------------------------------------------------------------
@@ -644,15 +516,16 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
     const idTarea = Number(draggableId);
     if (Number.isNaN(idTarea)) return;
 
-    // Si la intención es COMPLETAR (mover a col-realizadas desde otra columna),
-    // abrimos el modal de 1 tarea y NO actualizamos estado directo.
+    // 👉 Si la intención es COMPLETAR (mover a col-realizadas),
+    // abrimos el modal multi (aunque solo haya 1 tarea).
     if (
       destination.droppableId === "col-realizadas" &&
       source.droppableId !== "col-realizadas"
     ) {
       const tarea = tareas.find((t) => t.id_tarea_asignada === idTarea);
       if (!tarea) return;
-      abrirModalCompletar(tarea);
+
+      abrirModalCompletarConTareas([tarea]);
       return;
     }
 
@@ -715,7 +588,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
     // ❗ No permitir marcar masivamente como COMPLETADA sin archivo
     if (nuevoEstado === "COMPLETADA") {
       alert(
-        "Para marcar tareas como Realizadas debes subir un archivo por cada tarea. Usa el botón “Pasar a Realizadas (con archivo)” para completarlas masivamente con archivo."
+        "Para marcar tareas como Completadas debes subir un archivo por cada tarea. Usa el botón “Pasar a Completadas (con archivo)” para completarlas masivamente con archivo."
       );
       return;
     }
@@ -765,15 +638,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
     );
     if (!seleccionadas.length) return;
 
-    const initialMap: Record<number, File | null> = {};
-    seleccionadas.forEach((t) => {
-      initialMap[t.id_tarea_asignada] = null;
-    });
-
-    setMultiTareasSeleccionadas(seleccionadas);
-    setMultiFilesMap(initialMap);
-    setMultiModalError(null);
-    setMultiModalOpen(true);
+    abrirModalCompletarConTareas(seleccionadas);
   };
 
   const handleMultiFileChange = (tareaId: number, file: File | null) => {
@@ -784,7 +649,28 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
     setMultiModalError(null);
   };
 
-  const handleConfirmCompletarMasivo = async () => {
+  // Abre modal de correo para una tarea (ej: primera del lote masivo)
+  const abrirCorreoParaTarea = (t: TareaAsignada) => {
+    const resumen: TareaCorreoResumen = {
+      id_tarea_asignada: t.id_tarea_asignada,
+      rutCliente: t.rutCliente,
+      clienteRazonSocial: getRazonSocial(t.rutCliente),
+      // Si más adelante agregas email en TareaAsignada, cámbialo aquí
+      clienteEmail: (t as any).clienteEmail ?? null,
+      fechaProgramada: t.fechaProgramada,
+      tareaPlantilla: t.tareaPlantilla
+        ? {
+            nombre: t.tareaPlantilla.nombre,
+            codigoDocumento: t.tareaPlantilla.codigoDocumento ?? undefined,
+          }
+        : null,
+    };
+    setTareaCorreo(resumen);
+    setCorreoError(null);
+    setCorreoModalOpen(true);
+  };
+
+  const handleConfirmCompletarMasivo = async (sendEmail: boolean) => {
     if (!multiTareasSeleccionadas.length) return;
 
     // validar que TODAS tengan archivo
@@ -805,6 +691,9 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       "Content-Type": "application/json",
       ...getAuthHeaders(),
     };
+
+    // guardamos copia antes de limpiar, por si hay que abrir correo
+    const tareasParaCorreo = [...multiTareasSeleccionadas];
 
     try {
       const nowIso = new Date().toISOString();
@@ -881,7 +770,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
         );
       }
 
-      // forzar recarga para refrescar tareas nuevas del siguiente mes
+      // forzar recarga por si hay cambios externos
       setReloadKey((prev) => prev + 1);
 
       // limpiar selección y cerrar
@@ -889,6 +778,11 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       setMultiModalOpen(false);
       setMultiTareasSeleccionadas([]);
       setMultiFilesMap({});
+
+      // 👉 si marcaron "Enviar correo", abrimos el modal de correo
+      if (sendEmail && tareasParaCorreo.length > 0) {
+        abrirCorreoParaTarea(tareasParaCorreo[0]);
+      }
     } catch (err: any) {
       console.error("[Front] Error en completar masivo con archivos", err);
       setMultiModalError(
@@ -901,7 +795,62 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   };
 
   // ---------------------------------------------------------------------------
-  // exportar Excel (igual que ya tenías)
+  // envío de correo desde EnviarCorreoTareaModal
+  // ---------------------------------------------------------------------------
+  const handleEnviarCorreo = async (payload: {
+    para: string;
+    asunto: string;
+    mensaje: string;
+    archivosCorreo: File[];
+  }) => {
+    if (!tareaCorreo) return;
+
+    try {
+      setCorreoLoading(true);
+      setCorreoError(null);
+
+      // 🔹 Armamos FormData para enviar texto + adjuntos
+      const formData = new FormData();
+      formData.append("para", payload.para);
+      formData.append("asunto", payload.asunto);
+      formData.append("mensaje", payload.mensaje);
+
+      payload.archivosCorreo.forEach((file) => {
+        formData.append("adjuntos", file); // 👈 tiene que llamarse "adjuntos"
+      });
+
+      const headers = getAuthHeaders(); // solo Authorization, SIN Content-Type
+
+      const res = await fetch(
+        `${API_BASE_URL}/tareas/${tareaCorreo.id_tarea_asignada}/enviar-correo`,
+        {
+          method: "POST",
+          headers,
+          body: formData,
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const msg = data?.message || `Error enviando correo (${res.status})`;
+        throw new Error(msg);
+      }
+
+      setCorreoModalOpen(false);
+      setTareaCorreo(null);
+    } catch (err: any) {
+      console.error("[Front] Error enviando correo de tarea", err);
+      setCorreoError(
+        err?.message ||
+          "No se pudo enviar el correo al cliente. Intenta nuevamente."
+      );
+    } finally {
+      setCorreoLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // exportar Excel (ajustado a mismos nombres de estado)
   // ---------------------------------------------------------------------------
   const handleExportExcel = async () => {
     if (!todasTareasOrdenadas.length) return;
@@ -973,13 +922,13 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
           const rowNumber = 6 + idx;
           const estadoLegible =
             t.estado === "PENDIENTE"
-              ? "No realizada"
+              ? "No realizado"
               : t.estado === "VENCIDA"
-              ? "No realizada (vencida)"
+              ? "Vencida"
               : t.estado === "EN_PROCESO"
               ? "En proceso"
               : t.estado === "COMPLETADA"
-              ? "Realizada"
+              ? "Completada"
               : t.estado;
 
           sheet.row(rowNumber).cell(1).value(t.rutCliente ?? "");
@@ -1030,7 +979,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   // render
   // ---------------------------------------------------------------------------
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-full">
+    <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4 h-full">
       {/* PANEL IZQUIERDO: RUTs */}
       <aside className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-black/5">
@@ -1263,10 +1212,10 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                   className="border border-black/15 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-[var(--secondary-color)] bg-white"
                 >
                   <option value="TODOS">Todos</option>
-                  <option value="PENDIENTE">No realizadas (pendiente)</option>
-                  <option value="VENCIDA">No realizadas (vencida)</option>
+                  <option value="PENDIENTE">No realizado (pendiente)</option>
+                  <option value="VENCIDA">No realizado (vencida)</option>
                   <option value="EN_PROCESO">En proceso</option>
-                  <option value="COMPLETADA">Realizadas</option>
+                  <option value="COMPLETADA">Completada</option>
                 </select>
               </div>
             )}
@@ -1282,11 +1231,10 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
             )}
           </div>
 
-
           {/* métricas + barra de acciones masivas (solo tablero) */}
           {subVista === "tablero" && (
             <>
-              <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                 <div className="flex items-center gap-2 bg-amber-50/80 border border-amber-100 rounded-xl px-3 py-2">
                   <ListTodo className="w-4 h-4 text-amber-600" />
                   <div>
@@ -1311,7 +1259,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <div>
                     <p className="font-semibold text-emerald-700">
-                      Realizadas
+                      Completadas
                     </p>
                     <p className="text-emerald-800/80">
                       {totalRealizadas} de {totalTareas}
@@ -1342,7 +1290,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                           : "border-amber-300 bg-amber-50/80 text-amber-800 hover:bg-amber-100"
                       }`}
                     >
-                      Pasar a No realizadas
+                      Pasar a No realizado
                     </button>
                     <button
                       type="button"
@@ -1366,7 +1314,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                           : "border-emerald-300 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
                       }`}
                     >
-                      Pasar a Realizadas (con archivo)
+                      Pasar a Completadas (con archivo)
                     </button>
                   </div>
                 </div>
@@ -1582,7 +1530,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                         )}
                       </Droppable>
 
-                      {/* REALIZADAS (bloqueadas, sin drag ni selección) */}
+                      {/* COMPLETADAS (mostrar, sin drag) */}
                       <Droppable droppableId="col-realizadas">
                         {(provided, snapshot) => (
                           <div
@@ -1596,7 +1544,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
                           >
                             <div className="flex items-center justify-between mb-2 px-1">
                               <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                                Realizadas
+                                Completadas
                               </span>
                               <span className="text-[11px] text-emerald-800/80">
                                 {tareasRealizadas.length}
@@ -1837,18 +1785,6 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
         </div>
       </section>
 
-      {/* MODAL COMPLETAR CON ARCHIVO (1 tarea) */}
-      <CompletarTareaModal
-        open={!!modalTarea}
-        tarea={modalTarea}
-        isSubmitting={modalLoading}
-        canConfirm={!!modalFile}
-        errorMessage={modalError}
-        onClose={cerrarModalCompletar}
-        onFileChange={handleModalFileChange}
-        onConfirm={handleConfirmCompletar}
-      />
-
       {/* MODAL COMPLETAR MASIVO (N tareas con N archivos) */}
       <MultiCompletarTareasModal
         open={multiModalOpen}
@@ -1864,6 +1800,19 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
         onConfirm={handleConfirmCompletarMasivo}
         getRazonSocial={getRazonSocial}
         formatFecha={formatFecha}
+      />
+
+      {/* MODAL ENVIAR CORREO */}
+      <EnviarCorreoTareaModal
+        open={correoModalOpen}
+        tarea={tareaCorreo}
+        isSubmitting={correoLoading}
+        errorMessage={correoError}
+        onClose={() => {
+          if (correoLoading) return;
+          setCorreoModalOpen(false);
+        }}
+        onSend={handleEnviarCorreo}
       />
     </div>
   );

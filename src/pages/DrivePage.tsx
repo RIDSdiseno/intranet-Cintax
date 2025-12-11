@@ -740,7 +740,8 @@ setHasMore(!!newNextToken);
 
           {selectedFolder && !noAccess && pageFiles.length > 0 && (
             <>
-              <div className="overflow-x-auto mt-1">
+              {/* Desktop */}
+              <div className="overflow-x-auto mt-1 hidden md:block">
                 <table className="min-w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-black/5 text-[11px] uppercase tracking-wide text-black/50">
@@ -836,6 +837,93 @@ setHasMore(!!newNextToken);
                     })}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile */}
+              <div className="md:hidden mt-2 flex flex-col gap-2">
+                {pageFiles.map((file) => {
+                  const folderLike = isFolder(file.mimeType);
+                  const typeLabel = getFileTypeLabel(file.mimeType, folderLike);
+                  return (
+                    <div
+                      key={file.id}
+                      role={folderLike ? "button" : undefined}
+                      tabIndex={folderLike ? 0 : -1}
+                      onClick={() =>
+                        folderLike
+                          ? openFolder({ id: file.id, name: file.name }, false)
+                          : undefined
+                      }
+                      onKeyDown={(e) => {
+                        if (!folderLike) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openFolder({ id: file.id, name: file.name }, false);
+                        }
+                      }}
+                      className={`rounded-xl border border-black/5 bg-white p-3 shadow-sm flex flex-col gap-2 ${
+                        folderLike ? "cursor-pointer hover:border-black/15" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--tertiary-color)] text-[var(--secondary-color)]">
+                            {folderLike ? (
+                              <FolderIcon size={16} />
+                            ) : (
+                              <FileText size={16} />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">
+                              {file.name}
+                            </p>
+                            <div className="text-[11px] text-black/50 flex items-center gap-2 flex-wrap">
+                              <span>{typeLabel}</span>
+                              {file.modifiedTime && (
+                                <span className="w-1 h-1 rounded-full bg-black/20" />
+                              )}
+                              {file.modifiedTime && (
+                                <span>
+                                  {new Date(
+                                    file.modifiedTime
+                                  ).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {folderLike && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openFolder(
+                                { id: file.id, name: file.name },
+                                false
+                              )
+                            }
+                            className="inline-flex items-center gap-1 rounded-full bg-black/5 px-3 py-1 text-[11px] font-medium text-black/70 hover:bg-black/10"
+                          >
+                            Ver dentro
+                          </button>
+                        )}
+                        {!folderLike && file.webViewLink && (
+                          <a
+                            href={file.webViewLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-color)] px-3 py-1 text-[11px] font-medium text-white hover:bg-black"
+                          >
+                            <ExternalLink size={12} />
+                            Abrir
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* 🔁 Flechas de paginación de archivos (10 en 10) */}

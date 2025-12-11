@@ -38,6 +38,7 @@ import TareasSupervisionPage from "./pages/TareasSupervisionPage";
 import HomePage from "./pages/HomePage";
 import ReleaseNotesPage from "./pages/ReleaseNotesPage";
 
+
 import NotificationsBell from "./components/NotificationsBell";
 
 const API_BASE_URL =

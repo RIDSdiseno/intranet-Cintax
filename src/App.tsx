@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  // ... (tus otras importaciones de lucide-react)
   Home,
   Users,
   FileText,
@@ -16,7 +15,7 @@ import {
   BookCheck,
   ChevronDown,
   HandHelping,
-  History, // 👈 NUEVO
+  History,
 } from "lucide-react";
 import {
   Routes,
@@ -38,13 +37,16 @@ import TareasSupervisionPage from "./pages/TareasSupervisionPage";
 import HomePage from "./pages/HomePage";
 import ReleaseNotesPage from "./pages/ReleaseNotesPage";
 
-
 import NotificationsBell from "./components/NotificationsBell";
 
 const API_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
   "http://localhost:3000/api";
+
+// ------------------------
+// UI Helpers
+// ------------------------
 export const Chip: React.FC<{
   children: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "danger";
@@ -358,6 +360,8 @@ type JwtFrontendPayload = {
   nombre?: string;
   nombreUsuario?: string;
   isSupervisorOrAdmin?: boolean;
+  picture?: string;
+  avatarUrl?: string;
 };
 
 /**
@@ -404,6 +408,9 @@ function PrivateRoute({ element }: { element: JSX.Element }) {
   return isAuthed() ? element : <Navigate to="/login" replace />;
 }
 
+// -------------------------------------
+// APP
+// -------------------------------------
 export default function CintaxIntranetMockup() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -415,12 +422,16 @@ export default function CintaxIntranetMockup() {
   const authPayload = getAuthPayload();
   const canSeeSupervisor = isSupervisorOrAdmin();
 
-  // 👉 nombre que se va a mostrar en el header
+  // nombre que se va a mostrar en el header
   const displayName =
     authPayload?.nombre ||
     authPayload?.nombreUsuario ||
     (authPayload?.email ? authPayload.email.split("@")[0] : "") ||
     "Usuario";
+
+  // foto de perfil (si viene en el token)
+  const avatarUrl = authPayload?.avatarUrl || authPayload?.picture || null;
+  const displayInitial = displayName.charAt(0).toUpperCase();
 
   const handleLogout = async () => {
     try {
@@ -580,22 +591,27 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Inicio</span>
                 </NavLink>
-                <NavLink
-                  to="/personas"
-                  className={({ isActive }) =>
-                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                      isActive
-                        ? "bg-white text-[var(--primary-color)] shadow-sm"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`
-                  }
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <span className="shrink-0">
-                    <Users size={18} />
-                  </span>
-                  <span className="truncate text-left">Personas</span>
-                </NavLink>
+
+                {/* Personas solo visible para supervisor/admin */}
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/personas"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">Personas</span>
+                  </NavLink>
+                )}
+
                 <NavLink
                   to="/drive"
                   className={({ isActive }) =>
@@ -613,7 +629,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
 
-                {/* LINK TAREAS (AGENTES) */}
                 <NavLink
                   to="/tareas"
                   className={({ isActive }) =>
@@ -631,7 +646,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Tareas</span>
                 </NavLink>
 
-                {/* LINK SUPERVISOR SOLO SI PUEDE VERLO */}
                 {canSeeSupervisor && (
                   <NavLink
                     to="/supervisor"
@@ -653,7 +667,6 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
-                {/* 👇 NUEVO LINK: Notas de versión (MOBILE) */}
                 <NavLink
                   to="/notas-version"
                   className={({ isActive }) =>
@@ -695,7 +708,7 @@ export default function CintaxIntranetMockup() {
               </div>
             </aside>
 
-            {/* SIDEBAR DESKTOP FIJO */}
+            {/* SIDEBAR DESKTOP */}
             <aside
               className="
                 hidden lg:flex
@@ -732,21 +745,26 @@ export default function CintaxIntranetMockup() {
                   </span>
                   <span className="truncate text-left">Inicio</span>
                 </NavLink>
-                <NavLink
-                  to="/personas"
-                  className={({ isActive }) =>
-                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                      isActive
-                        ? "bg-white text-[var(--primary-color)] shadow-sm"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`
-                  }
-                >
-                  <span className="shrink-0">
-                    <Users size={18} />
-                  </span>
-                  <span className="truncate text-left">Personas</span>
-                </NavLink>
+
+                {/* Personas solo visible para supervisor/admin */}
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/personas"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">Personas</span>
+                  </NavLink>
+                )}
+
                 <NavLink
                   to="/drive"
                   className={({ isActive }) =>
@@ -763,7 +781,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
 
-                {/* LINK TAREAS (AGENTES) */}
                 <NavLink
                   to="/tareas"
                   className={({ isActive }) =>
@@ -780,7 +797,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Tareas</span>
                 </NavLink>
 
-                {/* LINK SUPERVISOR SOLO SI PUEDE VERLO */}
                 {canSeeSupervisor && (
                   <NavLink
                     to="/supervisor"
@@ -801,7 +817,6 @@ export default function CintaxIntranetMockup() {
                   </NavLink>
                 )}
 
-                {/* 👇 NUEVO LINK: Notas de versión (DESKTOP) */}
                 <NavLink
                   to="/notas-version"
                   className={({ isActive }) =>
@@ -850,7 +865,33 @@ export default function CintaxIntranetMockup() {
                   Resumen general y accesos rápidos
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Usuario logueado con foto y nombre */}
+              <div className="flex items-center gap-3">
+                {authPayload && (
+                  <div className="flex items-center gap-2 rounded-full bg-white border border-black/10 px-3 py-1.5 shadow-sm max-w-[260px]">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[var(--secondary-color)] text-white flex items-center justify-center text-sm font-semibold">
+                        {displayInitial}
+                      </div>
+                    )}
+                    <div className="flex flex-col leading-tight min-w-0">
+                      <span className="text-[11px] text-black/40">
+                        Conectado como
+                      </span>
+                      <span className="text-sm font-medium text-[var(--primary-color)] truncate">
+                        {displayName}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <NotificationsBell />
                 <button
                   onClick={() => navigate("/configurar")}
@@ -871,7 +912,13 @@ export default function CintaxIntranetMockup() {
             />
             <Route
               path="/personas"
-              element={<PrivateRoute element={<PersonasPage />} />}
+              element={
+                <PrivateRoute
+                  element={
+                    isSupervisorOrAdmin() ? <PersonasPage /> : <NotFoundPage />
+                  }
+                />
+              }
             />
             <Route path="/drive" element={<DrivePage />} />
             <Route
@@ -883,13 +930,11 @@ export default function CintaxIntranetMockup() {
               element={<PrivateRoute element={<TicketsPage />} />}
             />
 
-            {/* 👇 NUEVA RUTA: Notas de versión */}
             <Route
               path="/notas-version"
               element={<PrivateRoute element={<ReleaseNotesPage />} />}
             />
 
-            {/* RUTA SUPERVISOR PROTEGIDA */}
             <Route
               path="/supervisor"
               element={

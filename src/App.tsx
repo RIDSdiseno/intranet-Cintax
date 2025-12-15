@@ -629,7 +629,43 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
 
-                {/* Botones de tareas/supervisión removidos */}
+                <NavLink
+                  to="/tareas"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="shrink-0">
+                    <BookCheck size={18} />
+                  </span>
+                  <span className="truncate text-left">Tareas</span>
+                </NavLink>
+
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/supervisor"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">
+                      Supervisión tareas
+                    </span>
+                  </NavLink>
+                )}
 
                 <NavLink
                   to="/notas-version"
@@ -745,7 +781,41 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Google Drive</span>
                 </NavLink>
 
-                {/* Botones de tareas/supervisión removidos */}
+                <NavLink
+                  to="/tareas"
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                      isActive
+                        ? "bg-white text-[var(--primary-color)] shadow-sm"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                >
+                  <span className="shrink-0">
+                    <BookCheck size={18} />
+                  </span>
+                  <span className="truncate text-left">Tareas</span>
+                </NavLink>
+
+                {canSeeSupervisor && (
+                  <NavLink
+                    to="/supervisor"
+                    className={({ isActive }) =>
+                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-[var(--primary-color)] shadow-sm"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    <span className="shrink-0">
+                      <Users size={18} />
+                    </span>
+                    <span className="truncate text-left">
+                      Supervisión tareas
+                    </span>
+                  </NavLink>
+                )}
 
                 <NavLink
                   to="/notas-version"

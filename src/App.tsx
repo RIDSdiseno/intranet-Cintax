@@ -2,21 +2,19 @@ import React from "react";
 import {
   Home,
   Users,
-  FileText,
-  FolderKanban,
   LifeBuoy,
   Settings,
-  ChevronRight,
-  CheckCircle2,
   Clock,
   AlertTriangle,
   Folder,
-  X,
   BookCheck,
   ChevronDown,
   HandHelping,
   History,
+  ClipboardList,
+  CheckCircle2,
 } from "lucide-react";
+
 import {
   Routes,
   Route,
@@ -36,6 +34,7 @@ import TareasPage from "./pages/TareasPage";
 import TareasSupervisionPage from "./pages/TareasSupervisionPage";
 import HomePage from "./pages/HomePage";
 import ReleaseNotesPage from "./pages/ReleaseNotesPage";
+import CreacionTareasPage from "./pages/CreacionTareasPage";
 
 import NotificationsBell from "./components/NotificationsBell";
 
@@ -98,6 +97,51 @@ export const KpiCard: React.FC<{
   </div>
 );
 
+/** ✅ ESTO ES LO QUE TE FALTABA PARA QUE HomePage NO REViente */
+export const TaskRow: React.FC<{
+  idx: number;
+  title: string;
+  owner: string;
+  status: "En curso" | "Completada" | "Bloqueada";
+  due: string;
+}> = ({ idx, title, owner, status, due }) => {
+  const tone =
+    status === "Completada"
+      ? "success"
+      : status === "Bloqueada"
+      ? "danger"
+      : "warning";
+
+  const Icon =
+    status === "Completada"
+      ? CheckCircle2
+      : status === "Bloqueada"
+      ? AlertTriangle
+      : Clock;
+
+  return (
+    <tr className="border-b last:border-b-0">
+      <td className="py-3 px-3 text-black/70">
+        #{idx.toString().padStart(3, "0")}
+      </td>
+      <td className="py-3 px-3">
+        <div className="font-medium" style={{ color: "var(--primary-color)" }}>
+          {title}
+        </div>
+        <div className="text-xs text-black/50">Responsable: {owner}</div>
+      </td>
+      <td className="py-3 px-3">
+        <Chip tone={tone}>
+          <Icon size={14} /> {status}
+        </Chip>
+      </td>
+      <td className="py-3 px-3 text-right">
+        <span className="text-sm text-black/70">{due}</span>
+      </td>
+    </tr>
+  );
+};
+
 const SideLink: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -156,6 +200,7 @@ const TicketsNav: React.FC<{
         >
           Todos
         </NavLink>
+
         <NavLink
           to="/tickets/comercial"
           className={({ isActive }) =>
@@ -169,6 +214,7 @@ const TicketsNav: React.FC<{
         >
           Comercial y Marketing
         </NavLink>
+
         <NavLink
           to="/tickets/contabilidad"
           className={({ isActive }) =>
@@ -182,6 +228,7 @@ const TicketsNav: React.FC<{
         >
           Contabilidad
         </NavLink>
+
         <NavLink
           to="/tickets/gerencia"
           className={({ isActive }) =>
@@ -195,6 +242,7 @@ const TicketsNav: React.FC<{
         >
           Gerencia
         </NavLink>
+
         <NavLink
           to="/tickets/rrhh"
           className={({ isActive }) =>
@@ -208,6 +256,7 @@ const TicketsNav: React.FC<{
         >
           Recursos Humanos
         </NavLink>
+
         <NavLink
           to="/tickets/otros"
           className={({ isActive }) =>
@@ -225,110 +274,6 @@ const TicketsNav: React.FC<{
     </div>
   );
 };
-
-export const TaskRow: React.FC<{
-  idx: number;
-  title: string;
-  owner: string;
-  status: "En curso" | "Completada" | "Bloqueada";
-  due: string;
-}> = ({ idx, title, owner, status, due }) => {
-  const tone =
-    status === "Completada"
-      ? "success"
-      : status === "Bloqueada"
-      ? "danger"
-      : "warning";
-  const Icon =
-    status === "Completada"
-      ? CheckCircle2
-      : status === "Bloqueada"
-      ? AlertTriangle
-      : Clock;
-  return (
-    <tr className="border-b last:border-b-0">
-      <td className="py-3 px-3 text-black/70">
-        #{idx.toString().padStart(3, "0")}
-      </td>
-      <td className="py-3 px-3">
-        <div className="font-medium" style={{ color: "var(--primary-color)" }}>
-          {title}
-        </div>
-        <div className="text-xs text-black/50">Responsable: {owner}</div>
-      </td>
-      <td className="py-3 px-3">
-        <Chip tone={tone as any}>
-          <Icon size={14} /> {status}
-        </Chip>
-      </td>
-      <td className="py-3 px-3 text-right">
-        <span className="text-sm text-black/70">{due}</span>
-      </td>
-    </tr>
-  );
-};
-
-const ActivityItem: React.FC<{
-  title: string;
-  time: string;
-  icon: React.ReactNode;
-  hint?: string;
-}> = ({ title, time, icon, hint }) => (
-  <div className="flex gap-3 items-start">
-    <div className="mt-0.5 shrink-0 rounded-xl p-2 bg-white border border-black/5 shadow-sm">
-      {icon}
-    </div>
-    <div className="min-w-0">
-      <p className="text-sm" style={{ color: "var(--primary-color)" }}>
-        {title}
-      </p>
-      {hint && <p className="text-xs text-black/50 mt-0.5">{hint}</p>}
-      <p className="text-[10px] uppercase tracking-wider text-black/40 mt-1">
-        {time}
-      </p>
-    </div>
-  </div>
-);
-
-const TASKS = [
-  {
-    title: "Actualizar política de vacaciones 2026",
-    owner: "RR.HH.",
-    status: "En curso" as const,
-    due: "15 Nov 2025",
-  },
-  {
-    title: "Cierre de sprint #12 - Intranet Cintax",
-    owner: "TI",
-    status: "Completada" as const,
-    due: "08 Nov 2025",
-  },
-  {
-    title: "Revisión de contratos de proveedores",
-    owner: "Legal",
-    status: "Bloqueada" as const,
-    due: "20 Nov 2025",
-  },
-  {
-    title: "Capacitación de inducción (cohorte 11)",
-    owner: "Personas",
-    status: "En curso" as const,
-    due: "22 Nov 2025",
-  },
-];
-
-const ANNOUNCEMENTS = [
-  {
-    title: "Feriado institucional 02 Dic",
-    copy: "El 02 de diciembre habrá cierre parcial. Revise turnos.",
-    cta: "Ver calendario",
-  },
-  {
-    title: "Nueva política de gastos",
-    copy: "Reembolsos vía módulo Finanzas desde el 15 de noviembre.",
-    cta: "Leer guía",
-  },
-];
 
 function NotFoundPage() {
   return (
@@ -364,9 +309,6 @@ type JwtFrontendPayload = {
   avatarUrl?: string;
 };
 
-/**
- * Lee el payload del JWT guardado en el storage.
- */
 export function getAuthPayload(): JwtFrontendPayload | null {
   const token =
     localStorage.getItem("access_token") ||
@@ -394,13 +336,9 @@ export function getAuthPayload(): JwtFrontendPayload | null {
   }
 }
 
-/**
- * Ahora usamos el flag que viene directo del backend: payload.isSupervisorOrAdmin
- */
 function isSupervisorOrAdmin(): boolean {
   const payload = getAuthPayload();
   if (!payload) return false;
-
   return Boolean(payload.isSupervisorOrAdmin);
 }
 
@@ -422,14 +360,12 @@ export default function CintaxIntranetMockup() {
   const authPayload = getAuthPayload();
   const canSeeSupervisor = isSupervisorOrAdmin();
 
-  // nombre que se va a mostrar en el header
   const displayName =
     authPayload?.nombre ||
     authPayload?.nombreUsuario ||
     (authPayload?.email ? authPayload.email.split("@")[0] : "") ||
     "Usuario";
 
-  // foto de perfil (si viene en el token)
   const avatarUrl = authPayload?.avatarUrl || authPayload?.picture || null;
   const displayInitial = displayName.charAt(0).toUpperCase();
 
@@ -492,9 +428,7 @@ export default function CintaxIntranetMockup() {
           transition: transform 0.3s ease;
           overflow-y: auto;
         }
-        .sidebar-mobile.open {
-          transform: translateX(0);
-        }
+        .sidebar-mobile.open { transform: translateX(0); }
         .sidebar-overlay {
           position: fixed;
           inset: 0;
@@ -592,7 +526,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Inicio</span>
                 </NavLink>
 
-                {/* Personas solo visible para supervisor/admin */}
                 {canSeeSupervisor && (
                   <NavLink
                     to="/personas"
@@ -647,24 +580,43 @@ export default function CintaxIntranetMockup() {
                 </NavLink>
 
                 {canSeeSupervisor && (
-                  <NavLink
-                    to="/supervisor"
-                    className={({ isActive }) =>
-                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                        isActive
-                          ? "bg-white text-[var(--primary-color)] shadow-sm"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    <span className="shrink-0">
-                      <Users size={18} />
-                    </span>
-                    <span className="truncate text-left">
-                      Supervisión tareas
-                    </span>
-                  </NavLink>
+                  <>
+                    <NavLink
+                      to="/supervisor"
+                      className={({ isActive }) =>
+                        `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                          isActive
+                            ? "bg-white text-[var(--primary-color)] shadow-sm"
+                            : "text-white/80 hover:text-white hover:bg-white/10"
+                        }`
+                      }
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <span className="shrink-0">
+                        <Users size={18} />
+                      </span>
+                      <span className="truncate text-left">
+                        Supervisión tareas
+                      </span>
+                    </NavLink>
+
+                    <NavLink
+                      to="/tareas/creacion"
+                      className={({ isActive }) =>
+                        `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                          isActive
+                            ? "bg-white text-[var(--primary-color)] shadow-sm"
+                            : "text-white/80 hover:text-white hover:bg-white/10"
+                        }`
+                      }
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <span className="shrink-0">
+                        <ClipboardList size={18} />
+                      </span>
+                      <span className="truncate text-left">Crear tareas</span>
+                    </NavLink>
+                  </>
                 )}
 
                 <NavLink
@@ -746,7 +698,6 @@ export default function CintaxIntranetMockup() {
                   <span className="truncate text-left">Inicio</span>
                 </NavLink>
 
-                {/* Personas solo visible para supervisor/admin */}
                 {canSeeSupervisor && (
                   <NavLink
                     to="/personas"
@@ -798,23 +749,41 @@ export default function CintaxIntranetMockup() {
                 </NavLink>
 
                 {canSeeSupervisor && (
-                  <NavLink
-                    to="/supervisor"
-                    className={({ isActive }) =>
-                      `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
-                        isActive
-                          ? "bg-white text-[var(--primary-color)] shadow-sm"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
-                      }`
-                    }
-                  >
-                    <span className="shrink-0">
-                      <Users size={18} />
-                    </span>
-                    <span className="truncate text-left">
-                      Supervisión tareas
-                    </span>
-                  </NavLink>
+                  <>
+                    <NavLink
+                      to="/supervisor"
+                      className={({ isActive }) =>
+                        `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                          isActive
+                            ? "bg-white text-[var(--primary-color)] shadow-sm"
+                            : "text-white/80 hover:text-white hover:bg-white/10"
+                        }`
+                      }
+                    >
+                      <span className="shrink-0">
+                        <Users size={18} />
+                      </span>
+                      <span className="truncate text-left">
+                        Supervisión tareas
+                      </span>
+                    </NavLink>
+
+                    <NavLink
+                      to="/tareas/creacion"
+                      className={({ isActive }) =>
+                        `w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition ${
+                          isActive
+                            ? "bg-white text-[var(--primary-color)] shadow-sm"
+                            : "text-white/80 hover:text-white hover:bg-white/10"
+                        }`
+                      }
+                    >
+                      <span className="shrink-0">
+                        <ClipboardList size={18} />
+                      </span>
+                      <span className="truncate text-left">Crear tareas</span>
+                    </NavLink>
+                  </>
                 )}
 
                 <NavLink
@@ -866,7 +835,6 @@ export default function CintaxIntranetMockup() {
                 </p>
               </div>
 
-              {/* Usuario logueado con foto y nombre */}
               <div className="flex items-center gap-3">
                 {authPayload && (
                   <div className="flex items-center gap-2 rounded-full bg-white border border-black/10 px-3 py-1.5 shadow-sm max-w-[260px]">
@@ -906,10 +874,8 @@ export default function CintaxIntranetMockup() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
-            <Route
-              path="/home"
-              element={<PrivateRoute element={<HomePage />} />}
-            />
+            <Route path="/home" element={<PrivateRoute element={<HomePage />} />} />
+
             <Route
               path="/personas"
               element={
@@ -920,15 +886,11 @@ export default function CintaxIntranetMockup() {
                 />
               }
             />
-            <Route path="/drive" element={<DrivePage />} />
-            <Route
-              path="/tickets"
-              element={<PrivateRoute element={<TicketsPage />} />}
-            />
-            <Route
-              path="/tickets/:cat"
-              element={<PrivateRoute element={<TicketsPage />} />}
-            />
+
+            <Route path="/drive" element={<PrivateRoute element={<DrivePage />} />} />
+
+            <Route path="/tickets" element={<PrivateRoute element={<TicketsPage />} />} />
+            <Route path="/tickets/:cat" element={<PrivateRoute element={<TicketsPage />} />} />
 
             <Route
               path="/notas-version"
@@ -940,32 +902,29 @@ export default function CintaxIntranetMockup() {
               element={
                 <PrivateRoute
                   element={
-                    isSupervisorOrAdmin() ? (
-                      <TareasSupervisionPage />
-                    ) : (
-                      <NotFoundPage />
-                    )
+                    isSupervisorOrAdmin() ? <TareasSupervisionPage /> : <NotFoundPage />
                   }
                 />
               }
             />
 
             <Route
-              path="/configurar"
-              element={<PrivateRoute element={<ConfigurarPage />} />}
+              path="/tareas/creacion"
+              element={
+                <PrivateRoute
+                  element={
+                    isSupervisorOrAdmin() ? <CreacionTareasPage /> : <NotFoundPage />
+                  }
+                />
+              }
             />
-            <Route
-              path="/soporte"
-              element={<PrivateRoute element={<SoportePage />} />}
-            />
-            <Route
-              path="/tareas"
-              element={<PrivateRoute element={<TareasPage />} />}
-            />
+
+            <Route path="/configurar" element={<PrivateRoute element={<ConfigurarPage />} />} />
+            <Route path="/soporte" element={<PrivateRoute element={<SoportePage />} />} />
+            <Route path="/tareas" element={<PrivateRoute element={<TareasPage />} />} />
 
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/inicio" element={<Navigate to="/home" replace />} />
-
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
 

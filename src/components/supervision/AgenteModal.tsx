@@ -1,6 +1,7 @@
+// src/components/supervision/AgenteModal.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import ApexChart from "react-apexcharts";
-import { API_BASE_URL, fetchJSON, TareaFull, EstadoBack } from "./api";
+import { API_BASE_URL, fetchJSON, TareaFull, EstadoBack } from "../../lib/api";
 import { useFiltroPeriodo, Periodo } from "./usePeriodo";
 
 type MetricasAgente = {
@@ -27,17 +28,22 @@ type Props = {
 };
 
 const DIAS_POR_VENCER = 3;
+
 const formatFecha = (iso?: string | null) => {
   if (!iso) return "-";
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("es-CL");
 };
 
 const diffDias = (iso?: string | null) => {
   if (!iso) return null;
   const d = new Date(iso).getTime();
+  if (Number.isNaN(d)) return null;
+
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+
   const delta = Math.round((d - hoy.getTime()) / (1000 * 60 * 60 * 24));
   return delta;
 };
@@ -46,6 +52,7 @@ async function fetchTareasAgente(trabajadorId: number): Promise<TareaFull[]> {
   const ruts = await fetchJSON<{ rut: string }[]>(
     `${API_BASE_URL}/tareas/mis-ruts?trabajadorId=${trabajadorId}`
   );
+
   const all: TareaFull[] = [];
   for (const item of ruts) {
     const rut = encodeURIComponent(item.rut);
@@ -63,181 +70,6 @@ const Spinner = () => (
   </div>
 );
 
-const AgenteModal: React.FC<Props> = ({
-  trabajadorId,
-  onClose,
-  periodo,
-  mes,
-  anio,
-  tareasIniciales,
-  clientes = [],
-  clienteFiltroRut = "ALL",
-}) => {
-  const [metricas, setMetricas] = useState<MetricasAgente | null>(null);
-  const [tareas, setTareas] = useState<TareaFull[]>(tareasIniciales || []);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [m, t] = await Promise.all([
-          fetchJSON<MetricasAgente>(
-            `${API_BASE_URL}/tareas/supervision/metricas/agente/${trabajadorId}`
-          ),
-          tareasIniciales ? Promise.resolve(tareasIniciales) : fetchTareasAgente(trabajadorId),
-        ]);
-        setMetricas(m);
-        setTareas(t);
-      } catch (e) {
-        console.error("No se pudieron cargar datos del agente", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [trabajadorId, tareasIniciales]);
-
-  const tareasFiltradas = useFiltroPeriodo(tareas, periodo, mes, anio).filter((t) =>
-    clienteFiltroRut === "ALL" ? true : t.rutCliente === clienteFiltroRut
-  );
-
-  const kpis = useMemo(() => {
-    const hoy = new Date();
-    const limite = new Date();
-    limite.setDate(hoy.getDate() + DIAS_POR_VENCER);
-    let pend = 0,
-      proc = 0,
-      venc = 0,
-      comp = 0,
-      porVencer = 0;
-    tareasFiltradas.forEach((t) => {
-      if (t.estado === "PENDIENTE") pend++;
-      else if (t.estado === "EN_PROCESO") proc++;
-      else if (t.estado === "COMPLETADA") comp++;
-      else if (t.estado === "VENCIDA") venc++;
-
-      const fv = new Date(t.fechaProgramada);
-      if (t.estado !== "COMPLETADA" && fv >= hoy && fv <= limite) porVencer++;
-    });
-    return { pend, proc, venc, comp, porVencer, total: pend + proc + venc + comp };
-  }, [tareasFiltradas]);
-
-  const donutSeries = [kpis.pend, kpis.proc, kpis.venc, kpis.comp, kpis.porVencer];
-  const donutOptions = {
-    labels: [
-      "Pendiente",
-      "En proceso",
-      "Vencida",
-      "Completada",
-      `Por vencer (<=${DIAS_POR_VENCER}d)`,
-    ],
-    colors: ["#fbbf24", "#38bdf8", "#f97373", "#22c55e", "#fb923c"],
-    legend: { position: "bottom" },
-  };
-
-  const pendientesPorEmpresa = useMemo(() => {
-    const map = new Map<
-      string,
-      { rut: string; nombre: string; pendientes: number }
-    >();
-    const getLabel = (rut: string | null | undefined) => {
-      const r = rut || "SIN_RUT";
-      const found = clientes.find((c) => c.rut === r);
-      return found?.razonSocial || r;
-    };
-    tareasFiltradas
-      .filter((t) => t.estado === "PENDIENTE")
-      .forEach((t) => {
-        const rut = t.rutCliente || "SIN_RUT";
-        if (!map.has(rut)) {
-          map.set(rut, { rut, nombre: getLabel(rut), pendientes: 0 });
-        }
-        map.get(rut)!.pendientes += 1;
-      });
-    return Array.from(map.values()).sort((a, b) => b.pendientes - a.pendientes);
-  }, [tareasFiltradas, clientes]);
-
-  const barSeries = [
-    {
-      name: "Pendientes",
-      data: pendientesPorEmpresa.map((p) => p.pendientes),
-    },
-  ];
-  const barOptions = {
-    xaxis: {
-      categories: pendientesPorEmpresa.map((p) => p.nombre),
-      labels: { rotate: -30, trim: true },
-    },
-    colors: ["#fbbf24"],
-    plotOptions: { bar: { horizontal: false, columnWidth: "50%" } },
-    dataLabels: { enabled: true },
-    legend: { position: "top" as const },
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-auto">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {metricas?.resumenAgente?.nombre || "Agente"}
-            </h2>
-            <p className="text-xs text-black/60">{metricas?.resumenAgente?.email}</p>
-          </div>
-          <button onClick={onClose} className="text-sm text-red-500">
-            Cerrar
-          </button>
-        </div>
-
-        {loading ? (
-          <Spinner />
-        ) : (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-              <Kpi label="Pendientes" value={kpis.pend} color="#fbbf24" />
-              <Kpi label="En proceso" value={kpis.proc} color="#38bdf8" />
-              <Kpi label="Vencidas" value={kpis.venc} color="#f97373" />
-              <Kpi
-                label={`Por vencer (<=${DIAS_POR_VENCER}d)`}
-                value={kpis.porVencer}
-                color="#fb923c"
-              />
-              <Kpi label="Completadas" value={kpis.comp} color="#22c55e" />
-            </div>
-
-            <div className="bg-white mt-4 rounded-xl p-4 border shadow">
-              <h3 className="font-semibold text-sm mb-2">Distribución</h3>
-              <ApexChart type="donut" series={donutSeries} options={donutOptions as any} height={260} />
-            </div>
-
-            <div className="bg-white mt-4 rounded-xl p-4 border shadow space-y-4">
-              <div>
-                <h3 className="font-semibold text-sm mb-2">Pendientes por empresa</h3>
-                {pendientesPorEmpresa.length === 0 ? (
-                  <p className="text-xs text-black/50">Sin tareas pendientes</p>
-                ) : (
-                  <ApexChart
-                    type="bar"
-                    series={barSeries as any}
-                    options={barOptions as any}
-                    height={260}
-                  />
-                )}
-              </div>
-
-              <TareasTabs
-                tareas={tareasFiltradas}
-                porVencerDias={DIAS_POR_VENCER}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
 type TabKey = EstadoBack | "POR_VENCER";
 
 const TareasTabs: React.FC<{
@@ -246,9 +78,17 @@ const TareasTabs: React.FC<{
 }> = ({ tareas, porVencerDias }) => {
   const [tab, setTab] = useState<TabKey>("PENDIENTE");
 
-  const hoy = new Date();
-  const limite = new Date();
-  limite.setDate(hoy.getDate() + porVencerDias);
+  const hoy = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const limite = useMemo(() => {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() + porVencerDias);
+    return d;
+  }, [hoy, porVencerDias]);
 
   const listas = useMemo(() => {
     const pendientes: TareaFull[] = [];
@@ -259,11 +99,19 @@ const TareasTabs: React.FC<{
 
     tareas.forEach((t) => {
       const fv = new Date(t.fechaProgramada);
+      const fvOk = !Number.isNaN(fv.getTime());
+
       if (t.estado === "PENDIENTE") pendientes.push(t);
       if (t.estado === "EN_PROCESO") enProceso.push(t);
       if (t.estado === "VENCIDA") vencidas.push(t);
       if (t.estado === "COMPLETADA") completadas.push(t);
-      if (t.estado !== "COMPLETADA" && fv >= hoy && fv <= limite) {
+
+      if (
+        t.estado !== "COMPLETADA" &&
+        fvOk &&
+        fv >= hoy &&
+        fv <= limite
+      ) {
         porVencer.push(t);
       }
     });
@@ -280,7 +128,11 @@ const TareasTabs: React.FC<{
       <div className="flex flex-col gap-2 max-h-72 overflow-auto">
         {arr.map((t) => {
           const dias = diffDias(t.fechaProgramada);
-          const critico = t.estado !== "COMPLETADA" && typeof dias === "number" && dias < 0;
+          const critico =
+            t.estado !== "COMPLETADA" &&
+            typeof dias === "number" &&
+            dias < 0;
+
           const badge =
             t.estado === "COMPLETADA"
               ? "bg-emerald-50 text-emerald-700"
@@ -299,20 +151,38 @@ const TareasTabs: React.FC<{
                 <div className="text-sm font-semibold text-black/80">
                   {t.tareaPlantilla?.nombre || "Tarea"}
                 </div>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${badge}`}>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${badge}`}
+                >
                   {t.estado}
                 </span>
               </div>
+
               <div className="text-[11px] text-black/60">
                 Vence: {formatFecha(t.fechaProgramada)}{" "}
                 {typeof dias === "number" && (
-                  <span className={critico ? "text-rose-600 font-semibold" : "text-black/60"}>
-                    ({dias === 0 ? "hoy" : dias > 0 ? `en ${dias} d` : `${Math.abs(dias)} d vencida`})
+                  <span
+                    className={
+                      critico
+                        ? "text-rose-600 font-semibold"
+                        : "text-black/60"
+                    }
+                  >
+                    (
+                    {dias === 0
+                      ? "hoy"
+                      : dias > 0
+                      ? `en ${dias} d`
+                      : `${Math.abs(dias)} d vencida`}
+                    )
                   </span>
                 )}
               </div>
+
               {t.comentarios && (
-                <p className="text-[11px] text-black/60 line-clamp-2 mt-1">{t.comentarios}</p>
+                <p className="text-[11px] text-black/60 line-clamp-2 mt-1">
+                  {t.comentarios}
+                </p>
               )}
             </div>
           );
@@ -372,5 +242,207 @@ const Kpi: React.FC<{ label: string; value: number; color?: string }> = ({
     </p>
   </div>
 );
+
+const AgenteModal: React.FC<Props> = ({
+  trabajadorId,
+  onClose,
+  periodo,
+  mes,
+  anio,
+  tareasIniciales,
+  clientes = [],
+  clienteFiltroRut = "ALL",
+}) => {
+  const [metricas, setMetricas] = useState<MetricasAgente | null>(null);
+  const [tareas, setTareas] = useState<TareaFull[]>(tareasIniciales || []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [m, t] = await Promise.all([
+          fetchJSON<MetricasAgente>(
+            `${API_BASE_URL}/tareas/supervision/metricas/agente/${trabajadorId}`
+          ),
+          tareasIniciales
+            ? Promise.resolve(tareasIniciales)
+            : fetchTareasAgente(trabajadorId),
+        ]);
+        setMetricas(m);
+        setTareas(t);
+      } catch (e) {
+        console.error("No se pudieron cargar datos del agente", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [trabajadorId, tareasIniciales]);
+
+  const tareasFiltradas = useFiltroPeriodo(tareas, periodo, mes, anio).filter(
+    (t) => (clienteFiltroRut === "ALL" ? true : t.rutCliente === clienteFiltroRut)
+  );
+
+  const kpis = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const limite = new Date(hoy);
+    limite.setDate(limite.getDate() + DIAS_POR_VENCER);
+
+    let pend = 0,
+      proc = 0,
+      venc = 0,
+      comp = 0,
+      porVencer = 0;
+
+    tareasFiltradas.forEach((t) => {
+      if (t.estado === "PENDIENTE") pend++;
+      else if (t.estado === "EN_PROCESO") proc++;
+      else if (t.estado === "COMPLETADA") comp++;
+      else if (t.estado === "VENCIDA") venc++;
+
+      const fv = new Date(t.fechaProgramada);
+      if (
+        t.estado !== "COMPLETADA" &&
+        !Number.isNaN(fv.getTime()) &&
+        fv >= hoy &&
+        fv <= limite
+      ) {
+        porVencer++;
+      }
+    });
+
+    return { pend, proc, venc, comp, porVencer, total: pend + proc + venc + comp };
+  }, [tareasFiltradas]);
+
+  const donutSeries = [kpis.pend, kpis.proc, kpis.venc, kpis.comp, kpis.porVencer];
+
+  const donutOptions = useMemo(
+    () => ({
+      labels: [
+        "Pendiente",
+        "En proceso",
+        "Vencida",
+        "Completada",
+        `Por vencer (<=${DIAS_POR_VENCER}d)`,
+      ],
+      colors: ["#fbbf24", "#38bdf8", "#f97373", "#22c55e", "#fb923c"],
+      legend: { position: "bottom" as const },
+    }),
+    []
+  );
+
+  const pendientesPorEmpresa = useMemo(() => {
+    const map = new Map<string, { rut: string; nombre: string; pendientes: number }>();
+
+    const getLabel = (rut: string | null | undefined) => {
+      const r = rut || "SIN_RUT";
+      const found = clientes.find((c) => c.rut === r);
+      return found?.razonSocial || r;
+    };
+
+    tareasFiltradas
+      .filter((t) => t.estado === "PENDIENTE")
+      .forEach((t) => {
+        const rut = t.rutCliente || "SIN_RUT";
+        if (!map.has(rut)) {
+          map.set(rut, { rut, nombre: getLabel(rut), pendientes: 0 });
+        }
+        map.get(rut)!.pendientes += 1;
+      });
+
+    return Array.from(map.values()).sort((a, b) => b.pendientes - a.pendientes);
+  }, [tareasFiltradas, clientes]);
+
+  const barSeries = useMemo(
+    () => [
+      {
+        name: "Pendientes",
+        data: pendientesPorEmpresa.map((p) => p.pendientes),
+      },
+    ],
+    [pendientesPorEmpresa]
+  );
+
+  const barOptions = useMemo(
+    () => ({
+      xaxis: {
+        categories: pendientesPorEmpresa.map((p) => p.nombre),
+        labels: { rotate: -30, trim: true },
+      },
+      colors: ["#fbbf24"],
+      plotOptions: { bar: { horizontal: false, columnWidth: "50%" } },
+      dataLabels: { enabled: true },
+      legend: { position: "top" as const },
+    }),
+    [pendientesPorEmpresa]
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-auto">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-lg font-semibold">
+              {metricas?.resumenAgente?.nombre || "Agente"}
+            </h2>
+            <p className="text-xs text-black/60">{metricas?.resumenAgente?.email}</p>
+          </div>
+          <button onClick={onClose} className="text-sm text-red-500">
+            Cerrar
+          </button>
+        </div>
+
+        {loading ? (
+          <Spinner />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+              <Kpi label="Pendientes" value={kpis.pend} color="#fbbf24" />
+              <Kpi label="En proceso" value={kpis.proc} color="#38bdf8" />
+              <Kpi label="Vencidas" value={kpis.venc} color="#f97373" />
+              <Kpi
+                label={`Por vencer (<=${DIAS_POR_VENCER}d)`}
+                value={kpis.porVencer}
+                color="#fb923c"
+              />
+              <Kpi label="Completadas" value={kpis.comp} color="#22c55e" />
+            </div>
+
+            <div className="bg-white mt-4 rounded-xl p-4 border shadow">
+              <h3 className="font-semibold text-sm mb-2">Distribución</h3>
+              <ApexChart
+                type="donut"
+                series={donutSeries}
+                options={donutOptions as any}
+                height={260}
+              />
+            </div>
+
+            <div className="bg-white mt-4 rounded-xl p-4 border shadow space-y-4">
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Pendientes por empresa</h3>
+                {pendientesPorEmpresa.length === 0 ? (
+                  <p className="text-xs text-black/50">Sin tareas pendientes</p>
+                ) : (
+                  <ApexChart
+                    type="bar"
+                    series={barSeries as any}
+                    options={barOptions as any}
+                    height={260}
+                  />
+                )}
+              </div>
+
+              <TareasTabs tareas={tareasFiltradas} porVencerDias={DIAS_POR_VENCER} />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default AgenteModal;

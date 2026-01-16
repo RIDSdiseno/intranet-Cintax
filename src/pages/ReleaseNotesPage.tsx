@@ -1,16 +1,29 @@
 // src/pages/ReleaseNotesPage.tsx
-import React from "react";
+import React, { useMemo } from "react";
 import { History, Sparkles } from "lucide-react";
 
 type ReleaseNote = {
   version: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   title: string;
   items: string[];
   tag?: "nuevo" | "mejora" | "fix";
 };
 
 const NOTES: ReleaseNote[] = [
+  {
+    version: "v1.4.0",
+    date: "2025-12-18",
+    title: "Supervisión, exportaciones y notificaciones",
+    items: [
+      "Se habilita la vista de supervisión con modo Comparativa entre agentes (KPIs + gráficos).",
+      "Se agrega exportación a Excel/PDF para Comparativa, Dashboard y Empresas (según contexto).",
+      "Se optimiza la carga de datos en supervisión con caché por agente para reducir llamadas repetidas.",
+      "Se incorpora campana de notificaciones con filtro por mes/año y acción para marcar todas como leídas.",
+      "Se mejora la edición por ejecutivo: ahora solo se muestran plantillas que tengan tareas asignadas al cliente (para editar Aplica/NO aplica).",
+    ],
+    tag: "nuevo",
+  },
   {
     version: "v1.3.0",
     date: "2025-12-11",
@@ -38,8 +51,19 @@ const tagClass: Record<NonNullable<ReleaseNote["tag"]>, string> = {
   fix: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
+const formatDateCL = (yyyyMmDd: string) => {
+  const d = new Date(`${yyyyMmDd}T12:00:00`); // seguro para TZ
+  return Number.isNaN(d.getTime())
+    ? yyyyMmDd
+    : d.toLocaleDateString("es-CL", { year: "numeric", month: "2-digit", day: "2-digit" });
+};
+
 const ReleaseNotesPage: React.FC = () => {
-  const latest = NOTES[0];
+  const notesSorted = useMemo(() => {
+    return [...NOTES].sort((a, b) => b.date.localeCompare(a.date));
+  }, []);
+
+  const latest = notesSorted[0];
 
   return (
     <div className="space-y-6 mt-4">
@@ -63,14 +87,11 @@ const ReleaseNotesPage: React.FC = () => {
                 <Sparkles size={20} />
               </div>
               <div>
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: "var(--primary-color)" }}
-                >
+                <p className="text-sm font-medium" style={{ color: "var(--primary-color)" }}>
                   Última actualización
                 </p>
                 <p className="text-xs text-black/55">
-                  Versión {latest.version} · {latest.date}
+                  Versión {latest.version} · {formatDateCL(latest.date)}
                 </p>
               </div>
             </div>
@@ -88,9 +109,9 @@ const ReleaseNotesPage: React.FC = () => {
         </section>
       )}
 
-      {/* HISTORIAL COMPLETO (por ahora solo una versión, pero queda listo para más) */}
+      {/* HISTORIAL COMPLETO */}
       <section className="space-y-3">
-        {NOTES.map((note) => (
+        {notesSorted.map((note) => (
           <article
             key={note.version}
             className="rounded-2xl bg-white border border-black/5 shadow-sm px-4 py-4 md:px-5 md:py-4"
@@ -99,7 +120,7 @@ const ReleaseNotesPage: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono text-black/50">
-                    {note.date}
+                    {formatDateCL(note.date)}
                   </span>
                   {note.tag && (
                     <span

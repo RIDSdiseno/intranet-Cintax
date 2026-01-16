@@ -3,31 +3,26 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
-  Check,
-  Clock,
-  ListChecks,
-  Phone,
-  X,
   Users,
+  Pencil,
 } from "lucide-react";
 
+import EditarPersonaModal, {
+  PersonaEditable,
+} from "../components/personas/EditarPersonaModal";
+
+type Role = "ADMIN" | "SUPERVISOR" | "AGENTE";
+type Area = "ADMIN" | "CONTA" | "RRHH" | "TRIBUTARIO";
+
 type Persona = {
-  id: number;
+  id_trabajador: number;
   nombre: string;
   email: string;
-  rol: string;
-  area?: string;
-  categoria?: string;
-  estado: "Activo" | "Inactivo";
-  activo?: boolean;
-  ultimoLogin?: string | null;
-  proyectosActivos?: number;
-  areaInterna?: string | null; // 👈 NUEVO
+  areaInterna?: Area | null;
+  carpetaDriveCodigo?: string | null;
+  status?: boolean | null;
 };
 
-type FiltroRol = "Todos" | string;
-
-// 👇 Igual que en otros componentes tuyos (VistaPorRut, etc.)
 const API_BASE_URL =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
@@ -45,223 +40,282 @@ const getAuthToken = () => {
 const getAuthHeaders = (): Record<string, string> => {
   const token = getAuthToken();
   if (!token) return {};
-  return {
-    Authorization: `Bearer ${token}`,
-  };
+  return { Authorization: `Bearer ${token}` };
 };
+
+function safeRoleFromMe(raw: any): Role | null {
+  const candidate =
+    raw?.trabajador?.role ?? raw?.role ?? raw?.user?.role ?? null;
+  if (
+    candidate === "ADMIN" ||
+    candidate === "SUPERVISOR" ||
+    candidate === "AGENTE"
+  )
+    return candidate;
+  return null;
+}
+
+function parseJwt(token: string): any | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function roleFromToken(): Role | null {
+  const token = getAuthToken();
+  if (!token) return null;
+  const payload = parseJwt(token);
+  const r = payload?.role;
+  if (r === "ADMIN" || r === "SUPERVISOR" || r === "AGENTE") return r;
+  return null;
+}
 
 export default function PersonasPage() {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState<"idle" | "loading" | "error">("idle");
-
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{
-    action: string;
-    personaId: number;
-    personaNombre: string;
-  } | null>(null);
-
   const [query, setQuery] = useState("");
-  const [rolFiltro, setRolFiltro] = useState<FiltroRol>("Todos");
+
+  // permisos
+  const [myRole, setMyRole] = useState<Role | null>(null);
+  const canEdit = myRole === "ADMIN" || myRole === "SUPERVISOR";
+
+  // modal editar
+  const [editOpen, setEditOpen] = useState(false);
+  const [selected, setSelected] = useState<PersonaEditable | null>(null);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const toggleExpand = (id: number) => {
     setExpandedId(id === expandedId ? null : id);
   };
 
-  // ============================
-  //   FETCH A API / USUARIOS
-  // ============================
-  useEffect(() => {
-    const fetchPersonas = async () => {
-      try {
-        setLoading("loading");
+  const refreshList = async () => {
+    try {
+      setLoading("loading");
 
-        const res = await fetch(`${API_BASE_URL}/trabajadores`, {
+      const res = await fetch(`${API_BASE_URL}/trabajadores`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error(
+          "[PersonasPage] /trabajadores no OK:",
+          res.status,
+          res.statusText,
+          text
+        );
+        throw new Error(`Error HTTP ${res.status}`);
+      }
+
+      const raw = await res.json();
+
+      let lista: any[] = [];
+      if (Array.isArray(raw)) lista = raw;
+      else if (Array.isArray(raw?.personas)) lista = raw.personas;
+      else if (Array.isArray(raw?.data)) lista = raw.data;
+      else {
+        console.warn(
+          "[PersonasPage] Respuesta sin array en /trabajadores. raw:",
+          raw
+        );
+        setPersonas([]);
+        setLoading("idle");
+        return;
+      }
+
+      const mapped: Persona[] = lista.map((u: any) => ({
+        id_trabajador: Number(u.id_trabajador ?? u.id ?? 0),
+        nombre: String(u.nombre ?? "Sin nombre"),
+        email: String(u.email ?? "sin-correo@dominio.cl"),
+        areaInterna: (u.areaInterna ?? null) as any,
+        carpetaDriveCodigo: u.carpetaDriveCodigo ?? null,
+        status:
+          typeof u.status === "boolean"
+            ? u.status
+            : typeof u.activo === "boolean"
+            ? u.activo
+            : null,
+      }));
+
+      mapped.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+      setPersonas(mapped);
+      setLoading("idle");
+    } catch (e) {
+      console.error("[PersonasPage] Error refreshList:", e);
+      setLoading("error");
+    }
+  };
+
+  // 1) Traer mi rol (y fallback desde token)
+  useEffect(() => {
+    const initRole = async () => {
+      // fallback inmediato desde JWT (para que el botón no dependa del backend)
+      const tokenRole = roleFromToken();
+      if (tokenRole) setMyRole(tokenRole);
+
+      // luego intentamos /auth/me para consistencia
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           credentials: "include",
         });
-
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          console.error(
-            "[PersonasPage] Respuesta no OK:",
-            res.status,
-            res.statusText,
-            text
-          );
-          throw new Error(`Error HTTP ${res.status}`);
-        }
+        if (!res.ok) return;
 
         const raw = await res.json();
-        console.log("[PersonasPage] RAW data /trabajadores:", raw);
-
-        // Detectar dónde viene el array (nuevo: array directo / antiguo: { personas })
-        let lista: any[] = [];
-
-        if (Array.isArray(raw)) {
-          lista = raw;
-        } else if (Array.isArray((raw as any).personas)) {
-          lista = (raw as any).personas;
-        } else if (Array.isArray((raw as any).data)) {
-          lista = (raw as any).data;
-        } else {
-          console.warn(
-            "[PersonasPage] No se encontró un array en la respuesta. raw:",
-            raw
-          );
-          setPersonas([]);
-          setLoading("idle");
-          return;
-        }
-
-        const mapped: Persona[] = lista.map((u: any) => ({
-          id: u.id ?? u.id_trabajador ?? 0,
-          nombre: u.nombre ?? "Sin nombre",
-          email: u.email ?? "sin-correo@dominio.cl",
-          rol: u.rol ?? "Sin rol",
-          area: u.area,
-          categoria: u.categoria,
-          estado:
-            u.estado === "Inactivo" || u.activo === false
-              ? "Inactivo"
-              : "Activo",
-          activo: u.activo,
-          ultimoLogin: u.ultimoLogin ?? null,
-          proyectosActivos: u.proyectosActivos ?? 0,
-          areaInterna: u.areaInterna ?? null, // 👈 NUEVO: viene del backend (CONTA, TRIBUTARIO, etc.)
-        }));
-
-        setPersonas(mapped);
-        setLoading("idle");
-      } catch (error) {
-        console.error("[PersonasPage] Error cargando usuarios:", error);
-        setLoading("error");
+        const role = safeRoleFromMe(raw);
+        if (role) setMyRole(role);
+      } catch {
+        // ignore
       }
     };
 
-    fetchPersonas();
+    initRole();
   }, []);
 
-  // Roles dinámicos para los tabs
-  const rolesDisponibles = useMemo<FiltroRol[]>(() => {
-    const set = new Set<string>();
-    personas.forEach((p) => {
-      if (p.rol) set.add(p.rol);
-    });
-    return ["Todos", ...Array.from(set)];
-  }, [personas]);
+  // 2) Traer lista
+  useEffect(() => {
+    refreshList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Contadores por rol
-  const counts = useMemo(() => {
-    const base: Record<FiltroRol, number> = {
-      Todos: personas.length,
-    };
-    personas.forEach((p) => {
-      base[p.rol] = (base[p.rol] || 0) + 1;
-    });
-    return base;
-  }, [personas]);
-
-  // Filtrado
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (!q) return personas;
+
     return personas.filter((p) => {
-      const matchRol = rolFiltro === "Todos" ? true : p.rol === rolFiltro;
-      const matchQ =
-        !q ||
+      return (
         p.nombre.toLowerCase().includes(q) ||
         p.email.toLowerCase().includes(q) ||
-        p.rol.toLowerCase().includes(q) ||
-        (p.areaInterna?.toLowerCase().includes(q) ?? false); // 👈 búsqueda también por área interna
-      return matchRol && matchQ;
+        String(p.id_trabajador).includes(q) ||
+        String(p.areaInterna ?? "").toLowerCase().includes(q) ||
+        String(p.carpetaDriveCodigo ?? "").toLowerCase().includes(q)
+      );
     });
-  }, [personas, rolFiltro, query]);
+  }, [personas, query]);
 
-  const formatUltimoLogin = (value?: string | null) => {
-    if (!value) return "—";
+  const openEdit = (p: Persona) => {
+    if (!canEdit) return;
+
+    setSelected({
+      id_trabajador: p.id_trabajador,
+      nombre: p.nombre,
+      email: p.email, // read-only
+      areaInterna: (p.areaInterna ?? null) as any,
+      carpetaDriveCodigo: p.carpetaDriveCodigo ?? null,
+      status: p.status ?? true,
+    });
+
+    setEditOpen(true);
+  };
+
+  const onSaveEdit = async (payload: PersonaEditable) => {
     try {
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return "—";
-      return d.toLocaleString("es-CL", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "—";
+      setSavingId(payload.id_trabajador);
+
+      const res = await fetch(
+        `${API_BASE_URL}/trabajadores/${payload.id_trabajador}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            // ✅ NO enviamos email
+            nombre: payload.nombre,
+            areaInterna: payload.areaInterna,
+            carpetaDriveCodigo: payload.carpetaDriveCodigo,
+            status: payload.status,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error("[PersonasPage] PATCH error:", res.status, text);
+        throw new Error(`Error HTTP ${res.status}`);
+      }
+
+      // Si el backend devuelve { trabajador }, lo tomamos; si no, igual hacemos refresh
+      setEditOpen(false);
+      setSelected(null);
+
+      // ✅ refrescamos lista para evitar des-sync
+      await refreshList();
+    } catch (e) {
+      console.error(e);
+      alert(
+        "No se pudo guardar.\n- Revisa que tu usuario sea ADMIN/SUPERVISOR.\n- Revisa que exista PATCH /api/trabajadores/:id.\n- Mira consola/network."
+      );
+    } finally {
+      setSavingId(null);
     }
   };
 
   return (
     <div className="mt-4">
-      {/* Header de la page */}
+      {/* Header */}
       <div className="mb-4">
         <h2 className="text-2xl font-semibold flex items-center gap-2">
           <Users size={20} />
           Usuarios / Personas
         </h2>
         <p className="text-sm text-black/60">
-          Listado de usuarios con su correo y rol en el sistema.
+          Listado de usuarios con su ID, correo, área interna y código de
+          carpeta.
         </p>
       </div>
 
-      {/* Controles: Filtros + Búsqueda */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {/* Tabs de roles */}
-        <div className="flex flex-wrap items-center gap-2">
-          {rolesDisponibles.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRolFiltro(r)}
-              className={`rounded-full px-3 py-1.5 text-sm border transition ${
-                rolFiltro === r
-                  ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-                  : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-              }`}
-            >
-              {r}{" "}
-              <span className="ml-1 text-xs opacity-80">
-                ({counts[r] ?? 0})
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Buscador */}
-        <div className="flex items-center gap-2 bg-white rounded-xl border border-black/10 px-3 py-2 w-full md:w-[320px]">
-          <Search size={16} className="text-black/50" />
-          <input
-            className="w-full outline-none text-sm placeholder:text-black/40"
-            placeholder="Buscar por nombre, email, rol o área interna…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+      {/* Buscador */}
+      <div className="flex items-center gap-2 bg-white rounded-xl border border-black/10 px-3 py-2 w-full md:w-[520px]">
+        <Search size={16} className="text-black/50" />
+        <input
+          className="w-full outline-none text-sm placeholder:text-black/40"
+          placeholder="Buscar por ID, nombre, email, área interna o carpetaDriveCodigo…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
 
-      {/* Tabla */}
+      {/* Tabla desktop */}
       <div className="mt-4 bg-white rounded-2xl border border-black/5 shadow-lg overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-black/50 text-xs uppercase tracking-wider border-b border-black/5">
               <th className="py-3 px-3 font-semibold">#</th>
+              <th className="py-3 px-3 font-semibold">ID</th>
               <th className="py-3 px-3 font-semibold">Nombre</th>
               <th className="py-3 px-3 font-semibold">Email</th>
-              <th className="py-3 px-3 font-semibold">Rol</th>
-              <th className="py-3 px-3 font-semibold">Estado</th>
+              <th className="py-3 px-3 font-semibold">Área interna</th>
+              <th className="py-3 px-3 font-semibold">Carpeta</th>
               <th className="py-3 px-3 font-semibold text-right">Acciones</th>
             </tr>
           </thead>
+
           <tbody>
-            {/* Estado de carga / error */}
             {loading === "loading" && (
               <tr>
-                <td colSpan={6} className="py-8 px-3 text-center text-black/50">
+                <td colSpan={7} className="py-8 px-3 text-center text-black/50">
                   Cargando usuarios…
                 </td>
               </tr>
@@ -269,218 +323,148 @@ export default function PersonasPage() {
 
             {loading === "error" && (
               <tr>
-                <td
-                  colSpan={6}
-                  className="py-8 px-3 text-center text-rose-500"
-                >
+                <td colSpan={7} className="py-8 px-3 text-center text-rose-500">
                   Error cargando usuarios. Revisa la consola o el endpoint.
                 </td>
               </tr>
             )}
 
-            {/* Mensaje de no resultados */}
             {loading === "idle" && filtered.length === 0 && (
               <tr>
-                <td
-                  className="py-8 px-3 text-center text-black/50"
-                  colSpan={6}
-                >
+                <td colSpan={7} className="py-8 px-3 text-center text-black/50">
                   No hay resultados con los filtros actuales.
                 </td>
               </tr>
             )}
 
-            {/* Filas de datos */}
             {loading === "idle" &&
               filtered.map((p, i) => {
-                const isExpanded = expandedId === p.id;
+                const isExpanded = expandedId === p.id_trabajador;
+
                 return (
-                  <React.Fragment key={p.id}>
+                  <React.Fragment key={p.id_trabajador}>
                     <tr
                       className={`border-t group transition-colors cursor-pointer ${
-                        isExpanded
-                          ? "bg-black/[0.03]"
-                          : "hover:bg-black/[0.02]"
+                        isExpanded ? "bg-black/[0.03]" : "hover:bg-black/[0.02]"
                       }`}
+                      onClick={() => toggleExpand(p.id_trabajador)}
                     >
-                      <td
-                        className="py-3 px-3 text-black/70 font-mono"
-                        onClick={() => toggleExpand(p.id)}
-                      >
+                      <td className="py-3 px-3 text-black/70 font-mono">
                         {String(i + 1).padStart(3, "0")}
                       </td>
-                      <td
-                        className="py-3 px-3"
-                        onClick={() => toggleExpand(p.id)}
-                      >
+                      <td className="py-3 px-3 text-black/70 font-mono">
+                        {p.id_trabajador}
+                      </td>
+                      <td className="py-3 px-3">
                         <div
                           className="font-medium"
                           style={{ color: "var(--primary-color)" }}
                         >
                           {p.nombre}
                         </div>
-                        <div className="text-xs text-black/50">ID: {p.id}</div>
                       </td>
                       <td className="py-3 px-3">
                         <a
                           href={`mailto:${p.email}`}
                           className="text-[var(--secondary-color)] hover:underline"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {p.email}
                         </a>
                       </td>
-                      <td className="py-3 px-3 text-black/70">{p.rol}</td>
-                      <td className="py-3 px-3">
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                            p.estado === "Activo"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-rose-100 text-rose-800"
-                          }`}
-                        >
-                          {p.estado ?? "—"}
-                        </span>
+                      <td className="py-3 px-3 text-black/70">
+                        {p.areaInterna ?? "—"}
                       </td>
-                      <td className="py-3 px-3 text-right flex items-center justify-end gap-2 h-full">
-                        <button
-                          onClick={() => toggleExpand(p.id)}
-                          className={`p-1.5 rounded-full border border-black/10 hover:border-black/30 transition-all ${
-                            isExpanded ? "bg-black/5" : "bg-white"
-                          }`}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown size={18} />
-                          ) : (
-                            <ChevronRight size={18} />
-                          )}
-                        </button>
+                      <td className="py-3 px-3 text-black/70 font-mono">
+                        {p.carpetaDriveCodigo ?? "—"}
+                      </td>
+
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEdit(p);
+                            }}
+                            disabled={!canEdit}
+                            title={
+                              canEdit
+                                ? "Editar usuario"
+                                : "Solo ADMIN/SUPERVISOR"
+                            }
+                            className={`px-3 py-1.5 rounded-xl border transition-all bg-white flex items-center gap-2
+                              ${
+                                canEdit
+                                  ? "border-black/10 hover:border-black/30"
+                                  : "border-black/10 opacity-50 cursor-not-allowed"
+                              }`}
+                          >
+                            <Pencil size={16} />
+                            {savingId === p.id_trabajador ? "Guardando..." : "Editar"}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(p.id_trabajador);
+                            }}
+                            className="p-1.5 rounded-full border border-black/10 hover:border-black/30 transition-all bg-white"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown size={18} />
+                            ) : (
+                              <ChevronRight size={18} />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
 
-                    {/* Fila de Contenido Expandido */}
                     {isExpanded && (
                       <tr className="bg-black/[0.03] animate-in fade-in slide-in-from-top-1 duration-200">
                         <td
-                          colSpan={6}
-                          className="py-6 px-6 border-t border-black/10"
+                          colSpan={7}
+                          className="py-5 px-6 border-t border-black/10"
                         >
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-                            {/* Columna 1: Detalles de Contacto */}
-                            <div className="space-y-2">
-                              <p className="font-semibold text-black/70 mb-2 border-b border-black/5 pb-1">
-                                Detalles de Contacto
-                              </p>
-                              <div className="flex items-start gap-3">
-                                <Phone
-                                  size={16}
-                                  className="text-black/50 mt-1"
-                                />
-                                <div>
-                                  <p className="text-black/60">
-                                    Correo principal
-                                  </p>
-                                  <p className="font-medium text-[var(--primary-color)]">
-                                    {p.email}
-                                  </p>
-                                </div>
-                              </div>
-                              {p.area && (
-                                <div className="mt-2 text-sm text-black/60">
-                                  Área:{" "}
-                                  <span className="font-medium">
-                                    {p.area}
-                                  </span>
-                                </div>
-                              )}
-                              {p.areaInterna && (
-                                <div className="text-sm text-black/60">
-                                  Área interna:{" "}
-                                  <span className="font-medium">
-                                    {p.areaInterna}
-                                  </span>
-                                </div>
-                              )}
-                              {p.categoria && (
-                                <div className="text-sm text-black/60">
-                                  Categoría:{" "}
-                                  <span className="font-medium">
-                                    {p.categoria}
-                                  </span>
-                                </div>
-                              )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">ID</p>
+                              <p className="font-mono">{p.id_trabajador}</p>
                             </div>
 
-                            {/* Columna 2: Actividad */}
-                            <div className="space-y-2">
-                              <p className="font-semibold text-black/70 mb-2 border-b border-black/5 pb-1">
-                                Actividad
-                              </p>
-                              <div className="flex items-start gap-3">
-                                <Clock
-                                  size={16}
-                                  className="text-black/50 mt-1"
-                                />
-                                <div>
-                                  <p className="text-black/60">
-                                    Último Login
-                                  </p>
-                                  <p className="font-medium text-[var(--primary-color)]">
-                                    {formatUltimoLogin(p.ultimoLogin)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-start gap-3">
-                                <ListChecks
-                                  size={16}
-                                  className="text-black/50 mt-1"
-                                />
-                                <div>
-                                  <p className="text-black/60">
-                                    Proyectos activos (tareas)
-                                  </p>
-                                  <p className="font-medium text-[var(--primary-color)]">
-                                    {p.proyectosActivos ?? 0}
-                                  </p>
-                                </div>
-                              </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">Nombre</p>
+                              <p className="font-medium">{p.nombre}</p>
                             </div>
 
-                            {/* Columna 3: Acciones Administrativas */}
-                            <div className="space-y-2">
-                              <p className="font-semibold text-black/70 mb-2 border-b border-black/5 pb-1">
-                                Acciones Administrativas
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">Email</p>
+                              <p className="font-medium">{p.email}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">
+                                Área interna
                               </p>
-                              <div className="flex flex-col gap-2 pt-1">
-                                <button
-                                  onClick={() =>
-                                    setConfirmModal({
-                                      action: "enable",
-                                      personaId: p.id,
-                                      personaNombre: p.nombre,
-                                    })
-                                  }
-                                  className="flex items-center justify-center gap-2 w-full py-2 text-sm font-medium text-white rounded-lg shadow-sm hover:opacity-90 transition-opacity"
-                                  style={{
-                                    background: "var(--secondary-color)",
-                                  }}
-                                >
-                                  <Check size={16} />
-                                  Habilitar Cuenta
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    setConfirmModal({
-                                      action: "disable",
-                                      personaId: p.id,
-                                      personaNombre: p.nombre,
-                                    })
-                                  }
-                                  className="flex items-center justify-center gap-2 w-full py-2 text-sm font-medium text-rose-700 bg-white rounded-lg border border-rose-300 hover:bg-rose-50 transition-colors"
-                                >
-                                  <X size={16} />
-                                  Deshabilitar Acceso
-                                </button>
-                              </div>
+                              <p className="font-medium">
+                                {p.areaInterna ?? "—"}
+                              </p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">
+                                CarpetaDriveCodigo
+                              </p>
+                              <p className="font-mono">
+                                {p.carpetaDriveCodigo ?? "—"}
+                              </p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-xs text-black/50">Estado</p>
+                              <p className="font-medium">
+                                {p.status === false ? "Inactivo" : "Activo"}
+                              </p>
                             </div>
                           </div>
                         </td>
@@ -493,7 +477,7 @@ export default function PersonasPage() {
         </table>
       </div>
 
-      {/* Vista mobile en formato tarjetas/accordion */}
+      {/* Mobile cards */}
       <div className="mt-4 md:hidden flex flex-col gap-3">
         {loading === "loading" && (
           <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4 text-center text-black/50">
@@ -515,17 +499,18 @@ export default function PersonasPage() {
 
         {loading === "idle" &&
           filtered.map((p, i) => {
-            const isExpanded = expandedId === p.id;
+            const isExpanded = expandedId === p.id_trabajador;
+
             return (
               <div
-                key={p.id}
+                key={p.id_trabajador}
                 className="bg-white rounded-2xl border border-black/5 shadow-sm p-4 flex flex-col gap-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 text-xs text-black/50 font-mono">
                       <span>#{String(i + 1).padStart(3, "0")}</span>
-                      <span>ID: {p.id}</span>
+                      <span>ID: {p.id_trabajador}</span>
                     </div>
                     <p
                       className="text-base font-semibold truncate"
@@ -540,21 +525,35 @@ export default function PersonasPage() {
                       {p.email}
                     </a>
                     <p className="text-xs text-black/60 mt-1">
-                      Rol: <span className="font-medium">{p.rol}</span>
+                      Área interna:{" "}
+                      <span className="font-medium">{p.areaInterna ?? "—"}</span>
+                    </p>
+                    <p className="text-xs text-black/60">
+                      Carpeta:{" "}
+                      <span className="font-mono">
+                        {p.carpetaDriveCodigo ?? "—"}
+                      </span>
                     </p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        p.estado === "Activo"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-rose-100 text-rose-800"
-                      }`}
-                    >
-                      {p.estado}
-                    </span>
+
+                  <div className="flex flex-col gap-2 items-end">
                     <button
-                      onClick={() => toggleExpand(p.id)}
+                      onClick={() => openEdit(p)}
+                      disabled={!canEdit}
+                      title={canEdit ? "Editar usuario" : "Solo ADMIN/SUPERVISOR"}
+                      className={`px-3 py-2 rounded-xl border transition bg-white flex items-center gap-2 text-sm
+                        ${
+                          canEdit
+                            ? "border-black/10 hover:border-black/30"
+                            : "border-black/10 opacity-50 cursor-not-allowed"
+                        }`}
+                    >
+                      <Pencil size={16} />
+                      Editar
+                    </button>
+
+                    <button
+                      onClick={() => toggleExpand(p.id_trabajador)}
                       className="p-2 rounded-full border border-black/10 hover:border-black/30 transition"
                     >
                       {isExpanded ? (
@@ -567,59 +566,24 @@ export default function PersonasPage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="pt-2 border-t border-black/5 space-y-3 text-sm text-black/70">
-                    <div className="flex items-start gap-2">
-                      <Phone size={16} className="text-black/40 mt-0.5" />
-                      <div>
-                        <p className="text-black/50 text-xs">Correo principal</p>
-                        <p className="font-medium">{p.email}</p>
-                      </div>
+                  <div className="pt-2 border-t border-black/5 space-y-2 text-sm text-black/70">
+                    <div>
+                      <p className="text-xs text-black/50">ID</p>
+                      <p className="font-mono">{p.id_trabajador}</p>
                     </div>
-                    {p.area && (
-                      <p className="text-xs text-black/60">
-                        Area: <span className="font-medium">{p.area}</span>
+                    <div>
+                      <p className="text-xs text-black/50">Área interna</p>
+                      <p className="font-medium">{p.areaInterna ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50">CarpetaDriveCodigo</p>
+                      <p className="font-mono">{p.carpetaDriveCodigo ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50">Estado</p>
+                      <p className="font-medium">
+                        {p.status === false ? "Inactivo" : "Activo"}
                       </p>
-                    )}
-                    {p.areaInterna && (
-                      <p className="text-xs text-black/60">
-                        Area interna:{" "}
-                        <span className="font-medium">{p.areaInterna}</span>
-                      </p>
-                    )}
-                    {p.categoria && (
-                      <p className="text-xs text-black/60">
-                        Categoria:{" "}
-                        <span className="font-medium">{p.categoria}</span>
-                      </p>
-                    )}
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() =>
-                          setConfirmModal({
-                            action: "enable",
-                            personaId: p.id,
-                            personaNombre: p.nombre,
-                          })
-                        }
-                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-white rounded-lg shadow-sm hover:opacity-90 transition"
-                        style={{ background: "var(--secondary-color)" }}
-                      >
-                        <Check size={16} />
-                        Habilitar Cuenta
-                      </button>
-                      <button
-                        onClick={() =>
-                          setConfirmModal({
-                            action: "disable",
-                            personaId: p.id,
-                            personaNombre: p.nombre,
-                          })
-                        }
-                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-rose-700 bg-white rounded-lg border border-rose-300 hover:bg-rose-50 transition"
-                      >
-                        <X size={16} />
-                        Deshabilitar Acceso
-                      </button>
                     </div>
                   </div>
                 )}
@@ -628,59 +592,18 @@ export default function PersonasPage() {
           })}
       </div>
 
-      {/* Modal de confirmación */}
-      {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setConfirmModal(null)}
-          />
-          <div className="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-lg z-10">
-            <h3
-              className="text-lg font-semibold mb-2"
-              style={{ color: "var(--primary-color)" }}
-            >
-              {confirmModal.action === "enable"
-                ? "¿Habilitar cuenta?"
-                : "¿Deshabilitar acceso?"}
-            </h3>
-            <p className="text-sm text-black/60 mb-6">
-              {confirmModal.action === "enable"
-                ? `Se habilitará la cuenta de ${confirmModal.personaNombre}.`
-                : `Se deshabilitará el acceso de ${confirmModal.personaNombre}.`}
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  // Aquí después puedes llamar a tu API /trabajadores/:id/habilitar o deshabilitar
-                  const action =
-                    confirmModal.action === "enable"
-                      ? "Cuenta habilitada"
-                      : "Acceso deshabilitado";
-                  alert(`${action} para ${confirmModal.personaNombre}`);
-                  setConfirmModal(null);
-                }}
-                className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium text-white transition ${
-                  confirmModal.action === "enable"
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "bg-rose-600 hover:bg-rose-700"
-                }`}
-              >
-                {confirmModal.action === "enable"
-                  ? "Habilitar"
-                  : "Deshabilitar"}
-              </button>
-              <button
-                onClick={() => setConfirmModal(null)}
-                className="flex-1 py-2.5 px-3 rounded-lg text-sm font-medium border border-black/10 bg-white hover:border-black/20 transition"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ✅ MODAL */}
+      <EditarPersonaModal
+        open={editOpen}
+        persona={selected}
+        actorRole={myRole}
+        saving={savingId !== null}
+        onClose={() => {
+          setEditOpen(false);
+          setSelected(null);
+        }}
+        onSave={onSaveEdit}
+      />
     </div>
   );
 }

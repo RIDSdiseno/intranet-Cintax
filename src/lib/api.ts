@@ -1,10 +1,13 @@
 // src/components/supervision/api.ts
 // Helpers de datos para el módulo de supervisión de tareas.
 
-export const API_BASE_URL =
+const envBase =
   // @ts-ignore
   (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
   "http://localhost:3000/api";
+
+// Normaliza para evitar "//" (por ejemplo si el env viene con / al final)
+export const API_BASE_URL = String(envBase).replace(/\/+$/, "");
 
 export type EstadoBack = "PENDIENTE" | "EN_PROCESO" | "VENCIDA" | "COMPLETADA";
 
@@ -47,17 +50,16 @@ const getAuthToken = () =>
 
 const getAuthHeaders = (): HeadersInit => {
   const token = getAuthToken();
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export async function fetchJSON<T>(
-  url: string,
-  init?: RequestInit
-): Promise<T> {
+/**
+ * fetchJSON: wrapper con:
+ * - headers auth (Bearer)
+ * - manejo de errores con texto (si viene HTML o texto plano)
+ * - parse seguro de JSON
+ */
+export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -72,7 +74,16 @@ export async function fetchJSON<T>(
     throw new Error(`Error ${res.status} al llamar ${url}: ${text}`);
   }
 
-  return (await res.json()) as T;
+  // Algunos backends responden 204 sin body
+  if (res.status === 204) return undefined as unknown as T;
+
+  const raw = await res.text().catch(() => "");
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    // Si no era JSON, igual devolvemos error explícito
+    throw new Error(`Respuesta no-JSON desde ${url}: ${raw.slice(0, 200)}`);
+  }
 }
 
 export const mapEstadoLabel = (estado: EstadoBack) => {
@@ -90,11 +101,28 @@ export const mapEstadoLabel = (estado: EstadoBack) => {
   }
 };
 
+const safeDate = (iso?: string | null) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/**
+ * isPorVencer:
+ * - considera solo tareas NO completadas
+ * - compara con "hoy" a las 00:00 para evitar falsos negativos por hora
+ */
 export const isPorVencer = (tarea: TareaFull, dias = 3) => {
   if (tarea.estado === "COMPLETADA") return false;
-  const fv = new Date(tarea.fechaProgramada);
+
+  const fv = safeDate(tarea.fechaProgramada);
+  if (!fv) return false;
+
   const hoy = new Date();
-  const limite = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const limite = new Date(hoy);
   limite.setDate(hoy.getDate() + dias);
+
   return fv >= hoy && fv <= limite;
 };

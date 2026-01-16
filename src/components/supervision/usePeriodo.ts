@@ -1,11 +1,10 @@
-// src/components/supervision/usePeriodo.ts
 import { useMemo } from "react";
-import type { TareaFull } from "./api";
+import type { TareaFull } from "../../lib/api";
 
 export type Periodo =
   | "actual" // mes actual
   | "semana" // semana actual (lun-dom)
-  | "mes" // mes actual (alias de actual)
+  | "mes" // alias de actual
   | "hist" // sin filtro
   | "mes-especifico" // usa mes + año proporcionados
   | "anio-especifico"; // usa año proporcionado completo
@@ -24,10 +23,8 @@ const endOfWeek = (date: Date) => {
   return d;
 };
 
-const startOfMonth = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-const endOfMonth = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0);
+const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0);
 
 const sameMonth = (date: Date, year: number, month: number) =>
   date.getFullYear() === year && date.getMonth() === month - 1;
@@ -37,55 +34,48 @@ function inRange(date: Date, desde: Date, hasta: Date) {
 }
 
 function getFechaClave(t: TareaFull) {
-  // Usamos la fecha programada como referencia principal; fallback createdAt
-  return new Date(t.fechaProgramada || t.createdAt);
+  const d = new Date(t.fechaProgramada || t.createdAt);
+  if (Number.isNaN(d.getTime())) return new Date(0); // fallback estable
+  return d;
 }
 
-export function filtrarPorPeriodo(
-  tareas: TareaFull[],
-  periodo: Periodo,
-  mes?: number,
-  anio?: number
-): TareaFull[] {
+export function filtrarPorPeriodo(tareas: TareaFull[], periodo: Periodo, mes?: number, anio?: number): TareaFull[] {
   if (!Array.isArray(tareas) || tareas.length === 0) return [];
   const hoy = new Date();
 
   switch (periodo) {
     case "hist":
       return tareas;
+
     case "semana": {
       const ini = startOfWeek(hoy);
       const fin = endOfWeek(hoy);
       return tareas.filter((t) => inRange(getFechaClave(t), ini, fin));
     }
+
     case "mes": // alias de actual
     case "actual": {
       const ini = startOfMonth(hoy);
       const fin = endOfMonth(hoy);
       return tareas.filter((t) => inRange(getFechaClave(t), ini, fin));
     }
+
     case "mes-especifico": {
       const m = mes ?? hoy.getMonth() + 1;
       const a = anio ?? hoy.getFullYear();
       return tareas.filter((t) => sameMonth(getFechaClave(t), a, m));
     }
+
     case "anio-especifico": {
       const a = anio ?? hoy.getFullYear();
       return tareas.filter((t) => getFechaClave(t).getFullYear() === a);
     }
+
     default:
       return tareas;
   }
 }
 
-export function useFiltroPeriodo(
-  tareas: TareaFull[],
-  periodo: Periodo,
-  mes?: number,
-  anio?: number
-) {
-  return useMemo(
-    () => filtrarPorPeriodo(tareas, periodo, mes, anio),
-    [tareas, periodo, mes, anio]
-  );
+export function useFiltroPeriodo(tareas: TareaFull[], periodo: Periodo, mes?: number, anio?: number) {
+  return useMemo(() => filtrarPorPeriodo(tareas, periodo, mes, anio), [tareas, periodo, mes, anio]);
 }

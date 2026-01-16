@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { KpiCard, TaskRow } from "../App";
-import { getAuthPayload } from "../App";
-import {
-  Users,
-  FileText,
-  LifeBuoy,
-  Clock,
-} from "lucide-react";
+
+import KpiCard from "../components/ui/KpiCard";
+import TaskRow from "../components/ui/TaskRow";
+import { getAuthPayload, getAuthToken } from "../lib/auth";
+
+import { Users, FileText, LifeBuoy, Clock } from "lucide-react";
 
 // --- TIPOS DE DATOS DEL BACKEND ---
 interface BackendTask {
@@ -50,25 +48,31 @@ interface Kpi {
 }
 
 // --- HELPERS ---
-const mapTaskStatus = (status: BackendTask['estado']): Task['status'] => {
+const mapTaskStatus = (status: BackendTask["estado"]): Task["status"] => {
   switch (status) {
-    case 'PENDIENTE': return 'En curso';
-    case 'COMPLETADA': return 'Completada';
-    case 'VENCIDA': return 'Bloqueada'; // 'Bloqueada' usa el estilo rojo de peligro
-    default: return 'En curso';
+    case "PENDIENTE":
+      return "En curso";
+    case "COMPLETADA":
+      return "Completada";
+    case "VENCIDA":
+      return "Bloqueada";
+    default:
+      return "En curso";
   }
 };
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("es-CL", { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(dateString).toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL) || "http://localhost:3000/api";
-const getAuthToken = () => localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:3000/api";
 
 /**
  * Hook para obtener los datos del dashboard del usuario.
- * Debería obtener KPIs, Tareas, Clientes, etc.
  */
 const useDashboardData = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -88,41 +92,67 @@ const useDashboardData = () => {
       }
 
       const authPayload = getAuthPayload();
-      const userName = authPayload?.nombre || authPayload?.nombreUsuario || "Usuario";
+      const userName =
+        authPayload?.nombre || authPayload?.nombreUsuario || "Usuario";
 
       try {
         setLoading(true);
-        const [tasksResponse, kpisResponse, activityResponse, announcementsResponse] = await Promise.all([
-          axios.get(`${API_BASE_URL}/dashboard/my-tasks`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/dashboard/my-kpis`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/dashboard/activity`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/dashboard/announcements`, { headers: { Authorization: `Bearer ${token}` } }),
+
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const [
+          tasksResponse,
+          kpisResponse,
+          activityResponse,
+          announcementsResponse,
+        ] = await Promise.all([
+          axios.get(`${API_BASE_URL}/dashboard/my-tasks`, { headers }),
+          axios.get(`${API_BASE_URL}/dashboard/my-kpis`, { headers }),
+          axios.get(`${API_BASE_URL}/dashboard/activity`, { headers }),
+          axios.get(`${API_BASE_URL}/dashboard/announcements`, { headers }),
         ]);
 
-        // 1. Mapear Tareas
-        const mappedTasks: Task[] = tasksResponse.data.map((task: BackendTask) => ({
-          id: task.id_tarea_asignada,
-          title: task.tareaPlantilla.nombre,
-          owner: userName,
-          status: mapTaskStatus(task.estado),
-          due: formatDate(task.fechaProgramada),
-        }));
+        // 1) Mapear Tareas
+        const mappedTasks: Task[] = (tasksResponse.data ?? []).map(
+          (task: BackendTask) => ({
+            id: task.id_tarea_asignada,
+            title: task.tareaPlantilla?.nombre ?? "Tarea",
+            owner: userName,
+            status: mapTaskStatus(task.estado),
+            due: formatDate(task.fechaProgramada),
+          })
+        );
         setTasks(mappedTasks);
 
-        // 2. Mapear KPIs
-        const kpiData = kpisResponse.data;
+        // 2) Mapear KPIs
+        const kpiData = kpisResponse.data ?? {};
         const formattedKpis: Kpi[] = [
-          { title: "Colaboradores activos", value: String(kpiData.clientesACargo ?? 0), icon: <Users /> },
-          { title: "Tareas Pendientes", value: String(kpiData.tareasPendientes ?? 0), icon: <Clock /> },
-          { title: "Documentos Recientes", value: String(kpiData.documentosRecientes ?? 0), icon: <FileText /> },
-          { title: "Tickets Abiertos", value: String(kpiData.ticketsAbiertos ?? 0), icon: <LifeBuoy /> },
+          {
+            title: "Colaboradores activos",
+            value: String(kpiData.clientesACargo ?? 0),
+            icon: <Users />,
+          },
+          {
+            title: "Tareas Pendientes",
+            value: String(kpiData.tareasPendientes ?? 0),
+            icon: <Clock />,
+          },
+          {
+            title: "Documentos Recientes",
+            value: String(kpiData.documentosRecientes ?? 0),
+            icon: <FileText />,
+          },
+          {
+            title: "Tickets Abiertos",
+            value: String(kpiData.ticketsAbiertos ?? 0),
+            icon: <LifeBuoy />,
+          },
         ];
         setKpis(formattedKpis);
-        
-        // 3. & 4. Setear Actividad y Anuncios
-        setActivity(activityResponse.data);
-        setAnnouncements(announcementsResponse.data);
 
+        // 3) Actividad & 4) Anuncios
+        setActivity(activityResponse.data ?? []);
+        setAnnouncements(announcementsResponse.data ?? []);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
         setError("No se pudieron cargar los datos del dashboard.");
@@ -209,24 +239,28 @@ const DashboardSkeleton: React.FC = () => (
 
 // --- WIDGET COMPONENTS ---
 const ActivityWidget: React.FC<{ activities: Activity[] }> = ({ activities }) => {
-  if (!activities || activities.length === 0) {
-    return null;
-  }
+  if (!activities || activities.length === 0) return null;
+
   return (
     <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
       <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>
         Actividad reciente
       </h2>
+
       <div className="space-y-4">
-        {activities.map(activity => (
+        {activities.map((activity) => (
           <div key={activity.id} className="flex gap-3 items-start">
-            <div className={`mt-1.5 shrink-0 h-2 w-2 rounded-full ${!activity.leida ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+            <div
+              className={`mt-1.5 shrink-0 h-2 w-2 rounded-full ${
+                !activity.leida ? "bg-blue-500" : "bg-gray-300"
+              }`}
+            />
             <div className="min-w-0">
               <p className="text-sm" style={{ color: "var(--primary-color)" }}>
                 {activity.mensaje}
               </p>
               <p className="text-[10px] uppercase tracking-wider text-black/40 mt-1">
-                {new Date(activity.createdAt).toLocaleString('es-CL')}
+                {new Date(activity.createdAt).toLocaleString("es-CL")}
               </p>
             </div>
           </div>
@@ -236,17 +270,19 @@ const ActivityWidget: React.FC<{ activities: Activity[] }> = ({ activities }) =>
   );
 };
 
-const AnnouncementsWidget: React.FC<{ announcements: Announcement[] }> = ({ announcements }) => {
-  if (!announcements || announcements.length === 0) {
-    return null;
-  }
+const AnnouncementsWidget: React.FC<{ announcements: Announcement[] }> = ({
+  announcements,
+}) => {
+  if (!announcements || announcements.length === 0) return null;
+
   return (
     <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-4">
       <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--primary-color)" }}>
         Anuncios
       </h2>
+
       <div className="space-y-3">
-        {announcements.map(a => (
+        {announcements.map((a) => (
           <div key={a.id} className="rounded-xl p-3 bg-[var(--tertiary-color)]">
             <p className="font-medium" style={{ color: "var(--primary-color)" }}>
               {a.titulo}
@@ -263,30 +299,20 @@ const HomePage: React.FC = () => {
   const { tasks, kpis, activity, announcements, loading, error } = useDashboardData();
   const navigate = useNavigate();
 
-  if (loading) {
-    return <DashboardSkeleton />;
-  }
-
-  if (error) {
-    return <div className="mt-6 text-red-500">{error}</div>;
-  }
+  if (loading) return <DashboardSkeleton />;
+  if (error) return <div className="mt-6 text-red-500">{error}</div>;
 
   return (
     <>
-      {announcements && announcements.length > 0 && (
+      {announcements?.length > 0 && (
         <div className="mt-6">
           <AnnouncementsWidget announcements={announcements} />
         </div>
       )}
 
       <div className="mt-6 grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpis.map(kpi => (
-          <KpiCard
-            key={kpi.title}
-            title={kpi.title}
-            value={kpi.value}
-            icon={kpi.icon}
-          />
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.title} title={kpi.title} value={kpi.value} icon={kpi.icon} />
         ))}
       </div>
 
@@ -297,17 +323,17 @@ const HomePage: React.FC = () => {
               <h2 className="text-lg font-semibold" style={{ color: "var(--primary-color)" }}>
                 Mis Tareas Urgentes
               </h2>
-              <p className="text-xs text-black/50">
-                Tus 5 asignaciones más próximas a vencer.
-              </p>
+              <p className="text-xs text-black/50">Tus 5 asignaciones más próximas a vencer.</p>
             </div>
+
             <button
-              onClick={() => navigate('/tareas')}
+              onClick={() => navigate("/tareas")}
               className="text-sm rounded-xl px-3 py-1.5 border border-black/10 hover:border-black/20 transition"
             >
               Ver todas mis tareas
             </button>
           </header>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -318,10 +344,18 @@ const HomePage: React.FC = () => {
                   <th className="py-3 px-3 font-medium text-right">Vence</th>
                 </tr>
               </thead>
+
               <tbody>
                 {tasks.length > 0 ? (
                   tasks.map((t) => (
-                    <TaskRow key={t.id} idx={t.id} title={t.title} owner={t.owner} status={t.status} due={t.due} />
+                    <TaskRow
+                      key={t.id}
+                      idx={t.id}
+                      title={t.title}
+                      owner={t.owner}
+                      status={t.status}
+                      due={t.due}
+                    />
                   ))
                 ) : (
                   <tr>

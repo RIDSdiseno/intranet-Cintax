@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -13,25 +13,32 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rememberRef = useRef(remember);
 
   /* =========================
      LOGIN GOOGLE
   ========================== */
   const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "https://localhost:3000";
-  useEffect(() => {
-    // cargar script de Google Identity
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
-    script.onload = () => {
+  useEffect(() => {
+    rememberRef.current = remember;
+  }, [remember]);
+
+  useEffect(() => {
+    const initGoogleIdentity = () => {
+      // @ts-ignore
+      if (typeof google === "undefined" || !google.accounts?.id) return;
+      const target = document.getElementById("google-btn");
+      if (!target) return;
+      target.innerHTML = "";
+
       // @ts-ignore
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: async (response: any) => {
           const idToken = response.credential; // <- JWT de Google
+          const rememberCurrent = rememberRef.current;
 
           try {
             setLoading(true);
@@ -39,13 +46,13 @@ export default function LoginPage() {
 
             const res = await axios.post(
               `${API_BASE_URL}/auth/google`,
-              { idToken, remember },
+              { idToken, remember: rememberCurrent },
               { withCredentials: true } // para la cookie rt
             );
 
             const accessToken = res.data.accessToken as string;
 
-            if (remember) {
+            if (rememberCurrent) {
               localStorage.setItem("access_token", accessToken);
             } else {
               sessionStorage.setItem("access_token", accessToken);
@@ -65,7 +72,7 @@ export default function LoginPage() {
       });
 
       // @ts-ignore
-      google.accounts.id.renderButton(document.getElementById("google-btn"), {
+      google.accounts.id.renderButton(target, {
         theme: "outline",
         size: "large",
         shape: "pill",
@@ -73,11 +80,35 @@ export default function LoginPage() {
       });
     };
 
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+
+    if (existingScript) {
+      // @ts-ignore
+      if (typeof google !== "undefined" && google.accounts?.id) {
+        initGoogleIdentity();
+        return;
+      }
+
+      existingScript.addEventListener("load", initGoogleIdentity);
+      return () => {
+        existingScript.removeEventListener("load", initGoogleIdentity);
+      };
+    }
+
+    // cargar script de Google Identity
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.addEventListener("load", initGoogleIdentity);
+
     document.body.appendChild(script);
     return () => {
-      document.body.removeChild(script);
+      script.removeEventListener("load", initGoogleIdentity);
     };
-  }, [remember, navigate]);
+  }, [navigate]);
 
   /* =========================
      LOGIN EMAIL + PASSWORD

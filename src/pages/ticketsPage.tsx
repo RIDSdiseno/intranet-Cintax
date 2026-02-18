@@ -1,1080 +1,556 @@
-import { useMemo, useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import {
-  Search,
-  ChevronRight,
-  BookCheck,
-  X,
-  Bold,
-  Italic,
-  Underline,
-  Link as LinkIcon,
-  Image as ImageIcon,
-  List,
-  AlignLeft,
-  Paperclip,
-  AlertCircle,
-  Calendar,
-  CheckCircle2,
-  ChevronDown,
-  Clock,
-  MessageSquare,
-  Tickets,
-} from "lucide-react";
+// src/pages/TicketsPage.tsx
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { getAuthPayload, getAuthToken } from "../lib/auth"; // ✅ usa tu helper real
 
-import DashboardArea from "../components/DashboardArea";
-import React from "react";
+/**
+ * Vite:
+ * - .env => VITE_API_URL=http://localhost:3000/api
+ * - si no existe, fallback
+ */
+const API_BASE =
+  import.meta.env.VITE_API_URL?.toString() || "http://localhost:3000/api";
 
-// 1. DEFINICIÓN DE TIPOS
-type Categoria =
-  | "Contabilidad"
-  | "Comercial y Marketing"
-  | "Gerencia"
-  | "Recursos Humanos"
-  | "Entre otros";
+const api = axios.create({
+  baseURL: API_BASE,
+  // Si tu auth usa cookies, pon true y backend debe responder Allow-Credentials=true
+  withCredentials: false,
+});
 
-type Estado =
-  | "Abierto"
-  | "Pendiente"
-  | "Resuelto"
-  | "Cerrado"
-  | "Pendiente de cliente"
-  | "Pendiente de tercero";
+// ✅ token desde tu auth.ts (access_token / auth_token)
+api.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-type Prioridad = "Baja" | "Media" | "Alta" | "Urgente";
+type Area = "CONTA" | "ADMIN" | "RRHH" | "TRIBUTARIO" | null;
 
-type Ticket = {
-  id: number;
-  asunto: string;
-  solicitante: string;
-  categoria: Categoria;
-  estado: Estado;
-  prioridad: Prioridad;
-  fecha: string;
-  descripcion?: string;
-  agente?: string;
-  ultimaActualizacion?: string;
+type Me = {
+  id: number; // ✅ payload trae id, no id_trabajador
+  email: string;
+  nombre?: string;
+  areaInterna?: Area; // si no viene en payload, queda null
 };
 
-const getApiBaseUrl = () => {
-  try {
-    // @ts-ignore
-    if (
-      typeof import.meta !== "undefined" &&
-      import.meta.env &&
-      import.meta.env.VITE_API_BASE_URL
-    ) {
-      // @ts-ignore
-      return import.meta.env.VITE_API_BASE_URL;
-    }
-  } catch (e) {
-    // Fallo silencioso
-  }
-  return "https://localhost:3000";
+type GmailThreadRow = {
+  id: string; // threadId
+  snippet?: string;
+  historyId?: string;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+type GmailParsedMessage = {
+  gmailId: string | null;
+  threadId: string | null;
+  snippet: string | null;
 
-// 2. MAPEO DE CATEGORÍAS (Backend -> Frontend)
-function mapCategoria(raw: string | null | undefined): Categoria {
-  const nombre = raw?.trim() || "";
+  subject: string | null;
+  from: string | null;
+  to: string | null;
+  cc: string | null;
+  replyTo: string | null;
+  date: string | null;
 
-  if (nombre === "Contabilidad") return "Contabilidad";
-  if (nombre === "Comercial y Marketing") return "Comercial y Marketing";
-  if (nombre === "Gerencia") return "Gerencia";
+  messageIdHeader: string | null;
+  inReplyTo: string | null;
+  references: string | null;
 
-  if (nombre === "RRHH" || nombre === "Recursos Humanos") {
-    return "Recursos Humanos";
+  bodyText: string;
+  bodyHtml: string;
+};
+
+function formatArea(a?: Area) {
+  if (!a) return "—";
+  const map: Record<string, string> = {
+    CONTA: "Contabilidad",
+    ADMIN: "Administración",
+    RRHH: "Recursos Humanos",
+    TRIBUTARIO: "Tributario",
+  };
+  return map[a] ?? a;
+}
+
+function formatDate(s?: string | null) {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString();
+}
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function deriveSubjectFromSnippet(snippet?: string) {
+  if (!snippet) return "—";
+  return snippet.length > 60 ? snippet.slice(0, 60) + "…" : snippet;
+}
+
+function isCintaxAddress(v?: string | null) {
+  const s = (v ?? "").toLowerCase();
+  return s.includes("@cintax.cl");
+}
+
+function deriveRequesterFromMessages(messages: GmailParsedMessage[]) {
+  for (const m of messages) {
+    const from = (m.from ?? "").toLowerCase();
+    if (!from) continue;
+    if (!from.includes("@cintax.cl")) return m.from ?? "";
   }
-
-  return "Entre otros";
+  return messages[0]?.from ?? "";
 }
-
-function mapEstado(raw: string | number | null | undefined): Estado {
-  const num = typeof raw === "number" ? raw : Number(raw);
-  switch (num) {
-    case 3:
-      return "Pendiente";
-    case 4:
-      return "Resuelto";
-    case 5:
-      return "Cerrado";
-    case 6:
-      return "Pendiente de cliente";
-    case 7:
-      return "Pendiente de tercero";
-    case 2:
-    default:
-      return "Abierto";
-  }
-}
-
-function mapPrioridad(raw: number | null | undefined): Prioridad {
-  if (raw === 4) return "Urgente";
-  if (raw === 3) return "Alta";
-  if (raw === 2) return "Media";
-  if (raw === 1) return "Baja";
-  return "Media";
-}
-
-function getEstadoClasses(e: Estado): string {
-  switch (e) {
-    case "Abierto":
-      return "bg-amber-50 text-amber-700";
-    case "Pendiente":
-    case "Pendiente de cliente":
-    case "Pendiente de tercero":
-      return "bg-sky-50 text-sky-700";
-    case "Resuelto":
-      return "bg-emerald-50 text-emerald-700";
-    case "Cerrado":
-    default:
-      return "bg-zinc-100 text-zinc-700";
-  }
-}
-
-// 3. LISTA DE PESTAÑAS VISIBLES
-const CATS: Array<"Todos" | Categoria> = [
-  "Todos",
-  "Contabilidad",
-  "Comercial y Marketing",
-  "Gerencia",
-  "Recursos Humanos",
-  "Entre otros",
-];
-
-const ESTADOS: Array<"Todos" | Estado> = [
-  "Todos",
-  "Abierto",
-  "Pendiente",
-  "Pendiente de cliente",
-  "Pendiente de tercero",
-  "Resuelto",
-  "Cerrado",
-];
-
-const PRIORIDADES: Array<"Todas" | Prioridad> = [
-  "Todas",
-  "Baja",
-  "Media",
-  "Alta",
-  "Urgente",
-];
 
 export default function TicketsPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [expandedTicketId, setExpandedTicketId] = useState<number | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
 
-  const params = useParams();
-  const navigate = useNavigate();
+  // Gmail query real (se manda al backend)
+  const [gmailQ, setGmailQ] = useState("");
 
-  const catFromUrl: "Todos" | Categoria = useMemo(() => {
-    const p = params.cat;
-    if (p === "contabilidad") return "Contabilidad";
-    if (p === "comercial") return "Comercial y Marketing";
-    if (p === "gerencia") return "Gerencia";
-    if (p === "rrhh") return "Recursos Humanos";
-    if (p === "otros") return "Entre otros";
-    return "Todos";
-  }, [params.cat]);
+  // filtro local (texto simple sobre snippet/id)
+  const [localQ, setLocalQ] = useState("");
 
-  const [categoria, setCategoria] = useState<"Todos" | Categoria>(catFromUrl);
-  const [estado, setEstado] = useState<"Todos" | Estado>("Todos");
-  const [prioridad, setPrioridad] = useState<"Todas" | Prioridad>("Todas");
-  const [query, setQuery] = useState("");
+  const [threads, setThreads] = useState<GmailThreadRow[]>([]);
+  const [loadingThreads, setLoadingThreads] = useState(false);
+  const [threadsError, setThreadsError] = useState<string | null>(null);
 
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const [pageSize, setPageSize] = useState(10);
-  const [page, setPage] = useState(1);
+  const [messages, setMessages] = useState<GmailParsedMessage[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setPage(1);
-  }, [categoria, estado, prioridad, query]);
+  // responder
+  const [replyText, setReplyText] = useState("");
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    setCategoria(catFromUrl);
-  }, [catFromUrl]);
+  const canSend = useMemo(
+    () => replyText.trim().length > 0 && !!selectedThreadId && !sending,
+    [replyText, selectedThreadId, sending]
+  );
 
-  const toggleExpand = (id: number) => {
-    setExpandedTicketId((prev) => (prev === id ? null : id));
-  };
+  async function fetchMe() {
+    // ✅ 1) Preferimos payload local (no depende de /auth/me)
+    const payload = getAuthPayload();
+    if (payload?.id && payload.email) {
+      setMe({
+        id: payload.id,
+        email: payload.email,
+        nombre: payload.nombre ?? payload.nombreUsuario ?? undefined,
+        // si el JWT no trae area, lo dejamos null (la UI mostrará —)
+        areaInterna: null,
+      });
+      return;
+    }
 
-  function getAccessToken() {
-    return (
-      localStorage.getItem("access_token") ||
-      sessionStorage.getItem("access_token")
-    );
+    // ✅ 2) fallback: intenta endpoint si existe
+    try {
+      const res = await api.get("/auth/me");
+      const u = res.data?.user ?? res.data;
+      if (u) {
+        setMe({
+          id: u.id ?? u.id_trabajador ?? 0,
+          email: u.email,
+          nombre: u.nombre,
+          areaInterna: u.areaInterna ?? null,
+        });
+      }
+    } catch {
+      // nada
+    }
   }
 
-  const fetchTickets = async () => {
+  async function fetchThreads() {
+    setLoadingThreads(true);
+    setThreadsError(null);
     try {
-      setLoading(true);
-      setError(null);
+      const qBase = gmailQ.trim() ? gmailQ.trim() : "in:inbox";
 
-      const token = getAccessToken();
+      const res = await api.get("/mailbox/threads", {
+        params: {
+          q: qBase,
+          max: 50,
+          unreadOnly: false,
+          includeSpamTrash: false,
+        },
+      });
 
-      try {
-        const res = await axios.get(`${API_BASE_URL}/auth/getTickets`, {
-          withCredentials: true,
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        const apiTickets = res.data.tickets as any[];
-        const mapped: Ticket[] = apiTickets.map((t) => ({
-          id: t.freshdeskId,
-          asunto: t.subject ?? "Sin asunto",
-          solicitante: t.requesterEmail ?? "Sin correo",
-          categoria: mapCategoria(t.categoria),
-          estado: mapEstado(t.estado),
-          prioridad: mapPrioridad(t.prioridad),
-          fecha: t.createdAt ?? new Date().toISOString(),
-          descripcion: t.description_text || "Sin descripción.",
-          agente: "Sin asignar",
-          ultimaActualizacion: t.updated_at || new Date().toISOString(),
-        }));
-        setTickets(mapped);
-      } catch (apiError) {
-        console.warn(
-          "API no disponible, cargando datos de demostración...",
-          apiError
-        );
-        setTickets([
-          {
-            id: 101,
-            asunto: "Error en factura 123",
-            solicitante: "juan@cintax.cl",
-            categoria: "Contabilidad",
-            estado: "Abierto",
-            prioridad: "Alta",
-            fecha: new Date().toISOString(),
-            descripcion: "El monto del IVA no cuadra.",
-            agente: "Maria",
-            ultimaActualizacion: new Date().toISOString(),
-          },
-          {
-            id: 102,
-            asunto: "Licencia Médica J. Pérez",
-            solicitante: "rrhh@cintax.cl",
-            categoria: "Recursos Humanos",
-            estado: "Pendiente",
-            prioridad: "Media",
-            fecha: new Date().toISOString(),
-            descripcion: "Adjunto licencia.",
-            agente: "Carlos",
-            ultimaActualizacion: new Date().toISOString(),
-          },
-          {
-            id: 103,
-            asunto: "Campaña LinkedIn",
-            solicitante: "marketing@cintax.cl",
-            categoria: "Comercial y Marketing",
-            estado: "Resuelto",
-            prioridad: "Baja",
-            fecha: new Date().toISOString(),
-            descripcion: "Aprobar diseño.",
-            agente: "Sofia",
-            ultimaActualizacion: new Date().toISOString(),
-          },
-          {
-            id: 104,
-            asunto: "Aprobación Presupuesto",
-            solicitante: "gerencia@cintax.cl",
-            categoria: "Gerencia",
-            estado: "Abierto",
-            prioridad: "Urgente",
-            fecha: new Date().toISOString(),
-            descripcion: "Urgente revisar.",
-            agente: "Pedro",
-            ultimaActualizacion: new Date().toISOString(),
-          },
-        ]);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError("Error al cargar tickets.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSyncFreshdesk = async () => {
-    try {
-      setSyncing(true);
-      setError(null);
-      const token = getAccessToken();
-      if (!token) return;
-
-      await axios.post(
-        `${API_BASE_URL}/auth/sync-freshdesk`,
-        { pages: 3 },
-        { withCredentials: true, headers: { Authorization: `Bearer ${token}` } }
+      const list = res.data?.threads ?? [];
+      setThreads(Array.isArray(list) ? list : []);
+    } catch (e: any) {
+      setThreadsError(
+        e?.response?.data?.error ?? e?.message ?? "Error cargando bandeja"
       );
-      await fetchTickets();
-    } catch (err: any) {
-      console.error(err);
-      setError("Error al sincronizar.");
+      setThreads([]);
     } finally {
-      setSyncing(false);
+      setLoadingThreads(false);
     }
-  };
+  }
+
+  async function fetchThreadDetail(threadId: string) {
+    setLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const res = await api.get(`/mailbox/threads/${threadId}`, {
+        params: { markRead: false, raw: false },
+      });
+
+      const msgs = res.data?.messages ?? [];
+      setMessages(Array.isArray(msgs) ? msgs : []);
+    } catch (e: any) {
+      setDetailError(
+        e?.response?.data?.error ?? e?.message ?? "Error cargando thread"
+      );
+      setMessages([]);
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  async function sendReply() {
+    if (!selectedThreadId || !canSend) return;
+    setSending(true);
+    try {
+      const fd = new FormData();
+      fd.append("bodyText", replyText);
+
+      for (const f of replyFiles) {
+        fd.append("attachments", f);
+      }
+
+      const res = await api.post(
+        `/mailbox/threads/${selectedThreadId}/reply`,
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      if (!res.data?.ok) {
+        throw new Error(res.data?.error ?? "No se pudo enviar");
+      }
+
+      setReplyText("");
+      setReplyFiles([]);
+
+      await fetchThreadDetail(selectedThreadId);
+      await fetchThreads();
+    } catch (e: any) {
+      alert(e?.response?.data?.error ?? e?.message ?? "Error enviando respuesta");
+    } finally {
+      setSending(false);
+    }
+  }
 
   useEffect(() => {
-    fetchTickets();
-    const id = setInterval(() => fetchTickets(), 5 * 60 * 1000);
-    return () => clearInterval(id);
+    fetchMe();
+    fetchThreads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setCategoriaAndUrl = (c: "Todos" | Categoria) => {
-    setCategoria(c);
-    if (c === "Todos") navigate("/tickets", { replace: true });
-    else {
-      let slug = "otros";
-      if (c === "Contabilidad") slug = "contabilidad";
-      if (c === "Comercial y Marketing") slug = "comercial";
-      if (c === "Gerencia") slug = "gerencia";
-      if (c === "Recursos Humanos") slug = "rrhh";
+  useEffect(() => {
+    if (selectedThreadId) fetchThreadDetail(selectedThreadId);
+    else setMessages([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedThreadId]);
 
-      navigate(`/tickets/${slug}`, { replace: true });
-    }
-  };
+  const visibleThreads = useMemo(() => {
+    const qq = localQ.trim().toLowerCase();
+    if (!qq) return threads;
 
-  const counts = useMemo(() => {
-    const base: Record<"Todos" | Categoria, number> = {
-      Todos: tickets.length,
-      Contabilidad: 0,
-      "Comercial y Marketing": 0,
-      Gerencia: 0,
-      "Recursos Humanos": 0,
-      "Entre otros": 0,
-    };
-
-    tickets.forEach((t) => {
-      if (base[t.categoria] !== undefined) {
-        base[t.categoria] += 1;
-      } else {
-        base["Entre otros"] += 1;
-      }
+    return threads.filter((t) => {
+      const snippet = (t.snippet ?? "").toLowerCase();
+      return snippet.includes(qq) || t.id.toLowerCase().includes(qq);
     });
-    return base;
-  }, [tickets]);
+  }, [threads, localQ]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tickets.filter((t) => {
-      const okCat = categoria === "Todos" ? true : t.categoria === categoria;
-      const okEst = estado === "Todos" ? true : t.estado === estado;
-      const okPri = prioridad === "Todas" ? true : t.prioridad === prioridad;
-      const okQ =
-        !q ||
-        t.asunto.toLowerCase().includes(q) ||
-        t.solicitante.toLowerCase().includes(q) ||
-        t.id.toString().includes(q);
-      return okCat && okEst && okPri && okQ;
-    });
-  }, [tickets, categoria, estado, prioridad, query]);
+  const headerSubject = useMemo(() => {
+    if (messages.length > 0) return messages[0]?.subject ?? "—";
+    if (selectedThreadId)
+      return deriveSubjectFromSnippet(
+        threads.find((t) => t.id === selectedThreadId)?.snippet
+      );
+    return "—";
+  }, [messages, selectedThreadId, threads]);
 
-  const total = filtered.length;
-  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const pagedTickets = filtered.slice(startIndex, endIndex);
+  const requester = useMemo(() => {
+    if (messages.length > 0) return deriveRequesterFromMessages(messages);
+    return "—";
+  }, [messages]);
+
+  const lastDate = useMemo(() => {
+    if (!messages.length) return null;
+    return messages[messages.length - 1]?.date ?? null;
+  }, [messages]);
+
+  const tokenPresent = Boolean(getAuthToken());
 
   return (
-    <div className="mt-4 px-2 sm:px-0">
-      {/* Header */}
-      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h2
-            className="text-2xl font-semibold"
-            style={{ color: "var(--primary-color)" }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Tickets size={20} /> Tickets
-            </span>
-          </h2>
-          <p className="text-sm text-black/60">
-            Sincronizado con Freshdesk (Grupos)
-          </p>
-          {error && <p className="mt-1 text-xs text-rose-600">⚠️ {error}</p>}
-        </div>
+    <div className="min-h-screen w-full p-4 md:p-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-neutral-900">
+              Tickets (provisorio - Gmail)
+            </h1>
+            <div className="mt-1 text-sm text-neutral-500">
+              Bandeja real: soporte@cintax.cl. Grupo = tu área. Agente = tú.
+            </div>
+            <div className="mt-1 text-xs text-neutral-400">
+              API: <span className="font-mono">{API_BASE}</span> • Token:{" "}
+              <span className="font-mono">{tokenPresent ? "OK" : "NO"}</span>
+            </div>
+          </div>
 
-        <div className="flex gap-2">
           <button
-            onClick={handleSyncFreshdesk}
-            disabled={syncing || loading}
-            className="rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20 transition"
+            onClick={fetchThreads}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 hover:bg-neutral-50"
           >
-            {syncing ? "Sincronizando..." : "Sincronizar"}
-          </button>
-          <button
-            className="rounded-xl px-3 py-2 text-sm text-white shadow-md shadow-black/30 active:scale-95"
-            style={{ background: "var(--secondary-color)" }}
-            onClick={() => setIsModalOpen(true)}
-          >
-            Crear ticket
+            Refrescar
           </button>
         </div>
-      </div>
 
-      {/* Modal Crear Ticket */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setIsModalOpen(false)}
-          />
-          <div className="relative w-full max-w-md bg-white rounded-2xl p-4 shadow-lg z-10 max-h-[90vh] overflow-y-auto scroll-overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Crear ticket</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[380px_1fr]">
+          {/* LISTA */}
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            <div className="text-sm font-semibold text-neutral-900">Bandeja</div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2">
+              <input
+                value={gmailQ}
+                onChange={(e) => setGmailQ(e.target.value)}
+                placeholder='Gmail query (ej: in:inbox newer_than:7d is:unread)'
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:ring-2"
+              />
+
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  value={localQ}
+                  onChange={(e) => setLocalQ(e.target.value)}
+                  placeholder="Filtro local (texto sobre snippet/id)"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:ring-2"
+                />
+              </div>
+
               <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded hover:bg-black/5"
+                onClick={fetchThreads}
+                className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white"
               >
-                <X size={18} />
+                Buscar
               </button>
+
+              <div className="text-xs text-neutral-500">
+                Tips Gmail: <span className="font-mono">newer_than:7d</span>,{" "}
+                <span className="font-mono">from:correo</span>,{" "}
+                <span className="font-mono">subject:palabra</span>,{" "}
+                <span className="font-mono">is:unread</span>
+              </div>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setIsModalOpen(false);
-                alert("Ticket creado (pendiente integrar al backend)");
-              }}
-              className="flex flex-col gap-4"
-            >
-              {/* Contacto y Asunto */}
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs font-medium text-black/70">
-                      Contacto <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="text-xs text-[var(--secondary-color)] cursor-pointer flex gap-2"></div>
-                  </div>
-                  <input
-                    className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white"
-                    type="email"
-                    placeholder="ejemplo@cintax.cl"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Asunto <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white"
-                    type="text"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Grid Selectores */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Tipo */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Tipo <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white text-black/70"
-                  >
-                    <option value="">--</option>
-                    <option value="RRHH">RRHH</option>
-                    <option value="Contabilidad">Contabilidad</option>
-                    <option value="Tributacion">Tributacion</option>
-                    <option value="Comercial y MKT">Comercial y MKT</option>
-                    <option value="Ofertas Proveedores">
-                      Ofertas Proveedores
-                    </option>
-                    <option value="Otros">Otros</option>
-                  </select>
-                </div>
-
-                {/* Tipo 2 */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Tipo 2 <span className="text-rose-500">*</span>
-                  </label>
-                  <select className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white text-black/70">
-                    <option value="">--</option>
-                    <option value="Confeccion F29">Confeccion F29</option>
-                    <option value="Conciliacion RCV">Conciliacion RCV</option>
-                    <option value="Conciliacion BH">Conciliacion BH</option>
-                    <option value="Revision LR">Revision LR</option>
-                    <option value="Revision TGR">Revision TGR</option>
-                    <option value="Conciliacion Banco">
-                      Conciliacion Banco
-                    </option>
-                    <option value="Emision ER">Emision ER</option>
-                    <option value="Emision AC">Emision AC</option>
-                    <option value="DJ">DJ</option>
-                    <option value="F22">F22</option>
-                    <option value="RRHH">RRHH</option>
-                    <option value="Otros">Otros</option>
-                  </select>
-                </div>
-
-                {/* Estado */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Estado <span className="text-rose-500">*</span>
-                  </label>
-                  <select className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white">
-                    <option value="Abierta">Abierta</option>
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Resuelto">Resuelto</option>
-                    <option value="Cerrado">Cerrado</option>
-                    <option value="En espera de respuesta del cliente">
-                      En espera de respuesta del cliente
-                    </option>
-                    <option value="En espera de un tercero">
-                      En espera de un tercero
-                    </option>
-                  </select>
-                </div>
-
-                {/* Prioridad */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Prioridad <span className="text-rose-500">*</span>
-                  </label>
-                  <select className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white">
-                    <option value="Baja">Baja</option>
-                    <option value="Media">Media</option>
-                    <option value="Alta">Alta</option>
-                    <option value="Urgente">Urgente</option>
-                  </select>
-                </div>
-
-                {/* Grupo */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Grupo <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white text-black/70"
-                  >
-                    <option value="">--</option>
-                    <option value="Comercial y Marketing">
-                      Comercial y Marketing
-                    </option>
-                    <option value="Contabilidad">Contabilidad</option>
-                    <option value="Gerencia">Gerencia</option>
-                    <option value="RRHH">RRHH</option>
-                    <option value="Tributacion">Tributacion</option>
-                  </select>
-                </div>
-
-                {/* Agente */}
-                <div>
-                  <label className="text-xs font-medium text-black/70 mb-1 block">
-                    Agente <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    className="w-full border border-black/15 rounded-md px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] bg-white"
-                  >
-                    <option value="--">--</option>
-                    <option value="Esteban Ramos">Esteban Ramos</option>
-                    <option value="Patricio Mena">Patricio Mena</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Descripción */}
-              <div>
-                <label className="text-xs font-medium text-black/70 mb-1 block">
-                  Descripción <span className="text-rose-500">*</span>
-                </label>
-                <div className="border border-black/15 rounded-md bg-white focus-within:border-[var(--secondary-color)] overflow-hidden">
-                  <div className="flex items-center gap-3 px-3 py-2 border-b border-black/5 bg-gray-50 text-black/50">
-                    <Bold size={16} className="cursor-pointer hover:text-black" />
-                    <Italic
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                    <Underline
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                    <span className="w-px h-4 bg-black/10" />
-                    <List
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                    <AlignLeft
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                    <span className="w-px h-4 bg-black/10" />
-                    <LinkIcon
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                    <ImageIcon
-                      size={16}
-                      className="cursor-pointer hover:text-black"
-                    />
-                  </div>
-                  <textarea
-                    required
-                    className="w-full p-3 text-sm outline-none min-h-[100px] resize-y"
-                  ></textarea>
-                  <div className="px-3 py-2 bg-gray-50 border-t border-black/5 flex gap-3 text-black/50">
-                    <span className="p-1 bg-white border border-black/10 rounded cursor-pointer hover:bg-gray-100">
-                      <span className="text-xs font-bold">A</span>
-                    </span>
-                    <Paperclip
-                      size={16}
-                      className="cursor-pointer hover:text-black mt-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer Modal */}
-              <div className="flex justify-end gap-2 pt-4 mt-2 border-t border-black/5">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm border border-black/10 rounded-md bg-white hover:bg-gray-50 text-black/70"
-                >
-                  Cancelar
-                </button>
-                <div className="flex">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm text-white rounded-l-md hover:opacity-90"
-                    style={{ background: "var(--secondary-color)" }}
-                  >
-                    Crear
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs de Categoría */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {CATS.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategoriaAndUrl(c)}
-            className={`rounded-full px-3 py-1.5 text-sm border transition ${
-              categoria === c
-                ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-                : "bg-white text-[var(--primary-color)] border-black/10 hover:border-black/20"
-            }`}
-          >
-            {c}
-            <span className="ml-1 text-xs opacity-80">
-              ({c === "Todos" ? counts.Todos : counts[c]})
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {categoria !== "Todos" && categoria !== "Entre otros" && (
-        <div className="mb-8">
-          <DashboardArea area={categoria} />
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div className="grid gap-3 md:grid-cols-[1fr_200px_200px] mb-4">
-        <div className="flex items-center gap-2 bg-white rounded-xl border border-black/10 px-3 py-2">
-          <Search size={16} className="text-black/50" />
-          <input
-            className="w-full outline-none text-sm placeholder:text-black/40"
-            placeholder="Buscar por #, asunto o solicitante..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <select
-          value={estado}
-          onChange={(e) => setEstado(e.target.value as any)}
-          className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm"
-        >
-          {ESTADOS.map((e) => (
-            <option key={e} value={e}>
-              {e === "Todos" ? "Todos los estados" : e}
-            </option>
-          ))}
-        </select>
-        <select
-          value={prioridad}
-          onChange={(e) => setPrioridad(e.target.value as any)}
-          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-        >
-          {PRIORIDADES.map((p) => (
-            <option key={p} value={p}>
-              {p === "Todas" ? "Todas las prioridades" : p}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Tabla / Cards */}
-      <div className="bg-white rounded-2xl border border-black/5 shadow-lg overflow-hidden">
-        {/* Desktop: tabla */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-black/50 text-xs border-b border-black/5 uppercase tracking-wider bg-gray-50">
-                <th className="py-3 px-4 font-semibold">#</th>
-                <th className="py-3 px-4 font-semibold">Asunto</th>
-                <th className="py-3 px-4 font-semibold">Solicitante</th>
-                <th className="py-3 px-4 font-semibold">Grupo</th>
-                <th className="py-3 px-4 font-semibold">Estado</th>
-                <th className="py-3 px-4 font-semibold">Prioridad</th>
-                <th className="py-3 px-4 font-semibold">Fecha</th>
-                <th className="py-3 px-4 font-semibold text-right">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-black/50">
-                    Cargando tickets...
-                  </td>
-                </tr>
+            <div className="mt-4">
+              {loadingThreads && (
+                <div className="text-sm text-neutral-500">Cargando…</div>
               )}
-              {!loading && total === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-black/50">
-                    No se encontraron tickets.
-                  </td>
-                </tr>
+              {threadsError && (
+                <div className="text-sm text-red-600">{threadsError}</div>
               )}
 
-              {!loading &&
-                pagedTickets.map((t) => {
-                  const isExpanded = expandedTicketId === t.id;
+              {!loadingThreads && !threadsError && visibleThreads.length === 0 && (
+                <div className="text-sm text-neutral-500">No hay tickets.</div>
+              )}
+
+              <div className="mt-2 space-y-2">
+                {visibleThreads.map((t) => {
+                  const active = t.id === selectedThreadId;
                   return (
-                    <React.Fragment key={t.id}>
-                      <tr
-                        onClick={() => toggleExpand(t.id)}
-                        className={`border-b border-black/5 last:border-0 transition-colors cursor-pointer group ${
-                          isExpanded
-                            ? "bg-[var(--tertiary-color)]/50"
-                            : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <td className="py-4 px-4 text-black/70 font-mono">
-                          #{t.id}
-                        </td>
-                        <td className="py-4 px-4 font-medium text-[var(--primary-color)]">
-                          {t.asunto}
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="flex items-center">
-                            <span className="text-black/70 truncate max-w-[150px]">
-                              {t.solicitante}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="inline-block rounded-lg px-2.5 py-1 text-xs bg-white border border-black/10 text-black/70 font-medium shadow-sm">
-                            {t.categoria}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${getEstadoClasses(
-                              t.estado
-                            )}`}
-                          >
-                            {t.estado === "Resuelto" && (
-                              <CheckCircle2 size={12} />
-                            )}
-                            {t.estado === "Abierto" && (
-                              <AlertCircle size={12} />
-                            )}
-                            {t.estado}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span
-                            className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
-                              t.prioridad === "Urgente"
-                                ? "bg-rose-50 text-rose-700 border border-rose-100"
-                                : t.prioridad === "Alta"
-                                ? "bg-orange-50 text-orange-700 border border-orange-100"
-                                : t.prioridad === "Media"
-                                ? "bg-amber-50 text-amber-700 border border-amber-100"
-                                : "bg-zinc-100 text-zinc-700 border border-zinc-200"
-                            }`}
-                          >
-                            {t.prioridad}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-black/70 text-xs whitespace-nowrap">
-                          {new Date(t.fecha).toLocaleDateString()}
-                        </td>
-                        <td className="py-4 px-4 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExpand(t.id);
-                            }}
-                            className={`inline-flex items-center gap-1 text-xs font-medium rounded-lg px-3 py-1.5 border transition-all shadow-sm ${
-                              isExpanded
-                                ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-                                : "bg-white border-black/10 hover:border-[var(--secondary-color)] hover:text-[var(--secondary-color)] text-black/60"
-                            }`}
-                          >
-                            {isExpanded ? "Ocultar" : "Ver detalles"}
-                            {isExpanded ? (
-                              <ChevronDown size={14} />
-                            ) : (
-                              <ChevronRight size={14} />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr className="bg-[var(--tertiary-color)]/30 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <td colSpan={8} className="p-0 border-b border-black/5">
-                            <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                              <div className="lg:col-span-2 space-y-3">
-                                <h4 className="text-sm font-bold text-[var(--primary-color)] flex items-center gap-2">
-                                  <MessageSquare
-                                    size={16}
-                                    className="text-[var(--secondary-color)]"
-                                  />
-                                  Descripción de la solicitud
-                                </h4>
-                                <div className="bg-white p-4 rounded-xl border border-black/5 text-sm text-black/70 leading-relaxed shadow-sm">
-                                  {t.descripcion ||
-                                    "No hay descripción detallada disponible."}
-                                </div>
-                                <div className="flex gap-2 mt-2">
-                                  <button className="text-xs flex items-center gap-1 text-black/50 hover:text-[var(--secondary-color)] transition-colors">
-                                    <Paperclip size={14} /> Ver adjuntos (0)
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="space-y-4 border-l border-black/5 pl-6 lg:block hidden">
-                                <div>
-                                  <h4 className="text-xs font-bold text-black/40 uppercase tracking-wider mb-2">
-                                    Detalles del Agente
-                                  </h4>
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-[var(--secondary-color)] text-white flex items-center justify-center text-xs font-bold">
-                                      {(t.agente || "S").charAt(0)}
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-[var(--primary-color)]">
-                                        {t.agente}
-                                      </p>
-                                      <p className="text-xs text-black/50">
-                                        Soporte Nivel 1
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2 text-xs text-black/60">
-                                    <Calendar
-                                      size={14}
-                                      className="text-black/40"
-                                    />
-                                    Creado:{" "}
-                                    <span className="font-medium">
-                                      {new Date(t.fecha).toLocaleString()}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs text-black/60">
-                                    <Clock
-                                      size={14}
-                                      className="text-black/40"
-                                    />
-                                    Actualizado:{" "}
-                                    <span className="font-medium">
-                                      {new Date().toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-black/5">
-                                  <button className="w-full py-2 text-sm font-medium text-[var(--secondary-color)] bg-white border border-[var(--secondary-color)] rounded-lg hover:bg-[var(--secondary-color)] hover:text-white transition-colors shadow-sm">
-                                    Gestionar en Freshdesk
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Versión móvil de la columna 2 */}
-                              <div className="lg:hidden space-y-3 border-t border-black/10 pt-4">
-                                <p className="text-xs text-black/50">
-                                  <strong>Agente:</strong> {t.agente}
-                                </p>
-                                <button className="text-xs text-[var(--secondary-color)] underline">
-                                  Gestionar Ticket
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedThreadId(t.id)}
+                      className={cx(
+                        "w-full rounded-lg border p-3 text-left",
+                        active
+                          ? "border-neutral-900 bg-neutral-50"
+                          : "border-neutral-200 bg-white hover:bg-neutral-50"
                       )}
-                    </React.Fragment>
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-neutral-900">
+                          Thread #{t.id}
+                        </div>
+                        <div className="text-xs text-neutral-500">
+                          {t.historyId ?? "—"}
+                        </div>
+                      </div>
+
+                      <div className="mt-1 text-xs text-neutral-600">
+                        {t.snippet ?? "(sin snippet)"}
+                      </div>
+
+                      <div className="mt-1 text-xs text-neutral-500">
+                        Grupo: {formatArea(me?.areaInterna ?? null)}
+                      </div>
+                    </button>
                   );
                 })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile: cards */}
-        <div className="md:hidden divide-y divide-black/5">
-          {loading && (
-            <div className="py-8 text-center text-black/50">
-              Cargando tickets...
+              </div>
             </div>
-          )}
+          </div>
 
-          {!loading && total === 0 && (
-            <div className="py-8 text-center text-black/50">
-              No se encontraron tickets.
-            </div>
-          )}
+          {/* DETALLE */}
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            {!selectedThreadId ? (
+              <div className="text-sm text-neutral-500">
+                Selecciona un ticket para ver detalles.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-neutral-900">
+                      Thread #{selectedThreadId}
+                    </div>
+                    <div className="mt-1 text-sm text-neutral-500">
+                      {headerSubject}
+                    </div>
+                    <div className="mt-1 text-xs text-neutral-500">
+                      Cliente: {requester}
+                    </div>
+                  </div>
 
-          {!loading &&
-            pagedTickets.map((t) => {
-              const isExpanded = expandedTicketId === t.id;
-              return (
-                <div
-                  key={t.id}
-                  className={`p-4 flex flex-col gap-3 ${
-                    isExpanded
-                      ? "bg-[var(--tertiary-color)]/40"
-                      : "bg-white"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="text-xs text-neutral-500">
+                    Último mensaje: {formatDate(lastDate)}
+                  </div>
+                </div>
+
+                {/* Asignación */}
+                <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="text-sm font-semibold text-neutral-900">
+                    Asignación
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <div className="text-xs text-black/50 font-mono">
-                        #{t.id}
-                      </div>
-                      <div className="font-semibold text-[var(--primary-color)] leading-snug">
-                        {t.asunto}
-                      </div>
-                      <div className="mt-1 text-xs text-black/60">
-                        {t.solicitante}
+                      <div className="text-xs text-neutral-500">Grupo</div>
+                      <div className="mt-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm">
+                        {formatArea(me?.areaInterna ?? null)}
                       </div>
                     </div>
-                    <button
-                      onClick={() => toggleExpand(t.id)}
-                      className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-3 py-1 border shadow-sm ${
-                        isExpanded
-                          ? "bg-[var(--secondary-color)] text-white border-[var(--secondary-color)]"
-                          : "bg-white border-black/10 text-black/60"
-                      }`}
-                    >
-                      {isExpanded ? "Ocultar" : "Ver"}
-                      {isExpanded ? (
-                        <ChevronDown size={14} />
-                      ) : (
-                        <ChevronRight size={14} />
+
+                    <div>
+                      <div className="text-xs text-neutral-500">Agente (tú)</div>
+                      <div className="mt-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm">
+                        {me
+                          ? me.nombre
+                            ? `${me.nombre} (${me.email})`
+                            : me.email
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs text-neutral-500">
+                    Al responder: From = tu email, CC = soporte + tú, Reply-To = soporte.
+                  </div>
+                </div>
+
+                {/* Mensajes */}
+                <div className="mt-4">
+                  <div className="text-sm font-semibold text-neutral-900">
+                    Historial
+                  </div>
+
+                  {loadingDetail && (
+                    <div className="mt-2 text-sm text-neutral-500">Cargando…</div>
+                  )}
+                  {detailError && (
+                    <div className="mt-2 text-sm text-red-600">{detailError}</div>
+                  )}
+
+                  {!loadingDetail && !detailError && (
+                    <div className="mt-3 space-y-3">
+                      {messages.map((m, idx) => {
+                        const fromIsInternal = isCintaxAddress(m.from);
+                        return (
+                          <div
+                            key={m.gmailId ?? `${idx}`}
+                            className={cx(
+                              "rounded-xl border p-4",
+                              fromIsInternal
+                                ? "border-neutral-200 bg-neutral-50"
+                                : "border-neutral-200 bg-white"
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs text-neutral-500">
+                                {formatDate(m.date)}
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                From: {m.from ?? "—"}
+                              </div>
+                            </div>
+
+                            {m.subject && (
+                              <div className="mt-2 text-sm font-semibold text-neutral-900">
+                                {m.subject}
+                              </div>
+                            )}
+
+                            <pre className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">
+                              {m.bodyText ?? ""}
+                            </pre>
+                          </div>
+                        );
+                      })}
+
+                      {messages.length === 0 && (
+                        <div className="text-sm text-neutral-500">Sin mensajes aún.</div>
                       )}
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="inline-block rounded-lg px-2.5 py-1 bg-white border border-black/10 text-black/70 font-medium">
-                      {t.categoria}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium ${getEstadoClasses(
-                        t.estado
-                      )}`}
-                    >
-                      {t.estado === "Resuelto" && <CheckCircle2 size={12} />}
-                      {t.estado === "Abierto" && <AlertCircle size={12} />}
-                      {t.estado}
-                    </span>
-                    <span
-                      className={`inline-block rounded-full px-2.5 py-1 font-medium ${
-                        t.prioridad === "Urgente"
-                          ? "bg-rose-50 text-rose-700 border border-rose-100"
-                          : t.prioridad === "Alta"
-                          ? "bg-orange-50 text-orange-700 border border-orange-100"
-                          : t.prioridad === "Media"
-                          ? "bg-amber-50 text-amber-700 border border-amber-100"
-                          : "bg-zinc-100 text-zinc-700 border border-zinc-200"
-                      }`}
-                    >
-                      {t.prioridad}
-                    </span>
-                    <span className="ml-auto text-[10px] text-black/50">
-                      {new Date(t.fecha).toLocaleDateString()}
-                    </span>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-2 space-y-2 text-xs">
-                      <div className="bg-gray-50 border border-black/5 rounded-lg p-3 text-black/70 leading-relaxed">
-                        {t.descripcion ||
-                          "No hay descripción detallada disponible."}
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-black/50">
-                        <span>
-                          <strong>Agente:</strong> {t.agente || "Sin asignar"}
-                        </span>
-                        <span>
-                          <Calendar size={10} className="inline mr-1" />
-                          {new Date(t.fecha).toLocaleDateString()}
-                        </span>
-                      </div>
                     </div>
                   )}
                 </div>
-              );
-            })}
-        </div>
 
-        {/* Paginación */}
-        {!loading && total > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 bg-gray-50 border-t border-black/5">
-            <span className="text-xs text-black/50 font-medium">
-              Mostrando {startIndex + 1}-{Math.min(endIndex, total)} de {total}{" "}
-              tickets
-            </span>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 text-xs font-medium rounded-lg border border-black/10 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:hover:bg-white transition-colors shadow-sm"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-4 py-2 text-xs font-medium rounded-lg border border-black/10 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:hover:bg-white transition-colors shadow-sm"
-              >
-                Siguiente
-              </button>
-            </div>
+                {/* Responder */}
+                <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-neutral-900">Responder</div>
+
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Escribe tu respuesta…"
+                    className="mt-3 h-28 w-full rounded-lg border border-neutral-300 p-3 text-sm outline-none focus:ring-2"
+                  />
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) =>
+                        setReplyFiles(Array.from(e.target.files ?? []))
+                      }
+                      className="text-sm"
+                    />
+
+                    <button
+                      onClick={sendReply}
+                      disabled={!canSend}
+                      className="rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {sending ? "Enviando..." : "Enviar respuesta"}
+                    </button>
+                  </div>
+
+                  {replyFiles.length > 0 && (
+                    <div className="mt-2 text-xs text-neutral-500">
+                      Adjuntos: {replyFiles.map((f) => f.name).join(", ")}
+                    </div>
+                  )}
+
+                  <div className="mt-2 text-xs text-neutral-500">
+                    Endpoint requerido:{" "}
+                    <span className="font-mono">POST /mailbox/threads/:threadId/reply</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -33,6 +33,8 @@ type Me = {
   areaInterna?: Area; // si no viene en payload, queda null
 };
 
+
+
 type GmailThreadRow = {
   id: string; // threadId
   snippet?: string;

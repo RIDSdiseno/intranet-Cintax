@@ -18,8 +18,6 @@ type GlobalKpis = {
   riskLabel: string;
 };
 
-
-
 type LineData = {
   categories: string[];
   series: Array<{ name: string; data: number[] }>;
@@ -30,7 +28,7 @@ type ProcesoRow = {
   nombre: string;
   email: string;
 
-  // en esta tabla usaremos "pendientes" como backlog ya calculado
+  // backlog ya calculado
   pendientes: number;
 
   vencidas: number;
@@ -42,9 +40,12 @@ type ProcesoRow = {
 type Props = {
   agenteNombre: string;
   globalKpis: GlobalKpis;
+
   donutSeries: number[];
   donutOptions: any;
+
   lineData: LineData;
+
   procesoAgentes: ProcesoRow[];
   onOpenDetalle: (id: number) => void;
 };
@@ -60,12 +61,18 @@ const KPI_DESCRIPTIONS: Record<string, string> = {
   risk: "Indicador del nivel de riesgo del proceso (mayor = riesgo más alto).",
 };
 
-const formatNumber = (n: number) => new Intl.NumberFormat("es-ES").format(n);
-const formatPercent = (n: number) => `${n}%`;
+// ---------- utils seguros ----------
+const toNum = (v: unknown, fallback = 0) => {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const formatNumber = (n: number) => new Intl.NumberFormat("es-ES").format(toNum(n, 0));
+const formatPercent = (n: number) => `${toNum(n, 0)}%`;
 
 const KpiCard: React.FC<{
   label: string;
-  value: number;
+  value: number | null | undefined;
   tone?: "ok" | "warn" | "bad";
   desc?: string;
   format?: "number" | "percent";
@@ -77,7 +84,8 @@ const KpiCard: React.FC<{
       ? "bg-amber-50 border-amber-100"
       : "bg-emerald-50 border-emerald-100";
 
-  const display = format === "percent" ? formatPercent(value) : formatNumber(value);
+  const safe = toNum(value, 0);
+  const display = format === "percent" ? formatPercent(safe) : formatNumber(safe);
 
   return (
     <div className={`rounded-2xl p-4 border ${cls} shadow-sm`}>
@@ -109,21 +117,91 @@ const DashboardView: React.FC<Props> = ({
   procesoAgentes,
   onOpenDetalle,
 }) => {
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  // KPIs siempre seguros (evita NaN/undefined)
+  const kpis = useMemo<GlobalKpis>(() => {
+    const riskLabel =
+      typeof globalKpis?.riskLabel === "string" && globalKpis.riskLabel.trim().length > 0
+        ? globalKpis.riskLabel
+        : "Normal";
+
+    return {
+      total: toNum(globalKpis?.total, 0),
+      pend: toNum(globalKpis?.pend, 0),
+      proc: toNum(globalKpis?.proc, 0),
+      venc: toNum(globalKpis?.venc, 0),
+      comp: toNum(globalKpis?.comp, 0),
+      porVencer: toNum(globalKpis?.porVencer, 0),
+      backlog: toNum(globalKpis?.backlog, 0),
+      cierrePct: toNum(globalKpis?.cierrePct, 0),
+      avgCierreDias: toNum(globalKpis?.avgCierreDias, 0),
+      edadBacklogDias: toNum(globalKpis?.edadBacklogDias, 0),
+      riskScore: toNum(globalKpis?.riskScore, 0),
+      riskLabel,
+    };
+  }, [globalKpis]);
+
+  const riesgoTone: "ok" | "warn" | "bad" =
+    kpis.riskLabel === "Crítico" ? "bad" : kpis.riskLabel === "Riesgo" ? "warn" : "ok";
+
+  // Charts con fallback (no romper Apex)
+  const safeDonutSeries = useMemo(() => {
+    const s = Array.isArray(donutSeries) ? donutSeries.map((x) => toNum(x, 0)) : [];
+    // Apex donut con 0s igual dibuja; si no hay nada, forzamos 1 serie 0
+    return s.length ? s : [0];
+  }, [donutSeries]);
+
+  const safeLineData = useMemo<LineData>(() => {
+    const categories = Array.isArray(lineData?.categories) ? lineData.categories : [];
+    const series = Array.isArray(lineData?.series)
+      ? lineData.series.map((s) => ({
+          name: String(s?.name ?? "Serie"),
+          data: Array.isArray(s?.data) ? s.data.map((n) => toNum(n, 0)) : [],
+        }))
+      : [];
+
+    // Si no hay series/categorías, poner algo mínimo para no crashear
+    if (!categories.length || !series.length) {
+      return {
+        categories: categories.length ? categories : ["-"],
+        series: series.length ? series : [{ name: "Sin datos", data: [0] }],
+      };
+    }
+
+    // Asegurar que data tenga mismo largo de categories (o al menos 1)
+    const len = categories.length || 1;
+    const normalized = series.map((s) => {
+      const d = s.data.slice(0, len);
+      while (d.length < len) d.push(0);
+      return { ...s, data: d };
+    });
+
+    return { categories, series: normalized };
+  }, [lineData]);
+
   const lineOptions = useMemo(
     () => ({
       chart: { toolbar: { show: false } },
-      xaxis: { categories: lineData.categories },
+      xaxis: { categories: safeLineData.categories },
       stroke: { width: 2, curve: "smooth" as const },
       legend: { position: "bottom" as const },
       dataLabels: { enabled: false },
     }),
-    [lineData.categories]
+    [safeLineData.categories]
   );
 
-  const riesgoTone: "ok" | "warn" | "bad" =
-    globalKpis.riskLabel === "Crítico" ? "bad" : globalKpis.riskLabel === "Riesgo" ? "warn" : "ok";
+  const hasAnyData = useMemo(() => {
+    const hasKpi = kpis.total > 0 || kpis.backlog > 0 || kpis.venc > 0 || kpis.comp > 0;
+    const hasProceso = Array.isArray(procesoAgentes) && procesoAgentes.length > 0;
+    const hasLine = safeLineData.series.some((s) => s.data.some((n) => toNum(n, 0) > 0));
+    const hasDonut = safeDonutSeries.some((n) => toNum(n, 0) > 0);
+    return hasKpi || hasProceso || hasLine || hasDonut;
+  }, [kpis, procesoAgentes, safeLineData, safeDonutSeries]);
 
-  const [guideOpen, setGuideOpen] = useState(false);
+  const safeProcesoAgentes = useMemo(() => {
+    return Array.isArray(procesoAgentes) ? procesoAgentes : [];
+  }, [procesoAgentes]);
 
   return (
     <div className="space-y-4">
@@ -132,7 +210,9 @@ const DashboardView: React.FC<Props> = ({
           <h2 className="text-sm font-semibold text-[#1d1e1c]">
             Dashboard: {agenteNombre || "Agente"}
           </h2>
-          <p className="text-xs text-black/60">KPIs y evolución de tareas según filtros seleccionados.</p>
+          <p className="text-xs text-black/60">
+            KPIs y evolución de tareas según filtros seleccionados.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -147,34 +227,70 @@ const DashboardView: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* KPIs claros */}
-      <p className="text-xs text-black/60 mb-2">Estos KPIs resumen el estado del proceso; pasa el cursor sobre ℹ para ver una breve explicación.</p>
+      {!hasAnyData && (
+        <div className="bg-white border border-black/5 rounded-2xl p-4 shadow-sm">
+          <div className="text-xs font-semibold text-[#1d1e1c]">Sin datos</div>
+          <div className="text-xs text-black/60 mt-1">
+            No hay tareas para el agente/período seleccionado o los filtros están dejando 0 resultados.
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-black/60 mb-2">
+        Estos KPIs resumen el estado del proceso; pasa el cursor sobre ℹ para ver una breve explicación.
+      </p>
+
       <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
-        <KpiCard label="Total" value={globalKpis.total} desc={KPI_DESCRIPTIONS.total} />
-        <KpiCard label="Backlog" value={globalKpis.backlog} desc={KPI_DESCRIPTIONS.backlog} tone={globalKpis.backlog > 0 ? "warn" : "ok"} />
-        <KpiCard label="Vencidas" value={globalKpis.venc} desc={KPI_DESCRIPTIONS.venc} tone={globalKpis.venc > 0 ? "bad" : "ok"} />
-        <KpiCard label="Por vencer" value={globalKpis.porVencer} desc={KPI_DESCRIPTIONS.porVencer} tone={globalKpis.porVencer > 0 ? "warn" : "ok"} />
-        <KpiCard label="Completadas" value={globalKpis.comp} desc={KPI_DESCRIPTIONS.comp} tone="ok" />
+        <KpiCard label="Total" value={kpis.total} desc={KPI_DESCRIPTIONS.total} />
+        <KpiCard
+          label="Backlog"
+          value={kpis.backlog}
+          desc={KPI_DESCRIPTIONS.backlog}
+          tone={kpis.backlog > 0 ? "warn" : "ok"}
+        />
+        <KpiCard
+          label="Vencidas"
+          value={kpis.venc}
+          desc={KPI_DESCRIPTIONS.venc}
+          tone={kpis.venc > 0 ? "bad" : "ok"}
+        />
+        <KpiCard
+          label="Por vencer"
+          value={kpis.porVencer}
+          desc={KPI_DESCRIPTIONS.porVencer}
+          tone={kpis.porVencer > 0 ? "warn" : "ok"}
+        />
+        <KpiCard label="Completadas" value={kpis.comp} desc={KPI_DESCRIPTIONS.comp} tone="ok" />
         <KpiCard
           label="% Cierre"
-          value={globalKpis.cierrePct}
+          value={kpis.cierrePct}
           desc={KPI_DESCRIPTIONS.cierrePct}
           format="percent"
-          tone={globalKpis.cierrePct >= 70 ? "ok" : globalKpis.cierrePct >= 40 ? "warn" : "bad"}
+          tone={kpis.cierrePct >= 70 ? "ok" : kpis.cierrePct >= 40 ? "warn" : "bad"}
         />
-        <KpiCard label="Prom. cierre (días)" value={globalKpis.avgCierreDias} desc={KPI_DESCRIPTIONS.avgCierreDias} tone="ok" />
-        <KpiCard label={`Riesgo (${globalKpis.riskLabel})`} value={globalKpis.riskScore} desc={KPI_DESCRIPTIONS.risk} tone={riesgoTone} />
+        <KpiCard
+          label="Prom. cierre (días)"
+          value={kpis.avgCierreDias}
+          desc={KPI_DESCRIPTIONS.avgCierreDias}
+          tone="ok"
+        />
+        <KpiCard
+          label={`Riesgo (${kpis.riskLabel})`}
+          value={kpis.riskScore}
+          desc={KPI_DESCRIPTIONS.risk}
+          tone={riesgoTone}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border border-black/5 rounded-2xl p-4 shadow-sm">
           <p className="text-xs font-semibold text-[#1d1e1c] mb-2">Distribución</p>
-          <ApexChart type="donut" height={300} series={donutSeries as any} options={donutOptions as any} />
+          <ApexChart type="donut" height={300} series={safeDonutSeries as any} options={donutOptions as any} />
         </div>
 
         <div className="bg-white border border-black/5 rounded-2xl p-4 shadow-sm">
           <p className="text-xs font-semibold text-[#1d1e1c] mb-2">Evolución</p>
-          <ApexChart type="line" height={300} series={lineData.series as any} options={lineOptions as any} />
+          <ApexChart type="line" height={300} series={safeLineData.series as any} options={lineOptions as any} />
         </div>
       </div>
 
@@ -194,16 +310,16 @@ const DashboardView: React.FC<Props> = ({
             </tr>
           </thead>
           <tbody>
-            {procesoAgentes.map((r) => (
+            {safeProcesoAgentes.map((r) => (
               <tr key={r.trabajadorId} className="border-t border-black/5">
                 <td className="py-2">
                   <div className="font-semibold text-[#1d1e1c]">{r.nombre}</div>
                   <div className="text-[11px] text-black/50">{r.email}</div>
                 </td>
 
-                <td className="text-center font-semibold">{r.pendientes}</td>
-                <td className="text-center font-semibold">{r.vencidas}</td>
-                <td className="text-center">{r.porVencer ?? 0}</td>
+                <td className="text-center font-semibold">{toNum(r.pendientes, 0)}</td>
+                <td className="text-center font-semibold">{toNum(r.vencidas, 0)}</td>
+                <td className="text-center">{toNum(r.porVencer ?? 0, 0)}</td>
                 <td className="text-center">{r.proximoVenc ?? "-"}</td>
 
                 <td className="text-center">
@@ -225,7 +341,9 @@ const DashboardView: React.FC<Props> = ({
           </tbody>
         </table>
 
-        {!procesoAgentes.length && <p className="text-xs text-black/50 mt-2">Sin datos para el agente/periodo.</p>}
+        {!safeProcesoAgentes.length && (
+          <p className="text-xs text-black/50 mt-2">Sin datos para el agente/período.</p>
+        )}
       </div>
 
       <KpiGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} items={KPI_DESCRIPTIONS} />

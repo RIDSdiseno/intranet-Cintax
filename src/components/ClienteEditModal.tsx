@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Loader2 } from "lucide-react";
 
 type Cliente = {
@@ -6,7 +6,10 @@ type Cliente = {
   rut: string;
   razonSocial: string;
   alias?: string | null;
+
+  // ✅ este es el campo en Cliente (lo guardas en DB)
   codigoCartera?: string | null;
+
   agenteId?: number | null;
   activo?: boolean;
 };
@@ -14,7 +17,11 @@ type Cliente = {
 type Trabajador = {
   id_trabajador: number;
   nombre: string;
-  email: string; // lo usas para mostrar en selects internos si quieres
+  email: string;
+
+  // ✅ este es el “código de cartera” real del ejecutivo en tu modelo Trabajador
+  // (en Prisma: carpetaDriveCodigo)
+  carpetaDriveCodigo?: string | null;
 };
 
 type Props = {
@@ -46,6 +53,51 @@ const ClienteEditModal: React.FC<Props> = ({
   const setField = <K extends keyof Cliente>(key: K, value: Cliente[K]) => {
     setEditingCliente((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
+
+  const agenteSeleccionado = useMemo(() => {
+    const id = editingCliente.agenteId;
+    if (id == null) return null;
+    return trabajadores.find((t) => t.id_trabajador === id) ?? null;
+  }, [editingCliente.agenteId, trabajadores]);
+
+  // ✅ helper: al cambiar ejecutivo, auto-set de codigoCartera desde carpetaDriveCodigo
+  const handleChangeAgente = (raw: string) => {
+    const nextAgenteId = raw ? Number(raw) : null;
+
+    if (raw && !Number.isFinite(nextAgenteId)) {
+      // si por algún motivo llega algo raro, no rompas el state
+      setField("agenteId", null);
+      return;
+    }
+
+    // set agenteId
+    setEditingCliente((prev) => {
+      if (!prev) return prev;
+
+      const updated: Cliente = { ...prev, agenteId: nextAgenteId };
+
+      // ✅ si selecciona un agente, copiamos su carpetaDriveCodigo -> codigoCartera
+      if (nextAgenteId != null) {
+        const ag = trabajadores.find((t) => t.id_trabajador === nextAgenteId);
+        const code =
+          typeof ag?.carpetaDriveCodigo === "string" && ag.carpetaDriveCodigo.trim()
+            ? ag.carpetaDriveCodigo.trim()
+            : null;
+
+        // si hay código, lo seteamos; si no hay, lo dejamos como estaba (para no borrar sin querer)
+        if (code) updated.codigoCartera = code;
+      }
+
+      // ✅ si lo deja "sin asignar", opcional: limpiar cartera
+      // (si prefieres mantenerla, comenta la línea de abajo)
+      if (nextAgenteId == null) updated.codigoCartera = null;
+
+      return updated;
+    });
+  };
+
+  const carteraReadonly =
+    !!editingCliente.agenteId && !!agenteSeleccionado?.carpetaDriveCodigo;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
@@ -112,8 +164,17 @@ const ClienteEditModal: React.FC<Props> = ({
               onChange={(e) => setField("codigoCartera", e.target.value ? e.target.value : null)}
               placeholder='Ej: "CONTA/A01"'
               className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
-              disabled={saving || !canManageClientes}
+              disabled={saving || !canManageClientes || carteraReadonly}
             />
+            {carteraReadonly ? (
+              <p className="mt-1 text-[10px] text-black/45">
+                Se autocompleta desde el ejecutivo seleccionado.
+              </p>
+            ) : (
+              <p className="mt-1 text-[10px] text-black/45">
+                Si asignas un ejecutivo con código, se completa automáticamente.
+              </p>
+            )}
           </label>
 
           {/* Ejecutivo */}
@@ -122,7 +183,7 @@ const ClienteEditModal: React.FC<Props> = ({
               <span className="font-semibold text-black/70">Ejecutivo (agente)</span>
               <select
                 value={editingCliente.agenteId == null ? "" : String(editingCliente.agenteId)}
-                onChange={(e) => setField("agenteId", e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => handleChangeAgente(e.target.value)}
                 className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                 disabled={saving}
               >
@@ -130,11 +191,13 @@ const ClienteEditModal: React.FC<Props> = ({
                 {trabajadores.map((t) => (
                   <option key={t.id_trabajador} value={String(t.id_trabajador)}>
                     {t.nombre}
+                    {t.carpetaDriveCodigo ? ` · ${t.carpetaDriveCodigo}` : ""}
                   </option>
                 ))}
               </select>
+
               <p className="mt-1 text-[10px] text-black/45">
-                Reasignación solo Admin/Supervisor.
+                Al cambiar ejecutivo, se toma su <b>carpetaDriveCodigo</b> como código de cartera.
               </p>
             </label>
           ) : (

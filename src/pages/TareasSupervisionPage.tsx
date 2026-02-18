@@ -1,100 +1,137 @@
 // src/pages/TareasSupervisionPage.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { API_BASE_URL, fetchJSON, TareaFull, ResumenAgente } from "../lib/api";
-import AgenteModal from "../components/supervision/AgenteModal";
 import { filtrarPorPeriodo, Periodo } from "../components/supervision/usePeriodo";
+import { applyFilters, type GlobalFilters } from "../utils/supervisionMetrics";
 
-// ✅ RUTAS CORRECTAS (tu carpeta real es src/pages/supervision/views/)
-import DashboardView from "./supervision/views/DashboardView";
-import EmpresasView from "./supervision/views/EmpresasView";
-import ComparativaView from "./supervision/views/ComparativaView";
-
-// ✅ NUEVO: vista “Impacto por tarea”
-import TareaImpactoView from "./supervision/views/TareaImpactoView";
-
-// ✅ NUEVO: métricas + filtros unificados
-import {
-  applyFilters,
-  computeKpis,
-  getTaskKeyForFilter,
-  safeDate,
-  type Estado,
-  type DueMode,
-  type GlobalFilters,
-} from "../utils/supervisionMetrics";
+import AgentSupervisionPanel from "./supervision/views/panels/AgentSupervisionPanel";
+import TaskSupervisionPanel from "./supervision/views/panels/TaskSupervisionPanel";
 
 type RutCliente = { rut: string; razonSocial?: string | null };
 
-type AgenteComparativa = ResumenAgente & {
-  total: number;
-  abiertas: number;
-  cierre: number;
+// =========================
+// Auth helpers (frontend)
+// =========================
+function getToken() {
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("jwt") ||
+    ""
+  );
+}
+
+function getAuthHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// Wrapper para no “pisar” Authorization cuando pasas headers
+async function fetchJSONAuth<T>(url: string, init?: RequestInit): Promise<T> {
+  const mergedHeaders = {
+    ...(init?.headers || {}),
+    ...getAuthHeaders(),
+  } as Record<string, string>;
+
+  return fetchJSON<T>(url, {
+    ...init,
+    headers: mergedHeaders,
+  });
+}
+
+async function fetchDataAgente(
+  trabajadorId: number,
+  opts?: { signal?: AbortSignal }
+): Promise<{ tareas: TareaFull[]; ruts: RutCliente[] }> {
+  // 1) RUTs del agente
+  const ruts = await fetchJSONAuth<RutCliente[]>(
+    `${API_BASE_URL}/tareas/mis-ruts?trabajadorId=${trabajadorId}`,
+    { signal: opts?.signal }
+  );
+
+  const rutList = (ruts || []).map((r) => r.rut).filter(Boolean);
+  if (rutList.length === 0) return { tareas: [], ruts: ruts || [] };
+
+  // 2) Bulk tareas por ruts
+  const resBulk = await fetchJSONAuth<{ tareas: TareaFull[] }>(`${API_BASE_URL}/tareas/por-ruts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: opts?.signal,
+    body: JSON.stringify({ trabajadorId, ruts: rutList }),
+  });
+
+  return { tareas: resBulk?.tareas ?? [], ruts: ruts || [] };
+}
+
+type MainMode = "agente" | "tarea";
+type AgentView = "dashboard" | "empresas" | "impacto" | "comparativa";
+
+// =========================
+// Comparativa types/helpers
+// =========================
+type AgenteComparativa = {
+  trabajadorId: number;
+  nombre: string;
+  email?: string;
+
   pendientes: number;
   enProceso: number;
   vencidas: number;
   completadas: number;
+
+  total: number;
+  abiertas: number;
+  cierre: number; // %
+  riesgo: number; // %
 };
 
-const SpinnerSmall: React.FC<{ label?: string }> = ({ label = "Cargando..." }) => (
-  <div className="flex items-center gap-2 text-xs text-black/60">
-    <div className="relative flex h-5 w-5 items-center justify-center">
-      <span className="absolute inline-flex h-full w-full rounded-full bg-sky-200 opacity-60 animate-ping" />
-      <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-sky-200 border-t-sky-600 animate-spin" />
-    </div>
-    <span className="animate-pulse">{label}</span>
-  </div>
-);
+type ComparativaTotals = {
+  totalAgentes: number;
+  totalTareas: number;
+  backlog: number;
+  tasaGlobal: number; // % cierre global
+  promedioCierre: number; // promedio de cierre por agente (simple)
+  top: AgenteComparativa | null;
+};
 
-async function fetchDataAgente(trabajadorId: number): Promise<{
-  tareas: TareaFull[];
-  ruts: RutCliente[];
-}> {
-  const ruts = await fetchJSON<RutCliente[]>(
-    `${API_BASE_URL}/tareas/mis-ruts?trabajadorId=${trabajadorId}`
-  );
+type ChartSeries = Array<{ name: string; data: number[] }>;
 
-  const all: TareaFull[] = [];
-  for (const item of ruts) {
-    const rut = encodeURIComponent(item.rut);
-    const tareas = await fetchJSON<TareaFull[]>(
-      `${API_BASE_URL}/tareas/por-rut/${rut}?trabajadorId=${trabajadorId}`
-    );
-    all.push(...tareas);
-  }
-  return { tareas: all, ruts };
+function round0(n: number) {
+  return Math.round(n);
+}
+function pct(num: number, den: number) {
+  return den > 0 ? round0((num / den) * 100) : 0;
 }
 
 const TareasSupervisionPage: React.FC = () => {
+  // =========================
+  // Estado base / data
+  // =========================
   const [resumen, setResumen] = useState<ResumenAgente[]>([]);
   const [tareasCache, setTareasCache] = useState<Record<number, TareaFull[]>>({});
   const [rutsCache, setRutsCache] = useState<Record<number, RutCliente[]>>({});
 
-  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
-  const [selectedClientRut, setSelectedClientRut] = useState<string>("ALL");
+  const [loading, setLoading] = useState(false);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // =========================
+  // Nuevo flujo: primero modo
+  // =========================
+  const [mainMode, setMainMode] = useState<MainMode | null>(null);
+
+  // Por agente
+  const [agentView, setAgentView] = useState<AgentView>("dashboard");
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+
+  // Periodo
   const [periodo, setPeriodo] = useState<Periodo>("actual");
   const [mesSelect, setMesSelect] = useState<number>(new Date().getMonth() + 1);
   const [anioSelect, setAnioSelect] = useState<number>(new Date().getFullYear());
 
-  const [agenteDetalle, setAgenteDetalle] = useState<number | null>(null);
-
-  const [loading, setLoading] = useState(false);
-  const [agentLoading, setAgentLoading] = useState(false);
-  const [comparativaLoading, setComparativaLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // ✅ +impacto
-  const [viewMode, setViewMode] = useState<"dashboard" | "empresas" | "comparativa" | "impacto">(
-    "dashboard"
-  );
-
-  // =================================
-  // ✅ FILTROS GLOBALES
-  // =================================
+  // Filtros globales (se usan en ambos paneles)
   const [filters, setFilters] = useState<GlobalFilters>({
     estado: {
       PENDIENTE: true,
@@ -111,28 +148,19 @@ const TareasSupervisionPage: React.FC = () => {
     taskKey: "ALL",
   });
 
-  // Empresas UI state
-  const [empresaSearch, setEmpresaSearch] = useState("");
-  const [empresaPage, setEmpresaPage] = useState(1);
-  const [empresaSeleccionadaRut, setEmpresaSeleccionadaRut] = useState<string | null>(null);
-  const EMPRESAS_PAGE_SIZE = 12;
+  // Abort controllers
+  const agentAbortRef = useRef<AbortController | null>(null);
+  const globalAbortRef = useRef<AbortController | null>(null);
 
-  // Export modal
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportSelection, setExportSelection] = useState<{
-    target: "dashboard" | "empresas" | "comparativa" | "impacto";
-    format: "excel" | "pdf";
-  }>({
-    target: "comparativa",
-    format: "excel",
-  });
-
+  // =========================
+  // Load resumen (lista agentes)
+  // =========================
   const loadResumen = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const resResumen = await fetchJSON<ResumenAgente[]>(`${API_BASE_URL}/tareas/supervision/resumen`);
-      setResumen(resResumen);
+      const res = await fetchJSONAuth<ResumenAgente[]>(`${API_BASE_URL}/tareas/supervision/resumen`);
+      setResumen(res || []);
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar supervisión");
     } finally {
@@ -144,442 +172,158 @@ const TareasSupervisionPage: React.FC = () => {
     loadResumen();
   }, [loadResumen]);
 
-  // ✅ Pre-carga comparativa (todos los agentes) cuando entramos a comparativa
+  // =========================
+  // Carga global (para Por tarea y Comparativa)
+  // =========================
+  const needsGlobal =
+    mainMode === "tarea" || (mainMode === "agente" && agentView === "comparativa");
+
+  const missingGlobalIds = useMemo(() => {
+    if (!needsGlobal) return [];
+    if (!resumen.length) return [];
+    return resumen
+      .map((r) => r.trabajadorId)
+      .filter((id) => !tareasCache[id] || !rutsCache[id]);
+  }, [needsGlobal, resumen, tareasCache, rutsCache]);
+
   useEffect(() => {
-    if (viewMode !== "comparativa") return;
+    if (!needsGlobal) return;
+    if (resumen.length === 0) return;
+    if (missingGlobalIds.length === 0) return;
 
-    const missing = resumen.map((r) => r.trabajadorId).filter((id) => !tareasCache[id]);
-    if (missing.length === 0) return;
+    globalAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    globalAbortRef.current = ctrl;
 
-    setComparativaLoading(true);
-    Promise.all(
-      missing.map(async (id) => {
-        try {
-          const { tareas, ruts } = await fetchDataAgente(id);
-          setTareasCache((prev) => ({ ...prev, [id]: tareas }));
-          setRutsCache((prev) => ({ ...prev, [id]: ruts }));
-        } catch (e) {
-          console.error("Error cargando datos de agente para comparativa", e);
-        }
-      })
-    ).finally(() => setComparativaLoading(false));
-  }, [viewMode, resumen, tareasCache]);
+    setGlobalLoading(true);
+    setError(null);
 
-  // ✅ Carga on-demand del agente seleccionado (dashboard/empresas/impacto)
+    (async () => {
+      try {
+        const tareasUpdates: Record<number, TareaFull[]> = {};
+        const rutsUpdates: Record<number, RutCliente[]> = {};
+
+        await Promise.all(
+          missingGlobalIds.map(async (id) => {
+            const { tareas, ruts } = await fetchDataAgente(id, { signal: ctrl.signal });
+            tareasUpdates[id] = tareas;
+            rutsUpdates[id] = ruts;
+          })
+        );
+
+        setTareasCache((prev) => ({ ...prev, ...tareasUpdates }));
+        setRutsCache((prev) => ({ ...prev, ...rutsUpdates }));
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        console.error("Error cargando datos globales", e);
+        setError(e?.message || "Error cargando datos globales");
+      } finally {
+        setGlobalLoading(false);
+      }
+    })();
+
+    return () => ctrl.abort();
+  }, [needsGlobal, resumen.length, missingGlobalIds]);
+
+  // =========================
+  // Carga on-demand para Por agente (cuando ya eligió agente)
+  // =========================
+  const agentHasCache = useMemo(() => {
+    if (selectedAgentId === null) return false;
+    return Boolean(tareasCache[selectedAgentId] && rutsCache[selectedAgentId]);
+  }, [selectedAgentId, tareasCache, rutsCache]);
+
   useEffect(() => {
+    if (mainMode !== "agente") return;
+    if (agentView === "comparativa") return; // comparativa usa global
     if (selectedAgentId === null) return;
 
-    // reset UI de empresas al cambiar agente
-    setEmpresaSearch("");
-    setEmpresaPage(1);
-    setEmpresaSeleccionadaRut(null);
-
-    // ✅ en Empresas/Impacto dejamos el filtro cliente global en ALL (el view decide)
-    if (viewMode === "empresas" || viewMode === "impacto") setSelectedClientRut("ALL");
-
-    if (tareasCache[selectedAgentId] && rutsCache[selectedAgentId]) {
+    if (agentHasCache) {
       setAgentLoading(false);
       return;
     }
 
+    agentAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    agentAbortRef.current = ctrl;
+
     setAgentLoading(true);
-    fetchDataAgente(selectedAgentId)
+    setError(null);
+
+    fetchDataAgente(selectedAgentId, { signal: ctrl.signal })
       .then(({ tareas, ruts }) => {
         setTareasCache((prev) => ({ ...prev, [selectedAgentId]: tareas }));
         setRutsCache((prev) => ({ ...prev, [selectedAgentId]: ruts }));
       })
-      .catch((e) => console.error("Error cargando datos del agente", e))
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        console.error("Error cargando datos del agente", e);
+        setError(e?.message || "Error cargando datos del agente");
+      })
       .finally(() => setAgentLoading(false));
-  }, [selectedAgentId, tareasCache, rutsCache, viewMode]);
 
+    return () => ctrl.abort();
+  }, [mainMode, agentView, selectedAgentId, agentHasCache]);
+
+  // =========================
+  // Dataset por agente (para panel Agente)
+  // =========================
   const clienteOptions = useMemo(() => {
     if (selectedAgentId === null) return [];
     return rutsCache[selectedAgentId] || [];
   }, [selectedAgentId, rutsCache]);
 
-  const isComparativa = viewMode === "comparativa";
-  const isEmpresas = viewMode === "empresas";
-  const isImpacto = viewMode === "impacto";
-
-  // =========================
-  // ✅ Base tareas del agente seleccionado (por periodo + (cliente solo en dashboard))
-  // =========================
-  const tareasBaseSeleccionadas = useMemo(() => {
+  const tareasAgentePeriodo = useMemo(() => {
     if (selectedAgentId === null) return [];
     const base = tareasCache[selectedAgentId] || [];
-    const filtradasPeriodo = filtrarPorPeriodo(base, periodo, mesSelect, anioSelect);
+    return filtrarPorPeriodo(base, periodo, mesSelect, anioSelect);
+  }, [selectedAgentId, tareasCache, periodo, mesSelect, anioSelect]);
 
-    // ✅ En "Empresas" e "Impacto" NO aplicamos el filtro de cliente global.
-    if (isEmpresas || isImpacto) return filtradasPeriodo;
+  const tareasAgenteFiltradas = useMemo(() => {
+    return applyFilters(tareasAgentePeriodo, filters);
+  }, [tareasAgentePeriodo, filters]);
 
-    if (selectedClientRut === "ALL") return filtradasPeriodo;
-    return filtradasPeriodo.filter((t) => t.rutCliente === selectedClientRut);
-  }, [selectedAgentId, tareasCache, periodo, mesSelect, anioSelect, selectedClientRut, isEmpresas, isImpacto]);
-
-  // =========================
-  // ✅ Areas disponibles (dinámico)
-  // =========================
-  const areaOptions = useMemo(() => {
-    const set = new Set<string>();
-    tareasBaseSeleccionadas.forEach((t) => {
-      const a = t.tareaPlantilla?.area?.trim();
-      if (a) set.add(a);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [tareasBaseSeleccionadas]);
-
-  // =========================
-  // ✅ "Tipos de tarea" disponibles (para filtro)
-  // =========================
-  const taskOptions = useMemo(() => {
-    const map = new Map<string, { key: string; label: string }>();
-    for (const t of tareasBaseSeleccionadas) {
-      const key = getTaskKeyForFilter(t);
-      if (!map.has(key)) {
-        const codigo = t.tareaPlantilla?.codigoDocumento || "-";
-        const nombre = t.tareaPlantilla?.nombre || `Tarea #${t.id_tarea_asignada}`;
-        const area = t.tareaPlantilla?.area || "-";
-        map.set(key, { key, label: `${nombre} · ${area} · ${codigo}` });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [tareasBaseSeleccionadas]);
-
-  // =========================
-  // ✅ Aplicación de filtros globales
-  // =========================
-  const tareasSeleccionadas = useMemo(() => {
-    return applyFilters(tareasBaseSeleccionadas, filters);
-  }, [tareasBaseSeleccionadas, filters]);
-
-  // ✅ KPIs globales (dashboard)
-  const globalKpis = useMemo(() => {
-    if (selectedAgentId === null) {
-      return {
-        total: 0,
-        pend: 0,
-        proc: 0,
-        venc: 0,
-        comp: 0,
-        porVencer: 0,
-        backlog: 0,
-        cierrePct: 0,
-        avgCierreDias: 0,
-        edadBacklogDias: 0,
-        riskScore: 0,
-        riskLabel: "-",
-      };
-    }
-    return computeKpis(tareasSeleccionadas, filters);
-  }, [selectedAgentId, tareasSeleccionadas, filters]);
-
-  const donutSeries = useMemo(
-    () => [globalKpis.pend, globalKpis.proc, globalKpis.venc, globalKpis.comp, globalKpis.porVencer],
-    [globalKpis]
-  );
-
-  const donutOptions = useMemo(
-    () => ({
-      labels: ["Pendiente", "En proceso", "Vencida", "Completada", `Por vencer (<=${filters.dueDays}d)`],
-      colors: ["#fbbf24", "#38bdf8", "#f97373", "#22c55e", "#fb923c"],
-      legend: { position: "bottom" },
-    }),
-    [filters.dueDays]
-  );
-
-  // Linea avance por fecha
-  const lineData = useMemo(() => {
-    const bucket = new Map<
-      string,
-      { fecha: string; PENDIENTE: number; EN_PROCESO: number; VENCIDA: number; COMPLETADA: number }
-    >();
-
-    tareasSeleccionadas.forEach((t) => {
-      const key = (t.fechaProgramada || t.createdAt).slice(0, 10);
-      if (!bucket.has(key)) {
-        bucket.set(key, { fecha: key, PENDIENTE: 0, EN_PROCESO: 0, VENCIDA: 0, COMPLETADA: 0 });
-      }
-      bucket.get(key)![t.estado as Estado] += 1;
-    });
-
-    const arr = Array.from(bucket.values()).sort((a, b) => a.fecha.localeCompare(b.fecha));
-    return {
-      categories: arr.map((d) => d.fecha),
-      series: [
-        { name: "Pendiente", data: arr.map((d) => d.PENDIENTE) },
-        { name: "En proceso", data: arr.map((d) => d.EN_PROCESO) },
-        { name: "Vencida", data: arr.map((d) => d.VENCIDA) },
-        { name: "Completada", data: arr.map((d) => d.COMPLETADA) },
-      ],
-    };
-  }, [tareasSeleccionadas]);
-
-  // Proceso general (tabla)
-  const procesoAgentes = useMemo(() => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
-    const limite = new Date(hoy);
-    limite.setDate(limite.getDate() + Math.max(0, filters.dueDays));
-
-    if (selectedAgentId === null) return [];
-
-    return resumen
-      .filter((r) => r.trabajadorId === selectedAgentId)
-      .map((r) => {
-        const tareas = tareasSeleccionadas;
-
-        const backlog = tareas.filter((t) => t.estado === "PENDIENTE" || t.estado === "EN_PROCESO");
-        const vencidas = tareas.filter((t) => t.estado === "VENCIDA");
-
-        const porVencer = backlog.filter((t) => {
-          const fv = safeDate(t.fechaProgramada);
-          return !!fv && fv.getTime() >= hoy.getTime() && fv.getTime() <= limite.getTime();
-        });
-
-        const proximo =
-          backlog
-            .map((t) => safeDate(t.fechaProgramada))
-            .filter(Boolean)
-            .map((d) => d as Date)
-            .filter((d) => d.getTime() >= hoy.getTime())
-            .sort((a, b) => a.getTime() - b.getTime())[0] || null;
-
-        const riesgoValor = vencidas.length * 2 + backlog.length;
-        const estado = riesgoValor > 10 ? "Crítico" : vencidas.length > 0 ? "Riesgo" : "Normal";
-
-        return {
-          ...r,
-          pendientes: backlog.length,
-          vencidas: vencidas.length,
-          porVencer: porVencer.length,
-          proximoVenc: proximo ? proximo.toLocaleDateString("es-CL") : "-",
-          estadoProceso: estado,
-        };
-      });
-  }, [resumen, tareasSeleccionadas, selectedAgentId, filters.dueDays]);
-
-  // Empresas stats (sobre tareasSeleccionadas filtradas)
-  const empresasStats = useMemo(() => {
-    if (selectedAgentId === null) return [];
-
-    const mapa = new Map<
-      string,
-      {
-        rut: string;
-        razonSocial: string;
-        pendientes: number;
-        enProceso: number;
-        vencidas: number;
-        completadas: number;
-        porVencer: number;
-        total: number;
-      }
-    >();
-
-    clienteOptions.forEach((c) => {
-      mapa.set(c.rut, {
-        rut: c.rut,
-        razonSocial: c.razonSocial || c.rut,
-        pendientes: 0,
-        enProceso: 0,
-        vencidas: 0,
-        completadas: 0,
-        porVencer: 0,
-        total: 0,
-      });
-    });
-
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
-    const limite = new Date(hoy);
-    limite.setDate(limite.getDate() + Math.max(0, filters.dueDays));
-
-    tareasSeleccionadas.forEach((t) => {
-      const rut = t.rutCliente || "SIN_RUT";
-      if (!mapa.has(rut)) {
-        mapa.set(rut, {
-          rut,
-          razonSocial: rut,
-          pendientes: 0,
-          enProceso: 0,
-          vencidas: 0,
-          completadas: 0,
-          porVencer: 0,
-          total: 0,
-        });
-      }
-
-      const m = mapa.get(rut)!;
-      if (t.estado === "PENDIENTE") m.pendientes += 1;
-      else if (t.estado === "EN_PROCESO") m.enProceso += 1;
-      else if (t.estado === "VENCIDA") m.vencidas += 1;
-      else if (t.estado === "COMPLETADA") m.completadas += 1;
-
-      if (t.estado !== "COMPLETADA") {
-        const fv = safeDate(t.fechaProgramada);
-        if (fv && fv.getTime() >= hoy.getTime() && fv.getTime() <= limite.getTime()) m.porVencer += 1;
-      }
-
-      m.total += 1;
-    });
-
-    return Array.from(mapa.values()).sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
-  }, [selectedAgentId, clienteOptions, tareasSeleccionadas, filters.dueDays]);
-
-  const empresasFiltradas = useMemo(() => {
-    const term = empresaSearch.trim().toLowerCase();
-    if (!term) return empresasStats;
-    return empresasStats.filter(
-      (e) => e.rut.toLowerCase().includes(term) || e.razonSocial.toLowerCase().includes(term)
-    );
-  }, [empresasStats, empresaSearch]);
-
-  const empresasPageData = useMemo(() => {
-    const start = (empresaPage - 1) * EMPRESAS_PAGE_SIZE;
-    return empresasFiltradas.slice(start, start + EMPRESAS_PAGE_SIZE);
-  }, [empresasFiltradas, empresaPage]);
-
-  const totalEmpresas = empresasStats.length;
-  const totalTareasEmpresas = empresasStats.reduce((acc, e) => acc + e.total, 0);
-
-  // Comparativa
-  const periodoComparativa: Periodo =
-    viewMode === "comparativa"
-      ? periodo === "anio-especifico"
-        ? "anio-especifico"
-        : "mes-especifico"
-      : periodo;
-
-  const comparativaAgentes = useMemo<AgenteComparativa[]>(() => {
-    return resumen.map((r) => {
-      const tareas = tareasCache[r.trabajadorId] || [];
-      const tareasPeriodo =
-        tareas.length > 0 ? filtrarPorPeriodo(tareas, periodoComparativa, mesSelect, anioSelect) : [];
-
-      const tareasFiltradas = applyFilters(tareasPeriodo, filters);
-
-      const base =
-        tareasFiltradas.length > 0
-          ? tareasFiltradas.reduce(
-              (acc, t) => {
-                if (t.estado === "PENDIENTE") acc.pendientes += 1;
-                else if (t.estado === "EN_PROCESO") acc.enProceso += 1;
-                else if (t.estado === "VENCIDA") acc.vencidas += 1;
-                else if (t.estado === "COMPLETADA") acc.completadas += 1;
-                return acc;
-              },
-              { pendientes: 0, enProceso: 0, vencidas: 0, completadas: 0 }
-            )
-          : { pendientes: 0, enProceso: 0, vencidas: 0, completadas: 0 };
-
-      const total = base.pendientes + base.enProceso + base.vencidas + base.completadas;
-      const abiertas = total - base.completadas;
-      const cierre = total > 0 ? Math.round((base.completadas / total) * 100) : 0;
-
-      return { ...r, ...base, total, abiertas, cierre };
-    });
-  }, [resumen, tareasCache, periodoComparativa, mesSelect, anioSelect, filters]);
-
-  const comparativaTotals = useMemo(() => {
-    const totalAgentes = comparativaAgentes.length;
-    const totalTareas = comparativaAgentes.reduce((acc, a) => acc + a.total, 0);
-    const totalCompletadas = comparativaAgentes.reduce((acc, a) => acc + a.completadas, 0);
-    const backlog = comparativaAgentes.reduce((acc, a) => acc + a.abiertas, 0);
-
-    const tasaGlobal = totalTareas > 0 ? Math.round((totalCompletadas / totalTareas) * 100) : 0;
-    const promedioCierre =
-      totalAgentes > 0 ? Math.round(comparativaAgentes.reduce((acc, a) => acc + a.cierre, 0) / totalAgentes) : 0;
-
-    const top = comparativaAgentes.slice().sort((a, b) => b.cierre - a.cierre || b.total - a.total)[0] || null;
-
-    return { totalAgentes, totalTareas, backlog, tasaGlobal, promedioCierre, top };
-  }, [comparativaAgentes]);
-
-  const comparativaStacked = useMemo(() => {
-    return {
-      categories: comparativaAgentes.map((a) => a.nombre),
-      series: [
-        { name: "Pendientes", data: comparativaAgentes.map((a) => a.pendientes) },
-        { name: "En proceso", data: comparativaAgentes.map((a) => a.enProceso) },
-        { name: "Vencidas", data: comparativaAgentes.map((a) => a.vencidas) },
-        { name: "Completadas", data: comparativaAgentes.map((a) => a.completadas) },
-      ],
-    };
-  }, [comparativaAgentes]);
-
-  const comparativaRendimiento = useMemo(() => {
-    return {
-      categories: comparativaAgentes.map((a) => a.nombre),
-      data: comparativaAgentes.map((a) => a.cierre),
-    };
-  }, [comparativaAgentes]);
-
-  // =========================
-  // Export helpers (SIN CAMBIOS)
-  // =========================
-  const exportExcelGeneric = async ({
-    filename,
-    sheetName,
-    columns,
-    rows,
-    styleCell,
-  }: {
-    filename: string;
-    sheetName: string;
-    columns: Array<{ key: string; header: string; width?: number }>;
-    rows: Array<Record<string, any>>;
-    styleCell?: (params: { rowIndex: number; colKey: string; value: any; cell: ExcelJS.Cell }) => void;
-  }) => {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(sheetName);
-
-    ws.columns = columns.map((c) => ({
-      key: c.key,
-      header: c.header,
-      width: c.width || 18,
-      style: {
-        font: { color: { argb: "FF1D1E1C" } },
-        border: {
-          top: { style: "hair", color: { argb: "FFDDD9C3" } },
-          bottom: { style: "hair", color: { argb: "FFDDD9C3" } },
-        },
-      },
+  const empresasCarteraAgente = useMemo(() => {
+    return (clienteOptions || []).map((c) => ({
+      rut: c.rut,
+      razonSocial: c.razonSocial || c.rut,
     }));
+  }, [clienteOptions]);
 
-    ws.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FF1D1E1C" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F4F0" } };
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFDDD9C3" } },
-        bottom: { style: "thin", color: { argb: "FFDDD9C3" } },
-      };
-    });
+  // =========================
+  // Dataset global (para panel Tarea + Comparativa)
+  // =========================
+  const tareasGlobales = useMemo(() => {
+    const out: TareaFull[] = [];
+    Object.values(tareasCache).forEach((list) => out.push(...(list || [])));
+    return out;
+  }, [tareasCache]);
 
-    rows.forEach((row, idx) => {
-      const excelRow = ws.addRow(row);
-      excelRow.eachCell((cell, colNumber) => {
-        const colKey = columns[colNumber - 1]?.key;
-        if (styleCell && colKey) styleCell({ rowIndex: idx + 1, colKey, value: cell.value, cell });
-        if ((idx + 1) % 2 === 0) {
-          cell.fill =
-            cell.fill ||
-            ({
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFFAF8F2" },
-            } as any);
-        }
+  const tareasGlobalesPeriodo = useMemo(() => {
+    return filtrarPorPeriodo(tareasGlobales, periodo, mesSelect, anioSelect);
+  }, [tareasGlobales, periodo, mesSelect, anioSelect]);
+
+  const tareasGlobalesFiltradas = useMemo(() => {
+    // En "Por tarea" (y comparativa) no queremos que un toggle esconda completadas por accidente:
+    const fixed: GlobalFilters = {
+      ...filters,
+      estado: { PENDIENTE: true, EN_PROCESO: true, VENCIDA: true, COMPLETADA: true },
+      onlyBacklog: false,
+      onlyCompleted: false,
+    };
+    return applyFilters(tareasGlobalesPeriodo, fixed);
+  }, [tareasGlobalesPeriodo, filters]);
+
+  const carteraGlobal = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.values(rutsCache).forEach((list) => {
+      (list || []).forEach((c) => {
+        if (!c?.rut) return;
+        if (!map.has(c.rut)) map.set(c.rut, c.razonSocial || c.rut);
       });
     });
-
-    const buf = await wb.xlsx.writeBuffer();
-    saveAs(
-      new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      filename
-    );
-  };
+    return Array.from(map.entries()).map(([rut, razonSocial]) => ({ rut, razonSocial }));
+  }, [rutsCache]);
 
   const formatFecha = (iso?: string | null) => {
     if (!iso) return "-";
@@ -587,410 +331,281 @@ const TareasSupervisionPage: React.FC = () => {
     return d.toLocaleDateString("es-CL");
   };
 
-  const agenteSeleccionado = selectedAgentId ? resumen.find((r) => r.trabajadorId === selectedAgentId) : null;
+  const agenteSeleccionado = selectedAgentId
+    ? resumen.find((r) => r.trabajadorId === selectedAgentId)
+    : null;
 
+  // =========================
+  // ✅ Comparativa: construir datasets reales
+  // =========================
+  const comparativaAgentes = useMemo<AgenteComparativa[]>(() => {
+    if (!resumen.length) return [];
+
+    // agrupar por trabajadorId desde tareasGlobalesFiltradas (mismo periodo)
+    const byId = new Map<number, TareaFull[]>();
+    for (const t of tareasGlobalesFiltradas) {
+      const tid = (t as any)?.trabajadorId ?? 0;
+      if (!tid) continue;
+      if (!byId.has(tid)) byId.set(tid, []);
+      byId.get(tid)!.push(t);
+    }
+
+    return resumen.map((r) => {
+      const list = byId.get(r.trabajadorId) || [];
+      let pendientes = 0,
+        enProceso = 0,
+        vencidas = 0,
+        completadas = 0;
+
+      for (const t of list) {
+        if (t.estado === "PENDIENTE") pendientes++;
+        else if (t.estado === "EN_PROCESO") enProceso++;
+        else if (t.estado === "VENCIDA") vencidas++;
+        else if (t.estado === "COMPLETADA") completadas++;
+      }
+
+      const total = list.length;
+      const abiertas = pendientes + enProceso + vencidas;
+      const cierre = pct(completadas, total);
+      const riesgo = total > 0 ? round0(((vencidas * 1.5 + pendientes) / total) * 100) : 0;
+
+      return {
+        trabajadorId: r.trabajadorId,
+        nombre: r.nombre,
+        email: r.email,
+        pendientes,
+        enProceso,
+        vencidas,
+        completadas,
+        total,
+        abiertas,
+        cierre,
+        riesgo,
+      };
+    });
+  }, [resumen, tareasGlobalesFiltradas]);
+
+  const comparativaTotals = useMemo<ComparativaTotals>(() => {
+    const totalAgentes = comparativaAgentes.length;
+
+    const totalTareas = comparativaAgentes.reduce((acc, a) => acc + (a.total || 0), 0);
+    const backlog = comparativaAgentes.reduce((acc, a) => acc + (a.abiertas || 0), 0);
+    const totalCompletadas = comparativaAgentes.reduce((acc, a) => acc + (a.completadas || 0), 0);
+
+    const tasaGlobal = pct(totalCompletadas, totalTareas);
+    const promedioCierre =
+      totalAgentes > 0
+        ? round0(comparativaAgentes.reduce((acc, a) => acc + (a.cierre || 0), 0) / totalAgentes)
+        : 0;
+
+    let top: AgenteComparativa | null = null;
+    for (const a of comparativaAgentes) {
+      if (!top) top = a;
+      else if ((a.cierre || 0) > (top.cierre || 0)) top = a;
+      else if ((a.cierre || 0) === (top.cierre || 0) && (a.total || 0) > (top.total || 0)) top = a;
+    }
+
+    return {
+      totalAgentes,
+      totalTareas,
+      backlog,
+      tasaGlobal,
+      promedioCierre,
+      top,
+    };
+  }, [comparativaAgentes]);
+
+  const comparativaStacked = useMemo(() => {
+    // barras apiladas por agente (pendientes/enProceso/vencidas/completadas)
+    const categories = comparativaAgentes.map((a) => a.nombre);
+    const series: ChartSeries = [
+      { name: "Pendiente", data: comparativaAgentes.map((a) => a.pendientes || 0) },
+      { name: "En proceso", data: comparativaAgentes.map((a) => a.enProceso || 0) },
+      { name: "Vencida", data: comparativaAgentes.map((a) => a.vencidas || 0) },
+      { name: "Completada", data: comparativaAgentes.map((a) => a.completadas || 0) },
+    ];
+    return { categories, series };
+  }, [comparativaAgentes]);
+
+  const comparativaRendimiento = useMemo(() => {
+    // line/columns de cierre% y riesgo% por agente
+    const categories = comparativaAgentes.map((a) => a.nombre);
+    const series: ChartSeries = [
+      { name: "Cierre %", data: comparativaAgentes.map((a) => a.cierre || 0) },
+      { name: "Riesgo %", data: comparativaAgentes.map((a) => a.riesgo || 0) },
+    ];
+    return { categories, series };
+  }, [comparativaAgentes]);
+
+  // =========================
+  // UI states
+  // =========================
   if (loading) return <div>Cargando supervisión...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
+  if (error) return <div className="text-red-600 text-sm">{error}</div>;
 
   return (
     <div className="space-y-6">
-      {/* Filtros superiores */}
-      <div className="space-y-3 bg-[#f5f4f0] border border-black/5 rounded-2xl px-3 py-3 shadow-sm">
-        <div className="flex flex-wrap gap-3 items-center">
-          {!isComparativa && (
-            <select
-              className="text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
-              value={selectedAgentId ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedAgentId(val ? Number(val) : null);
-                setSelectedClientRut("ALL");
-                setEmpresaSearch("");
-                setEmpresaPage(1);
-                setEmpresaSeleccionadaRut(null);
-                setFilters((prev) => ({ ...prev, taskKey: "ALL" }));
-              }}
-            >
-              <option value="">Selecciona un agente</option>
-              {resumen.map((r) => (
-                <option key={r.trabajadorId} value={r.trabajadorId}>
-                  {r.nombre}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <div className="flex items-center gap-2 text-xs">
-            <select
-              className="bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
-              value={mesSelect}
-              onChange={(e) => {
-                setPeriodo("mes-especifico");
-                setMesSelect(Number(e.target.value));
-              }}
-            >
-              {Array.from({ length: 12 }).map((_, i) => (
-                <option key={i + 1} value={i + 1}>
-                  Mes {i + 1}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="number"
-              className="bg-white border border-black/10 rounded-xl px-3 py-2 w-24 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
-              value={anioSelect}
-              onChange={(e) => {
-                setPeriodo("anio-especifico");
-                setAnioSelect(Number(e.target.value));
-              }}
-            />
-          </div>
-
-          {!isComparativa &&
-            (["actual", "hist"] as Periodo[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  setPeriodo(p);
-                  if (p === "actual") {
-                    const now = new Date();
-                    setMesSelect(now.getMonth() + 1);
-                    setAnioSelect(now.getFullYear());
-                  }
-                }}
-                className={`px-4 py-2 rounded-full text-xs font-semibold border shadow-sm transition ${
-                  periodo === p
-                    ? "bg-[#af9150] text-white border-[#af9150]"
-                    : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-                }`}
-              >
-                {p === "actual" ? "Actual" : "Histórico"}
-              </button>
-            ))}
-
-          {/* ✅ Cliente global SOLO en Dashboard */}
-          {selectedAgentId !== null && !isComparativa && viewMode === "dashboard" && (
-            <div className="flex items-center gap-1 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm">
-              <span className="text-[#1d1e1c]/70">Cliente:</span>
-              <select
-                className="text-xs bg-transparent outline-none"
-                value={selectedClientRut}
-                onChange={(e) => setSelectedClientRut(e.target.value)}
-              >
-                <option value="ALL">Todos</option>
-                {clienteOptions.map((c) => (
-                  <option key={c.rut} value={c.rut}>
-                    {c.razonSocial || c.rut}
-                  </option>
-                ))}
-              </select>
+      {/* Step 1: elegir modo (obligatorio) */}
+      {mainMode === null ? (
+        <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-6">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold text-[#1d1e1c]">Supervisión de tareas</h2>
+              <p className="text-sm text-black/60 mt-1">
+                Elige el modo de análisis:
+              </p>
             </div>
-          )}
 
-          {(loading || agentLoading) && (
-            <div className="ml-auto">
-              <SpinnerSmall label="Cargando datos..." />
+            <div className="text-xs text-black/50">
+              Consejo: “Por tarea” sirve para ver el consolidado global; “Por agente” para analizar cartera.
             </div>
-          )}
-        </div>
-
-        {/* ✅ Filtros avanzados */}
-        <div className="flex flex-wrap gap-2 items-center">
-          {(["PENDIENTE", "EN_PROCESO", "VENCIDA", "COMPLETADA"] as const).map((st) => {
-            const label =
-              st === "PENDIENTE"
-                ? "Pendiente"
-                : st === "EN_PROCESO"
-                ? "En proceso"
-                : st === "VENCIDA"
-                ? "Vencida"
-                : "Completada";
-
-            const active = filters.estado[st];
-
-            return (
-              <button
-                key={st}
-                onClick={() =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    estado: { ...prev.estado, [st]: !prev.estado[st] },
-                  }))
-                }
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  active
-                    ? "bg-[#af9150] text-white border-[#af9150] shadow-sm"
-                    : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-
-          <div className="flex items-center gap-2 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm">
-            <span className="text-[#1d1e1c]/70">Área:</span>
-            <select
-              className="text-xs bg-transparent outline-none"
-              value={filters.area}
-              onChange={(e) => setFilters((p) => ({ ...p, area: e.target.value }))}
-              disabled={selectedAgentId === null}
-              title={selectedAgentId === null ? "Selecciona un agente" : ""}
-            >
-              <option value="ALL">Todas</option>
-              {areaOptions.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
           </div>
 
-          <div className="flex items-center gap-2 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm">
-            <span className="text-[#1d1e1c]/70">Tarea:</span>
-            <select
-              className="text-xs bg-transparent outline-none max-w-[420px]"
-              value={filters.taskKey}
-              onChange={(e) => setFilters((p) => ({ ...p, taskKey: e.target.value }))}
-              disabled={selectedAgentId === null && viewMode !== "comparativa"}
+          {/* ✅ 2 columnas visibles */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            {/* ✅ Primero: Por tarea */}
+            <button
+              onClick={() => {
+                setMainMode("tarea");
+                setSelectedAgentId(null);
+              }}
+              className="
+                text-left
+                p-6
+                rounded-3xl
+                border-2 border-black/10
+                bg-[#faf9f6]
+                shadow-sm
+                hover:border-[#af9150]
+                hover:shadow-md
+                active:scale-[0.99]
+                transition
+                focus:outline-none focus:ring-2 focus:ring-[#af9150]/40 focus:ring-offset-2
+              "
             >
-              <option value="ALL">Todas</option>
-              {taskOptions.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-xs text-black/50">Modo</div>
+                  <div className="text-lg font-semibold text-[#1d1e1c]">Por tarea</div>
+                  <div className="text-sm text-black/60 mt-2">
+                    Selecciona una tarea y revisa su estado consolidado en todas las empresas.
+                  </div>
+                </div>
 
-          <input
-            value={filters.search}
-            onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
-            placeholder="Buscar tarea / área / código..."
-            className="w-72 max-w-full text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
-            disabled={selectedAgentId === null && viewMode !== "comparativa"}
-          />
+                <div className="shrink-0">
+                  <span className="inline-flex items-center justify-center h-10 w-10 rounded-2xl bg-white border border-black/10 text-[#af9150] text-lg">
+                    ✓
+                  </span>
+                </div>
+              </div>
 
-          <div className="flex items-center gap-2 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm">
-            <span className="text-[#1d1e1c]/70">Vencimiento:</span>
-            <select
-              className="text-xs bg-transparent outline-none"
-              value={filters.dueMode}
-              onChange={(e) => setFilters((p) => ({ ...p, dueMode: e.target.value as DueMode }))}
+              <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#af9150]">
+                Entrar
+                <span className="text-base leading-none">→</span>
+              </div>
+            </button>
+
+            {/* ✅ Segundo: Por agente */}
+            <button
+              onClick={() => {
+                setMainMode("agente");
+                setAgentView("dashboard");
+                setSelectedAgentId(null);
+              }}
+              className="
+                text-left
+                p-6
+                rounded-3xl
+                border-2 border-black/10
+                bg-[#faf9f6]
+                shadow-sm
+                hover:border-[#af9150]
+                hover:shadow-md
+                active:scale-[0.99]
+                transition
+                focus:outline-none focus:ring-2 focus:ring-[#af9150]/40 focus:ring-offset-2
+              "
             >
-              <option value="ALL">Todos</option>
-              <option value="OVERDUE">Vencidas</option>
-              <option value="DUE_SOON">Por vencer</option>
-              <option value="ON_TIME">Al día</option>
-            </select>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-xs text-black/50">Modo</div>
+                  <div className="text-lg font-semibold text-[#1d1e1c]">Por agente</div>
+                  <div className="text-sm text-black/60 mt-2">
+                    Dashboards, empresas e impacto dentro de la cartera de un agente.
+                  </div>
+                </div>
 
-            <span className="text-[#1d1e1c]/60">Días:</span>
-            <input
-              type="number"
-              min={0}
-              className="w-16 text-xs bg-transparent outline-none"
-              value={filters.dueDays}
-              onChange={(e) =>
-                setFilters((p) => ({ ...p, dueDays: Math.max(0, Number(e.target.value || 0)) }))
-              }
-              title="Umbral para 'por vencer'"
-            />
+                <div className="shrink-0">
+                  <span className="inline-flex items-center justify-center h-10 w-10 rounded-2xl bg-white border border-black/10 text-[#af9150] text-lg">
+                    ◻
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#af9150]">
+                Entrar
+                <span className="text-base leading-none">→</span>
+              </div>
+            </button>
           </div>
-
-          <button
-            onClick={() =>
-              setFilters((p) => ({
-                ...p,
-                onlyBacklog: !p.onlyBacklog,
-                onlyCompleted: !p.onlyBacklog ? false : p.onlyCompleted,
-              }))
-            }
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-              filters.onlyBacklog
-                ? "bg-sky-600 text-white border-sky-600 shadow-sm"
-                : "bg-white text-[#1d1e1c] border-black/10 hover:border-sky-600"
-            }`}
-            title="Excluir completadas"
-          >
-            Solo backlog
-          </button>
-
-          <button
-            onClick={() =>
-              setFilters((p) => ({
-                ...p,
-                onlyCompleted: !p.onlyCompleted,
-                onlyBacklog: !p.onlyCompleted ? false : p.onlyBacklog,
-              }))
-            }
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-              filters.onlyCompleted
-                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                : "bg-white text-[#1d1e1c] border-black/10 hover:border-emerald-600"
-            }`}
-            title="Mostrar solo completadas"
-          >
-            Solo completadas
-          </button>
-
-          <button
-            onClick={() => {
-              setFilters({
-                estado: { PENDIENTE: true, EN_PROCESO: true, VENCIDA: true, COMPLETADA: true },
-                area: "ALL",
-                search: "",
-                dueMode: "ALL",
-                dueDays: 3,
-                onlyBacklog: false,
-                onlyCompleted: false,
-                taskKey: "ALL",
-              });
-            }}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold border border-black/10 bg-white text-[#1d1e1c] hover:border-[#af9150]"
-          >
-            Reset filtros
-          </button>
         </div>
-      </div>
-
-      {/* Tabs + export */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <button
-          onClick={() => setViewMode("dashboard")}
-          className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${
-            viewMode === "dashboard"
-              ? "bg-[#af9150] text-white border-[#af9150] shadow-sm"
-              : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-          }`}
-        >
-          Dashboards
-        </button>
-
-        <button
-          onClick={() => {
-            setViewMode("empresas");
-            setSelectedClientRut("ALL");
-          }}
-          className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${
-            viewMode === "empresas"
-              ? "bg-[#af9150] text-white border-[#af9150] shadow-sm"
-              : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-          }`}
-        >
-          Empresas
-        </button>
-
-        {/* ✅ NUEVO TAB */}
-        <button
-          onClick={() => {
-            setViewMode("impacto");
-            setSelectedClientRut("ALL");
-          }}
-          className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${
-            viewMode === "impacto"
-              ? "bg-[#af9150] text-white border-[#af9150] shadow-sm"
-              : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-          }`}
-        >
-          Impacto por tarea
-        </button>
-
-        <button
-          onClick={() => {
-            setViewMode("comparativa");
-            setPeriodo("mes-especifico");
-          }}
-          className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${
-            viewMode === "comparativa"
-              ? "bg-[#af9150] text-white border-[#af9150] shadow-sm"
-              : "bg-white text-[#1d1e1c] border-black/10 hover:border-[#af9150]"
-          }`}
-        >
-          Comparativa
-        </button>
-
-        <div className="flex gap-2 ml-auto">
-          <button
-            onClick={() => {
-              setExportSelection({
-                target: viewMode === "comparativa" ? "comparativa" : viewMode,
-                format: "excel",
-              });
-              setShowExportModal(true);
-            }}
-            className="px-4 py-2 rounded-full text-xs font-semibold border border-black/10 bg-white text-[#1d1e1c] hover:border-[#af9150] shadow-sm"
-          >
-            Exportar
-          </button>
-        </div>
-      </div>
-
-      {/* Contenido */}
-      {viewMode === "comparativa" ? (
-        <ComparativaView
-          loading={comparativaLoading || loading}
-          comparativaAgentes={comparativaAgentes}
-          comparativaTotals={comparativaTotals}
-          comparativaStacked={comparativaStacked}
-          comparativaRendimiento={comparativaRendimiento}
-          onOpenAgenteDetalle={(id) => setAgenteDetalle(id)}
-        />
-      ) : selectedAgentId === null ? (
-        <div className="text-sm text-black/60">Selecciona un agente para ver sus dashboards y tareas filtradas.</div>
-      ) : viewMode === "dashboard" ? (
-        <DashboardView
+      ) : mainMode === "agente" ? (
+        <AgentSupervisionPanel
+          resumen={resumen}
+          agentView={agentView}
+          setAgentView={setAgentView}
+          selectedAgentId={selectedAgentId}
+          setSelectedAgentId={setSelectedAgentId}
           agenteNombre={agenteSeleccionado?.nombre || ""}
-          globalKpis={globalKpis as any}
-          donutSeries={donutSeries}
-          donutOptions={donutOptions}
-          lineData={lineData}
-          procesoAgentes={procesoAgentes}
-          onOpenDetalle={(id) => setAgenteDetalle(id)}
-        />
-      ) : viewMode === "impacto" ? (
-        <TareaImpactoView
-          empresasStats={clienteOptions.map((c) => ({
-            rut: c.rut,
-            razonSocial: c.razonSocial || c.rut,
-          }))}
-          tareasSeleccionadas={tareasSeleccionadas}
+
+          periodo={periodo}
+          setPeriodo={setPeriodo}
+          mesSelect={mesSelect}
+          setMesSelect={setMesSelect}
+          anioSelect={anioSelect}
+          setAnioSelect={setAnioSelect}
+
+          filters={filters}
+          setFilters={setFilters}
+
+          agentLoading={agentLoading}
+          globalLoading={globalLoading}
+
+          clienteOptions={clienteOptions}
+          empresasCarteraAgente={empresasCarteraAgente}
+          tareasAgenteFiltradas={tareasAgenteFiltradas}
           formatFecha={formatFecha}
+
+          // ✅ NUEVO: pasar datasets reales a la comparativa
+          comparativaAgentes={comparativaAgentes as any}
+          comparativaTotals={comparativaTotals as any}
+          comparativaStacked={comparativaStacked as any}
+          comparativaRendimiento={comparativaRendimiento as any}
+
+          onBack={() => {
+            setMainMode(null);
+            setSelectedAgentId(null);
+          }}
         />
       ) : (
-        <EmpresasView
-          selectedAgentId={selectedAgentId}
-          empresasStats={empresasStats}
-          empresasFiltradas={empresasFiltradas}
-          empresasPage={empresasPageData}
-          empresaSearch={empresaSearch}
-          setEmpresaSearch={(v) => {
-            setEmpresaPage(1);
-            setEmpresaSearch(v);
-          }}
-          empresaPageIndex={empresaPage}
-          setEmpresaPageIndex={setEmpresaPage}
-          pageSize={EMPRESAS_PAGE_SIZE}
-          empresaSeleccionadaRut={empresaSeleccionadaRut}
-          setEmpresaSeleccionadaRut={setEmpresaSeleccionadaRut}
-          totalEmpresas={totalEmpresas}
-          totalTareasEmpresas={totalTareasEmpresas}
-          tareasSeleccionadas={tareasSeleccionadas}
-          formatFecha={formatFecha}
-        />
-      )}
-
-      {/* AgenteModal */}
-      {agenteDetalle !== null && (
-        <AgenteModal
-          trabajadorId={agenteDetalle}
-          onClose={() => setAgenteDetalle(null)}
+        <TaskSupervisionPanel
+          resumen={resumen}
           periodo={periodo}
-          mes={mesSelect}
-          anio={anioSelect}
-          tareasIniciales={tareasCache[agenteDetalle]}
-          clientes={rutsCache[agenteDetalle] || []}
-          clienteFiltroRut={"ALL"}
+          setPeriodo={setPeriodo}
+          mesSelect={mesSelect}
+          setMesSelect={setMesSelect}
+          anioSelect={anioSelect}
+          setAnioSelect={setAnioSelect}
+          filters={filters}
+          setFilters={setFilters}
+          globalLoading={globalLoading}
+          carteraGlobal={carteraGlobal}
+          tareasGlobalesFiltradas={tareasGlobalesFiltradas}
+          formatFecha={formatFecha}
+          onBack={() => {
+            setMainMode(null);
+            setSelectedAgentId(null);
+          }}
         />
       )}
     </div>

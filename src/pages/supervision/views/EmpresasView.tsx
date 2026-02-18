@@ -13,7 +13,7 @@ type EmpresaStat = {
 };
 
 type Props = {
-  selectedAgentId: number;
+  selectedAgentId: number | null;
 
   empresasStats: EmpresaStat[];
   empresasFiltradas: EmpresaStat[];

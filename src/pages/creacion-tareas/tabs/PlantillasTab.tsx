@@ -4,23 +4,38 @@ import type { LoadState } from "../shared/types";
 import { getAuthHeaders } from "../shared/auth";
 
 type Frecuencia = "UNICA" | "SEMANAL" | "MENSUAL";
+type Presentacion = "CLIENTE" | "INTERNO";
+type Area = "CONTA" | "RRHH" | "COMERCIAL" | "GERENCIA" | "OTROS";
 
 type TareaPlantilla = {
-  id: number;
-  area: string;
+  // Backend (prisma) típicamente retorna id_tarea_plantilla.
+  id_tarea_plantilla: number;
+
+  area: Area | string;
   nombre: string;
   detalle: string;
+
   frecuencia: Frecuencia;
-  diaVencimiento?: number | null;
+  presentacion: Presentacion;
+
+  // Backend real: campos separados
+  diaMesVencimiento?: number | null;
+  diaSemanaVencimiento?: number | null;
+
   codigoDocumento?: string | null;
-  presentacion?: string | null;
+  requiereDrive?: boolean | null;
   activo?: boolean;
+
   createdAt?: string;
 };
 
 type Props = {
   API_BASE_URL: string;
 };
+
+function parseErrorMessage(j: any, fallback: string) {
+  return j?.message || j?.error || j?.detail || fallback;
+}
 
 const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
   const [plantillas, setPlantillas] = useState<TareaPlantilla[]>([]);
@@ -30,13 +45,23 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
   const [q, setQ] = useState("");
 
   // form
-  const [area, setArea] = useState("CONTA");
+  const [area, setArea] = useState<Area>("CONTA");
   const [frecuencia, setFrecuencia] = useState<Frecuencia>("UNICA");
-  const [diaVencimiento, setDiaVencimiento] = useState<number | "">("");
+
+  // ✅ según frecuencia, el backend pide:
+  // - MENSUAL => diaMesVencimiento (1..31)
+  // - SEMANAL => diaSemanaVencimiento (1..7)
+  // - UNICA   => ninguno
+  const [diaMesVencimiento, setDiaMesVencimiento] = useState<number | "">("");
+  const [diaSemanaVencimiento, setDiaSemanaVencimiento] = useState<number | "">("");
+
   const [nombre, setNombre] = useState("");
   const [detalle, setDetalle] = useState("");
   const [codigoDocumento, setCodigoDocumento] = useState("");
-  const [presentacion, setPresentacion] = useState("Cliente");
+
+  // ✅ valores compatibles con el backend
+  const [presentacion, setPresentacion] = useState<Presentacion>("CLIENTE");
+
   const [creating, setCreating] = useState(false);
 
   const fetchPlantillas = async () => {
@@ -51,13 +76,14 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
         let msg = `Error ${res.status}`;
         try {
           const j = await res.json();
-          msg = j?.message || j?.error || msg;
+          msg = parseErrorMessage(j, msg);
         } catch {}
         throw new Error(msg);
       }
 
       const raw = await res.json();
 
+      // el backend que mostraste devuelve array directo
       const items: TareaPlantilla[] = Array.isArray((raw as any)?.items)
         ? (raw as any).items
         : Array.isArray((raw as any)?.data)
@@ -77,7 +103,6 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
     }
   };
 
-  // ✅ AUTO LOAD
   useEffect(() => {
     fetchPlantillas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,12 +111,24 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
   const plantillasFiltradas = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return plantillas;
+
     return plantillas.filter((p) => {
       return (
-        (p.area || "").toLowerCase().includes(s) ||
-        (p.nombre || "").toLowerCase().includes(s) ||
-        (p.detalle || "").toLowerCase().includes(s) ||
-        (p.codigoDocumento || "").toLowerCase().includes(s)
+        String(p.area || "")
+          .toLowerCase()
+          .includes(s) ||
+        String(p.nombre || "")
+          .toLowerCase()
+          .includes(s) ||
+        String(p.detalle || "")
+          .toLowerCase()
+          .includes(s) ||
+        String(p.codigoDocumento || "")
+          .toLowerCase()
+          .includes(s) ||
+        String(p.presentacion || "")
+          .toLowerCase()
+          .includes(s)
       );
     });
   }, [plantillas, q]);
@@ -100,15 +137,40 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
     setNombre("");
     setDetalle("");
     setCodigoDocumento("");
-    setDiaVencimiento("");
     setFrecuencia("UNICA");
     setArea("CONTA");
-    setPresentacion("Cliente");
+    setPresentacion("CLIENTE");
+    setDiaMesVencimiento("");
+    setDiaSemanaVencimiento("");
+  };
+
+  const validateForm = () => {
+    if (!nombre.trim()) return "Nombre es obligatorio";
+    if (!detalle.trim()) return "Detalle es obligatorio";
+
+    if (frecuencia === "MENSUAL") {
+      const v = diaMesVencimiento === "" ? NaN : Number(diaMesVencimiento);
+      if (!Number.isFinite(v) || v < 1 || v > 31) return "Día mes vencimiento debe ser 1..31";
+    }
+
+    if (frecuencia === "SEMANAL") {
+      const v = diaSemanaVencimiento === "" ? NaN : Number(diaSemanaVencimiento);
+      if (!Number.isFinite(v) || v < 1 || v > 7) return "Día semana vencimiento debe ser 1..7 (1=Lun...7=Dom)";
+    }
+
+    if (!presentacion || !["CLIENTE", "INTERNO"].includes(presentacion)) return "Presentación inválida";
+
+    return null;
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim() || !detalle.trim()) return;
+
+    const msg = validateForm();
+    if (msg) {
+      alert(msg);
+      return;
+    }
 
     try {
       setCreating(true);
@@ -119,13 +181,19 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
         nombre: nombre.trim(),
         detalle: detalle.trim(),
         codigoDocumento: codigoDocumento.trim() ? codigoDocumento.trim() : null,
-        presentacion: presentacion || null,
+        presentacion, // ✅ "CLIENTE" | "INTERNO"
       };
 
-      if (frecuencia !== "UNICA") {
-        body.diaVencimiento = diaVencimiento === "" ? null : Number(diaVencimiento);
+      // ✅ backend actual
+      if (frecuencia === "MENSUAL") {
+        body.diaMesVencimiento = diaMesVencimiento === "" ? null : Number(diaMesVencimiento);
+        body.diaSemanaVencimiento = null;
+      } else if (frecuencia === "SEMANAL") {
+        body.diaSemanaVencimiento = diaSemanaVencimiento === "" ? null : Number(diaSemanaVencimiento);
+        body.diaMesVencimiento = null;
       } else {
-        body.diaVencimiento = null;
+        body.diaMesVencimiento = null;
+        body.diaSemanaVencimiento = null;
       }
 
       const res = await fetch(`${API_BASE_URL}/tareas/plantillas`, {
@@ -135,17 +203,23 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
       });
 
       if (!res.ok) {
-        let msg = `Error ${res.status}`;
+        let errMsg = `Error ${res.status}`;
         try {
           const j = await res.json();
-          msg = j?.message || j?.error || msg;
+          errMsg = parseErrorMessage(j, errMsg);
         } catch {}
-        throw new Error(msg);
+        throw new Error(errMsg);
       }
 
       const created: TareaPlantilla = await res.json();
 
-      setPlantillas((prev) => [created, ...prev]);
+      // ✅ agrega arriba y evita duplicados por id
+      setPlantillas((prev) => {
+        const id = created?.id_tarea_plantilla;
+        const sin = prev.filter((x) => x.id_tarea_plantilla !== id);
+        return [created, ...sin];
+      });
+
       resetForm();
     } catch (e: any) {
       console.error("[Front] Error creando plantilla", e);
@@ -155,19 +229,35 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (idPlantilla: number) => {
     if (!confirm("¿Eliminar esta plantilla? (Esto puede borrar tareas relacionadas)")) return;
+
     try {
-      const res = await fetch(`${API_BASE_URL}/tareas/plantillas/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/tareas/plantillas/${idPlantilla}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      setPlantillas((prev) => prev.filter((p) => p.id !== id));
-    } catch (e) {
+
+      if (!res.ok) {
+        let errMsg = `Error ${res.status}`;
+        try {
+          const j = await res.json();
+          errMsg = parseErrorMessage(j, errMsg);
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      setPlantillas((prev) => prev.filter((p) => p.id_tarea_plantilla !== idPlantilla));
+    } catch (e: any) {
       console.error("[Front] Error eliminando plantilla", e);
-      alert("No se pudo eliminar la plantilla.");
+      alert(`No se pudo eliminar la plantilla. ${e?.message || ""}`.trim());
     }
+  };
+
+  const badgeDia = (p: TareaPlantilla) => {
+    if (p.frecuencia === "MENSUAL" && p.diaMesVencimiento) return `Día ${p.diaMesVencimiento}`;
+    if (p.frecuencia === "SEMANAL" && p.diaSemanaVencimiento) return `Día ${p.diaSemanaVencimiento}`;
+    return null;
   };
 
   return (
@@ -187,7 +277,7 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
               <span className="font-semibold text-black/70">Área</span>
               <select
                 value={area}
-                onChange={(e) => setArea(e.target.value)}
+                onChange={(e) => setArea(e.target.value as Area)}
                 className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
               >
                 <option value="CONTA">CONTA</option>
@@ -212,17 +302,34 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
             </label>
           </div>
 
-          {frecuencia !== "UNICA" && (
+          {frecuencia === "MENSUAL" && (
             <label className="block mt-2 text-[11px]">
-              <span className="font-semibold text-black/70">
-                Día vencimiento ({frecuencia === "SEMANAL" ? "1=Lun...7=Dom" : "1..31"})
-              </span>
+              <span className="font-semibold text-black/70">Día mes vencimiento (1..31)</span>
               <input
                 type="number"
-                value={diaVencimiento}
-                onChange={(e) => setDiaVencimiento(e.target.value === "" ? "" : Number(e.target.value))}
+                value={diaMesVencimiento}
+                onChange={(e) => setDiaMesVencimiento(e.target.value === "" ? "" : Number(e.target.value))}
                 className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
-                placeholder={frecuencia === "SEMANAL" ? "Ej: 5 (Viernes)" : "Ej: 10"}
+                placeholder="Ej: 10"
+                min={1}
+                max={31}
+              />
+            </label>
+          )}
+
+          {frecuencia === "SEMANAL" && (
+            <label className="block mt-2 text-[11px]">
+              <span className="font-semibold text-black/70">Día semana vencimiento (1=Lun...7=Dom)</span>
+              <input
+                type="number"
+                value={diaSemanaVencimiento}
+                onChange={(e) =>
+                  setDiaSemanaVencimiento(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
+                placeholder="Ej: 5 (Viernes)"
+                min={1}
+                max={7}
               />
             </label>
           )}
@@ -264,11 +371,11 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
               <span className="font-semibold text-black/70">Presentación</span>
               <select
                 value={presentacion}
-                onChange={(e) => setPresentacion(e.target.value)}
+                onChange={(e) => setPresentacion(e.target.value as Presentacion)}
                 className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
               >
-                <option value="Cliente">Cliente</option>
-                <option value="Interno">Interno</option>
+                <option value="CLIENTE">Cliente</option>
+                <option value="INTERNO">Interno</option>
               </select>
             </label>
           </div>
@@ -298,7 +405,7 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por área/nombre/detalle/código…"
+                  placeholder="Buscar por área/nombre/detalle/código/vista…"
                   className="w-72 max-w-[60vw] border border-black/15 rounded-lg pl-7 pr-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                 />
               </div>
@@ -336,58 +443,67 @@ const PlantillasTab: React.FC<Props> = ({ API_BASE_URL }) => {
 
           {loading === "success" && plantillasFiltradas.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {plantillasFiltradas.map((p) => (
-                <div key={p.id} className="rounded-2xl border border-black/5 bg-white shadow-sm p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-black/5 text-black/60">
-                          {p.area}
-                        </span>
-                        <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-black/5 text-black/60">
-                          {p.frecuencia}
-                        </span>
-                        {p.diaVencimiento ? (
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-100">
-                            Día {p.diaVencimiento}
+              {plantillasFiltradas.map((p) => {
+                const diaLabel = badgeDia(p);
+
+                return (
+                  <div
+                    key={p.id_tarea_plantilla} // ✅ key única real
+                    className="rounded-2xl border border-black/5 bg-white shadow-sm p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-black/5 text-black/60">
+                            {String(p.area)}
                           </span>
-                        ) : null}
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-black/5 text-black/60">
+                            {p.frecuencia}
+                          </span>
+
+                          {diaLabel ? (
+                            <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-100">
+                              {diaLabel}
+                            </span>
+                          ) : null}
+
+                          {p.presentacion ? (
+                            <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-lg bg-black/5 text-black/60">
+                              {p.presentacion}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 font-semibold text-black/80 text-sm truncate">{p.nombre}</div>
+                        <div className="mt-1 text-[11px] text-black/55 leading-relaxed line-clamp-3">
+                          {p.detalle}
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-black/50">
+                          {p.codigoDocumento ? (
+                            <span className="px-2 py-1 rounded-lg bg-black/5">
+                              Doc: <b className="text-black/70">{p.codigoDocumento}</b>
+                            </span>
+                          ) : null}
+                          <span className="px-2 py-1 rounded-lg bg-black/5">
+                            ID: <b className="text-black/70">{p.id_tarea_plantilla}</b>
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="mt-2 font-semibold text-black/80 text-sm truncate">{p.nombre}</div>
-                      <div className="mt-1 text-[11px] text-black/55 leading-relaxed line-clamp-3">
-                        {p.detalle}
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-black/50">
-                        {p.codigoDocumento ? (
-                          <span className="px-2 py-1 rounded-lg bg-black/5">
-                            Doc: <b className="text-black/70">{p.codigoDocumento}</b>
-                          </span>
-                        ) : null}
-                        {p.presentacion ? (
-                          <span className="px-2 py-1 rounded-lg bg-black/5">
-                            Vista: <b className="text-black/70">{p.presentacion}</b>
-                          </span>
-                        ) : null}
-                        <span className="px-2 py-1 rounded-lg bg-black/5">
-                          ID: <b className="text-black/70">{p.id}</b>
-                        </span>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(p.id_tarea_plantilla)}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Eliminar
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(p.id)}
-                      className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Eliminar
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

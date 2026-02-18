@@ -98,7 +98,7 @@ const TareasTabs: React.FC<{
     const completadas: TareaFull[] = [];
     const porVencer: TareaFull[] = [];
 
-    tareas.forEach((t) => {
+    tareas.forEach((t: TareaFull) => {
       const fv = new Date(t.fechaProgramada);
       const fvOk = !Number.isNaN(fv.getTime());
 
@@ -107,12 +107,7 @@ const TareasTabs: React.FC<{
       if (t.estado === "VENCIDA") vencidas.push(t);
       if (t.estado === "COMPLETADA") completadas.push(t);
 
-      if (
-        t.estado !== "COMPLETADA" &&
-        fvOk &&
-        fv >= hoy &&
-        fv <= limite
-      ) {
+      if (t.estado !== "COMPLETADA" && fvOk && fv >= hoy && fv <= limite) {
         porVencer.push(t);
       }
     });
@@ -122,12 +117,14 @@ const TareasTabs: React.FC<{
 
   const renderList = (arr: TareaFull[]) => {
     if (!arr.length) {
-      return <p className="text-xs text-black/50">Sin tareas en esta categoría.</p>;
+      return (
+        <p className="text-xs text-black/50">Sin tareas en esta categoría.</p>
+      );
     }
 
     return (
       <div className="flex flex-col gap-2 max-h-72 overflow-auto">
-        {arr.map((t) => {
+        {arr.map((t: TareaFull) => {
           const dias = diffDias(t.fechaProgramada);
           const critico =
             t.estado !== "COMPLETADA" &&
@@ -164,9 +161,7 @@ const TareasTabs: React.FC<{
                 {typeof dias === "number" && (
                   <span
                     className={
-                      critico
-                        ? "text-rose-600 font-semibold"
-                        : "text-black/60"
+                      critico ? "text-rose-600 font-semibold" : "text-black/60"
                     }
                   >
                     (
@@ -214,18 +209,19 @@ const TareasTabs: React.FC<{
   return (
     <div className="mt-2">
       <div className="flex flex-wrap gap-2 mb-3">
-        {tabs.map((t) => (
+        {tabs.map((tabItem: { key: TabKey; label: string }) => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            key={tabItem.key}
+            onClick={() => setTab(tabItem.key)}
             className={`px-3 py-1.5 rounded-full text-xs border ${
-              tab === t.key ? "bg-sky-600 text-white" : "bg-white"
+              tab === tabItem.key ? "bg-sky-600 text-white" : "bg-white"
             }`}
           >
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>
+
       {renderList(currentList)}
     </div>
   );
@@ -281,8 +277,9 @@ const AgenteModal: React.FC<Props> = ({
     load();
   }, [trabajadorId, tareasIniciales]);
 
-  const tareasFiltradas = useFiltroPeriodo(tareas, periodo, mes, anio).filter(
-    (t) => (clienteFiltroRut === "ALL" ? true : t.rutCliente === clienteFiltroRut)
+  const tareasFiltradas = filtrarPorPeriodo(tareas, periodo, mes, anio).filter(
+    (t: TareaFull) =>
+      clienteFiltroRut === "ALL" ? true : t.rutCliente === clienteFiltroRut
   );
 
   const kpis = useMemo(() => {
@@ -298,7 +295,7 @@ const AgenteModal: React.FC<Props> = ({
       comp = 0,
       porVencer = 0;
 
-    tareasFiltradas.forEach((t) => {
+    tareasFiltradas.forEach((t: TareaFull) => {
       if (t.estado === "PENDIENTE") pend++;
       else if (t.estado === "EN_PROCESO") proc++;
       else if (t.estado === "COMPLETADA") comp++;
@@ -315,7 +312,14 @@ const AgenteModal: React.FC<Props> = ({
       }
     });
 
-    return { pend, proc, venc, comp, porVencer, total: pend + proc + venc + comp };
+    return {
+      pend,
+      proc,
+      venc,
+      comp,
+      porVencer,
+      total: pend + proc + venc + comp,
+    };
   }, [tareasFiltradas]);
 
   const donutSeries = [kpis.pend, kpis.proc, kpis.venc, kpis.comp, kpis.porVencer];
@@ -336,7 +340,10 @@ const AgenteModal: React.FC<Props> = ({
   );
 
   const pendientesPorEmpresa = useMemo(() => {
-    const map = new Map<string, { rut: string; nombre: string; pendientes: number }>();
+    const map = new Map<
+      string,
+      { rut: string; nombre: string; pendientes: number }
+    >();
 
     const getLabel = (rut: string | null | undefined) => {
       const r = rut || "SIN_RUT";
@@ -345,8 +352,8 @@ const AgenteModal: React.FC<Props> = ({
     };
 
     tareasFiltradas
-      .filter((t) => t.estado === "PENDIENTE")
-      .forEach((t) => {
+      .filter((t: TareaFull) => t.estado === "PENDIENTE")
+      .forEach((t: TareaFull) => {
         const rut = t.rutCliente || "SIN_RUT";
         if (!map.has(rut)) {
           map.set(rut, { rut, nombre: getLabel(rut), pendientes: 0 });
@@ -389,7 +396,9 @@ const AgenteModal: React.FC<Props> = ({
             <h2 className="text-lg font-semibold">
               {metricas?.resumenAgente?.nombre || "Agente"}
             </h2>
-            <p className="text-xs text-black/60">{metricas?.resumenAgente?.email}</p>
+            <p className="text-xs text-black/60">
+              {metricas?.resumenAgente?.email}
+            </p>
           </div>
           <button onClick={onClose} className="text-sm text-red-500">
             Cerrar
@@ -424,7 +433,9 @@ const AgenteModal: React.FC<Props> = ({
 
             <div className="bg-white mt-4 rounded-xl p-4 border shadow space-y-4">
               <div>
-                <h3 className="font-semibold text-sm mb-2">Pendientes por empresa</h3>
+                <h3 className="font-semibold text-sm mb-2">
+                  Pendientes por empresa
+                </h3>
                 {pendientesPorEmpresa.length === 0 ? (
                   <p className="text-xs text-black/50">Sin tareas pendientes</p>
                 ) : (

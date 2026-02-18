@@ -60,13 +60,22 @@ const getAuthHeaders = (): HeadersInit => {
  * - parse seguro de JSON
  */
 export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers || {});
+  const authHeaders = getAuthHeaders() as Record<string, string>;
+
+  if (!headers.has("Authorization") && authHeaders.Authorization) {
+    headers.set("Authorization", authHeaders.Authorization);
+  }
+
+  const isFormDataBody =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
+  if (!isFormDataBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const res = await fetch(url, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeaders(),
-      ...(init?.headers || {}),
-    },
+    headers,
   });
 
   if (!res.ok) {

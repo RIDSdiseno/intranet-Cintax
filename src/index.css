@@ -22,3 +22,75 @@
 
 html { font-size: var(--base-size-font); }
 body { font-family: var(--primary-font); color: var(--primary-color); background: var(--tertiary-color); }
+
+/* Mantiene el scroll funcional, pero oculta la barra visual. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.ticket-rich-editor p {
+  margin: 0 0 0.65rem;
+}
+
+.ticket-rich-editor p:last-child {
+  margin-bottom: 0;
+}
+
+.ticket-rich-editor ul,
+.ticket-rich-editor ol {
+  margin: 0.25rem 0 0.75rem 1.2rem;
+  padding: 0;
+}
+
+.ticket-rich-editor li {
+  margin-bottom: 0.2rem;
+}
+
+.ticket-rich-editor a {
+  color: #0369a1;
+  text-decoration: underline;
+}
+
+.ticket-rich-editor blockquote {
+  border-left: 3px solid #d4d4d4;
+  margin: 0.75rem 0;
+  padding-left: 0.75rem;
+  color: #525252;
+}
+
+.ticket-rich-editor .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: rgba(0, 0, 0, 0.38);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ticket-thread-body p {
+  margin: 0 0 0.55rem;
+}
+
+.ticket-thread-body p:last-child {
+  margin-bottom: 0;
+}
+
+.ticket-thread-body ul,
+.ticket-thread-body ol {
+  margin: 0.2rem 0 0.65rem 1.1rem;
+}
+
+.ticket-thread-body li {
+  margin-bottom: 0.2rem;
+}
+
+.ticket-thread-body a {
+  color: #0369a1;
+  text-decoration: underline;
+}

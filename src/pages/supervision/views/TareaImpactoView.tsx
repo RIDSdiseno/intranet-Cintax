@@ -378,15 +378,7 @@ export default function TareaImpactoView({
                   </div>
                 </div>
 
-                {impactoTotals && (
-                  <div className="flex gap-2 flex-wrap justify-end">
-                    <Badge tone="bad">Vencida {impactoTotals.vencida}</Badge>
-                    <Badge tone="warn">Pend {impactoTotals.pendiente}</Badge>
-                    <Badge tone="neutral">Proc {impactoTotals.proceso}</Badge>
-                    <Badge tone="warn">No iniciada {impactoTotals.noIniciada}</Badge>
-                    <Badge tone="ok">Completada {impactoTotals.completada}</Badge>
-                  </div>
-                )}
+                
               </div>
 
               {/* filtros empresas */}

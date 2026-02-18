@@ -11,6 +11,22 @@ type ReleaseNote = {
 };
 
 const NOTES: ReleaseNote[] = [
+  // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
+  {
+    version: "v1.5.0",
+    date: "2026-02-18",
+    title: "Supervisión por Tarea/Agente, filtros interactivos y exportación Excel",
+    items: [
+      "Se reorganiza la Supervisión en 2 módulos principales: Por tarea (TaskSupervisionPanel) y Por agente (AgentSupervisionPanel).",
+      "Se implementan chips/botones de filtro por estado (Vencida, Pendiente, En proceso, Completada) para aumentar interactividad en supervisión.",
+      "Los filtros por estado ahora afectan el contenido de las vistas del panel (Dashboard, Empresas e Impacto), manteniendo coherencia de KPIs y listados.",
+      "Se incorpora exportación a Excel contextual en supervisión, respetando filtros (chips + búsqueda) y selección de empresa cuando aplica.",
+      "Se mejora el flujo de análisis: botón para volver y cambiar modo entre módulos, sin perder consistencia de filtros y navegación.",
+    ],
+    tag: "nuevo",
+  },
+
+  // HISTÓRICO (EXISTENTE)
   {
     version: "v1.4.0",
     date: "2025-12-18",
@@ -73,9 +89,7 @@ const ReleaseNotesPage: React.FC = () => {
           <History size={22} />
           Notas de versión
         </h1>
-        <p className="text-sm text-black/60">
-          Registro de cambios y mejoras de la intranet Cintax.
-        </p>
+        <p className="text-sm text-black/60">Registro de cambios y mejoras de la intranet Cintax.</p>
       </header>
 
       {/* ÚLTIMA VERSIÓN DESTACADA */}
@@ -95,9 +109,7 @@ const ReleaseNotesPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <span className="text-[11px] text-black/45">
-              Más abajo verás el historial de versiones.
-            </span>
+            <span className="text-[11px] text-black/45">Más abajo verás el historial de versiones.</span>
           </div>
 
           <p className="text-sm font-medium">{latest.title}</p>
@@ -119,9 +131,7 @@ const ReleaseNotesPage: React.FC = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-black/50">
-                    {formatDateCL(note.date)}
-                  </span>
+                  <span className="text-xs font-mono text-black/50">{formatDateCL(note.date)}</span>
                   {note.tag && (
                     <span
                       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${tagClass[note.tag]}`}

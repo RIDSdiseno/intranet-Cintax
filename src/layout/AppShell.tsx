@@ -161,7 +161,7 @@ export default function AppShell() {
           <>
             {/* MOBILE */}
             <aside
-              className={`sidebar-mobile ${sidebarOpen ? "open" : ""} bg-[var(--primary-color)] text-white px-4 py-5 lg:hidden`}
+              className={`sidebar-mobile no-scrollbar ${sidebarOpen ? "open" : ""} bg-[var(--primary-color)] text-white px-4 py-5 lg:hidden`}
             >
               <Sidebar
                 variant="mobile"
@@ -172,7 +172,7 @@ export default function AppShell() {
             </aside>
 
             {/* DESKTOP */}
-            <aside className="hidden lg:flex fixed inset-y-0 left-0 w-[260px] bg-[var(--primary-color)] text-white px-4 py-5 flex-col z-40 overflow-y-auto">
+            <aside className="hidden lg:flex fixed inset-y-0 left-0 w-[260px] bg-[var(--primary-color)] text-white px-4 py-5 flex-col z-40 overflow-y-auto no-scrollbar">
               <Sidebar
                 variant="desktop"
                 canSeeSupervisor={canSeeSupervisor}

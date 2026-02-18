@@ -171,7 +171,7 @@ export default function Sidebar({
         />
       </div>
 
-      <nav className="mt-2 space-y-1 flex-1 overflow-y-auto">
+      <nav className="mt-2 space-y-1 flex-1 overflow-y-auto no-scrollbar">
         {visible.map((item) => (
           <NavLink
             key={item.to}

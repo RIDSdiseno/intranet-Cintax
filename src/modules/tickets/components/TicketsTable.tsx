@@ -146,7 +146,7 @@ export default function TicketsTable({
                   <div className="flex flex-col gap-2 lg:items-end lg:min-w-[260px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-black/[0.03] border-black/10 text-black/65">
-                        {ticket.areaLabel || ticket.group}
+                        {ticket.areaDetected || ticket.areaLabel || ticket.group}
                       </span>
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getStatusClasses(
@@ -163,6 +163,19 @@ export default function TicketsTable({
                         {ticket.priority}
                       </span>
                     </div>
+
+                    {(ticket.tags ?? []).length > 0 && (
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {(ticket.tags ?? []).slice(0, 4).map((tag) => (
+                          <span
+                            key={`${ticket.id}-${tag}`}
+                            className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-2">
                       <button
@@ -183,7 +196,12 @@ export default function TicketsTable({
                             event.stopPropagation();
                             onReply(ticket.id);
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-black/10 bg-white hover:border-black/20"
+                          disabled={closed}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border ${
+                            closed
+                              ? "border-black/10 bg-black/[0.03] text-black/40 cursor-not-allowed"
+                              : "border-black/10 bg-white hover:border-black/20"
+                          }`}
                         >
                           <MessageSquareReply size={13} />
                           Responder
@@ -209,7 +227,12 @@ export default function TicketsTable({
                             event.stopPropagation();
                             onForward(ticket.id);
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-black/10 bg-white hover:border-black/20"
+                          disabled={closed}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border ${
+                            closed
+                              ? "border-black/10 bg-black/[0.03] text-black/40 cursor-not-allowed"
+                              : "border-black/10 bg-white hover:border-black/20"
+                          }`}
                         >
                           <Forward size={13} />
                           Reenviar

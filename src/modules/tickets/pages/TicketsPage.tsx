@@ -1,26 +1,35 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tickets } from "lucide-react";
 
 import TicketsTabs from "../components/TicketsTabs";
-import TicketsFilters from "../components/TicketsFilters";
 import TicketsTable from "../components/TicketsTable";
+import CreateTicketModal from "../components/CreateTicketModal";
+import ConfirmDialog from "../components/ConfirmDialog";
+import BarraFiltrosTickets from "../components/BarraFiltrosTickets";
+import TicketSettingsMenu from "../../../components/tickets/settings/TicketSettingsMenu";
+import { useTickets } from "../hooks/useTickets";
 import {
   getGroups,
   getInboxDiagnostic,
-  getTickets,
+  getTicketAgents,
   syncTickets,
   updateTicket,
 } from "../services/ticketsApi";
 import type {
   InboxDiagnosticData,
+  TicketAgent,
   TicketGroup,
   TicketRow,
   TicketsGroupsData,
 } from "../types";
-import { getAuthPayload } from "../../../lib/auth";
+import { esAdminOSoporte, getAuthPayload } from "../../../lib/auth";
+import {
+  FILTROS_HUD_INICIALES,
+  type FiltrosHudTickets,
+} from "../utils/normalizarFiltros";
 
-type ToastTone = "success" | "error";
+type ToastTone = "success" | "error" | "warning" | "info";
 
 function isClosedStatus(status: string) {
   const key = String(status || "").trim().toLowerCase();
@@ -31,110 +40,133 @@ export default function TicketsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [groupsData, setGroupsData] = useState<TicketsGroupsData | null>(null);
-  const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [loadingTickets, setLoadingTickets] = useState(false);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ tone: ToastTone; text: string } | null>(
+  const usuarioAuth = getAuthPayload();
+  const esAdmin = esAdminOSoporte();
+  const emailUsuario = usuarioAuth?.email ?? "";
+
+  const [groupsData, setGroupsData] = React.useState<TicketsGroupsData | null>(null);
+  const [agentes, setAgentes] = React.useState<TicketAgent[]>([]);
+  const [loadingGroups, setLoadingGroups] = React.useState(false);
+  const [loadingAgentes, setLoadingAgentes] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const [actionLoadingId, setActionLoadingId] = React.useState<number | null>(null);
+  const [errorGlobal, setErrorGlobal] = React.useState<string | null>(null);
+  const [toast, setToast] = React.useState<{ tone: ToastTone; text: string } | null>(null);
+  const toastTimerRef = React.useRef<number | null>(null);
+
+  const [diagnosticOpen, setDiagnosticOpen] = React.useState(false);
+  const [diagnosticLoading, setDiagnosticLoading] = React.useState(false);
+  const [diagnosticError, setDiagnosticError] = React.useState<string | null>(null);
+  const [diagnosticData, setDiagnosticData] = React.useState<InboxDiagnosticData | null>(
     null
   );
-  const toastTimerRef = useRef<number | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
-  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
-  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
-  const [diagnosticData, setDiagnosticData] = useState<InboxDiagnosticData | null>(
+  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+
+  const [ticketPendienteCerrar, setTicketPendienteCerrar] = React.useState<TicketRow | null>(
     null
   );
 
-  const [rawQuery, setRawQuery] = useState("");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("Todos");
-  const [priority, setPriority] = useState("Media");
-  const [priorityTouched, setPriorityTouched] = useState(false);
+  const [filtrosHud, setFiltrosHud] = React.useState<FiltrosHudTickets>({
+    ...FILTROS_HUD_INICIALES,
+    vista: esAdmin ? "all" : "mine",
+  });
 
   const activeArea = searchParams.get("area") || "";
-
-  const showToast = (tone: ToastTone, text: string) => {
-    setToast({ tone, text });
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 3200);
-  };
-
-  const visibleGroups: TicketGroup[] = useMemo(
+  const visibleGroups: TicketGroup[] = React.useMemo(
     () => groupsData?.groups ?? [],
     [groupsData]
   );
-
   const totalAll = groupsData?.totalAll ?? 0;
 
-  const isAdmin = useMemo(() => {
-    const payload = getAuthPayload() as { role?: string } | null;
-    return payload?.role === "ADMIN";
+  const {
+    tickets,
+    setTickets,
+    total,
+    loading: loadingTickets,
+    error: errorTickets,
+    recargar: recargarTickets,
+  } = useTickets({
+    areaActiva: activeArea,
+    filtros: filtrosHud,
+    isAdmin: esAdmin,
+  });
+
+  const sugerenciasSolicitante = React.useMemo(() => {
+    const set = new Set<string>();
+    tickets.forEach((ticket) => {
+      if (ticket.requesterEmail) set.add(ticket.requesterEmail);
+    });
+    return Array.from(set).slice(0, 25);
+  }, [tickets]);
+
+  const showToast = React.useCallback((tone: ToastTone, text: string) => {
+    setToast({ tone, text });
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 3200);
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     return () => {
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     };
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setQuery(rawQuery.trim());
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [rawQuery]);
+  React.useEffect(() => {
+    if (!esAdmin) {
+      setFiltrosHud((current) => ({
+        ...current,
+        vista: "mine",
+        agente: "all",
+      }));
+      setIsCreateOpen(false);
+    }
+  }, [esAdmin]);
 
-  useEffect(() => {
-    const loadGroups = async () => {
-      try {
-        setLoadingGroups(true);
-        const res = await getGroups();
-        setGroupsData(res.data);
-      } catch (err) {
-        console.error("Error cargando grupos:", err);
-        setError("Error al cargar grupos.");
-      } finally {
-        setLoadingGroups(false);
-      }
-    };
-
-    loadGroups();
+  const cargarGrupos = React.useCallback(async () => {
+    try {
+      setLoadingGroups(true);
+      const res = await getGroups();
+      setGroupsData(res.data);
+    } catch (err) {
+      console.error("Error cargando grupos:", err);
+      setErrorGlobal("Error al cargar grupos.");
+    } finally {
+      setLoadingGroups(false);
+    }
   }, []);
 
-  const loadTickets = async () => {
-    try {
-      setLoadingTickets(true);
-      setError(null);
-      const res = await getTickets({
-        area: activeArea,
-        q: query || undefined,
-        status: status === "Todos" ? undefined : status,
-        priority: priorityTouched ? priority : undefined,
-      });
-      setTickets(res.data);
-    } catch (err) {
-      console.error("Error cargando tickets:", err);
-      setError("Error al cargar tickets.");
-    } finally {
-      setLoadingTickets(false);
+  const cargarAgentes = React.useCallback(async () => {
+    if (!esAdmin) {
+      setAgentes([]);
+      return;
     }
-  };
 
-  useEffect(() => {
-    if (!activeArea) return;
-    loadTickets();
-  }, [activeArea, query, status, priority, priorityTouched]);
+    try {
+      setLoadingAgentes(true);
+      const res = await getTicketAgents();
+      setAgentes(res.data);
+    } catch (err) {
+      console.error("Error cargando agentes:", err);
+    } finally {
+      setLoadingAgentes(false);
+    }
+  }, [esAdmin]);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    cargarGrupos();
+    cargarAgentes();
+  }, [cargarAgentes, cargarGrupos]);
+
+  React.useEffect(() => {
     if (!groupsData) return;
-    const allowed = visibleGroups.map((g) => g.slug);
+    const allowed = visibleGroups.map((group) => group.slug);
     if (allowed.length === 0) return;
 
-    const fallback = allowed.includes("all") ? "all" : allowed[0];
+    const fallback = allowed.includes("all")
+      ? "all"
+      : allowed.includes("mine")
+      ? "mine"
+      : allowed[0];
 
     if (!activeArea) {
       setSearchParams({ area: fallback }, { replace: true });
@@ -158,42 +190,18 @@ export default function TicketsPage() {
         showToast("error", res.message || "Error al sincronizar.");
         return;
       }
-      const groupsRes = await getGroups();
-      setGroupsData(groupsRes.data);
-      await loadTickets();
-      showToast("success", "Sincronizacion completada.");
+      await Promise.all([cargarGrupos(), recargarTickets()]);
+      const processed = (res as any)?.data?.processed ?? (res as any)?.processed ?? 0;
+      showToast(
+        "success",
+        `Sincronizacion completada (${processed} correos procesados).`
+      );
     } catch (err) {
       console.error("Error al sincronizar:", err);
       showToast("error", "Error al sincronizar.");
     } finally {
       setSyncing(false);
     }
-  };
-
-  const handleQuickClose = async (ticketId: number) => {
-    const row = tickets.find((item) => item.id === ticketId);
-    if (!row || isClosedStatus(row.status)) return;
-    const confirmed = window.confirm(
-      "¿Estas seguro? Esta accion marcara el ticket como CERRADO."
-    );
-    if (!confirmed) return;
-
-    try {
-      setActionLoadingId(ticketId);
-      await updateTicket(ticketId, { estado: "CERRADO" });
-      await Promise.all([loadTickets(), getGroups().then((res) => setGroupsData(res.data))]);
-      showToast("success", `Ticket #${row.number} cerrado.`);
-    } catch (err) {
-      console.error("Error cerrando ticket:", err);
-      showToast("error", "No se pudo cerrar el ticket.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const handlePriorityChange = (value: string) => {
-    setPriority(value);
-    setPriorityTouched(true);
   };
 
   const handleOpenDiagnostic = async () => {
@@ -212,6 +220,31 @@ export default function TicketsPage() {
     }
   };
 
+  const confirmarCierre = (ticket: TicketRow) => {
+    if (isClosedStatus(ticket.status)) return;
+    setTicketPendienteCerrar(ticket);
+  };
+
+  const runCerrarTicket = async () => {
+    if (!ticketPendienteCerrar || isClosedStatus(ticketPendienteCerrar.status)) {
+      setTicketPendienteCerrar(null);
+      return;
+    }
+
+    try {
+      setActionLoadingId(ticketPendienteCerrar.id);
+      await updateTicket(ticketPendienteCerrar.id, { estado: "CERRADO" });
+      await Promise.all([recargarTickets(), cargarGrupos()]);
+      showToast("success", `Ticket #${ticketPendienteCerrar.number} cerrado.`);
+    } catch (err) {
+      console.error("Error cerrando ticket:", err);
+      showToast("error", "No se pudo cerrar el ticket.");
+    } finally {
+      setActionLoadingId(null);
+      setTicketPendienteCerrar(null);
+    }
+  };
+
   return (
     <div className="mt-4 px-2 sm:px-0">
       {toast && (
@@ -220,6 +253,10 @@ export default function TicketsPage() {
             className={`rounded-xl border px-4 py-3 text-sm shadow-lg ${
               toast.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : toast.tone === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : toast.tone === "info"
+                ? "border-sky-200 bg-sky-50 text-sky-700"
                 : "border-rose-200 bg-rose-50 text-rose-700"
             }`}
           >
@@ -228,47 +265,62 @@ export default function TicketsPage() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2
-            className="text-2xl font-semibold"
-            style={{ color: "var(--primary-color)" }}
-          >
+          <h2 className="text-2xl font-semibold" style={{ color: "var(--primary-color)" }}>
             <span className="inline-flex items-center gap-2">
               <Tickets size={20} /> Tickets
             </span>
           </h2>
-          <p className="text-sm text-black/60">
-            Sincronizado con Freshdesk (Grupos)
+          <p className="text-sm text-black/60">Helpdesk sincronizado por correo</p>
+          <p className="text-xs text-black/45">
+            Mostrando {tickets.length} de {total} tickets
+            {loadingAgentes && esAdmin ? " | Cargando agentes..." : ""}
           </p>
-          {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
+          {(errorGlobal || errorTickets) && (
+            <p className="mt-1 text-xs text-rose-600">{errorGlobal || errorTickets}</p>
+          )}
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={handleSync}
-            disabled={syncing || loadingTickets}
-            className="rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20 transition"
-          >
-            {syncing ? "Sincronizando..." : "Sincronizar"}
-          </button>
-          {isAdmin && (
+          {esAdmin && (
+            <button
+              onClick={handleSync}
+              disabled={syncing || loadingTickets}
+              className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-black/20"
+            >
+              {syncing ? "Sincronizando..." : "Sincronizar"}
+            </button>
+          )}
+          {esAdmin && (
             <button
               onClick={handleOpenDiagnostic}
-              className="rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20 transition"
+              className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm transition hover:border-black/20"
             >
               Ver inbox diagnostico
             </button>
           )}
-          <button
-            className="rounded-xl px-3 py-2 text-sm text-white shadow-md shadow-black/30 active:scale-95"
-            style={{ background: "var(--secondary-color)" }}
-            onClick={() => navigate("/tickets/nuevo")}
-          >
-            Crear ticket
-          </button>
+          {esAdmin && (
+            <button
+              className="rounded-xl px-3 py-2 text-sm text-white shadow-md shadow-black/30 active:scale-95"
+              style={{ background: "var(--secondary-color)" }}
+              onClick={() => setIsCreateOpen(true)}
+            >
+              Crear ticket
+            </button>
+          )}
+          <TicketSettingsMenu isAdmin={esAdmin} />
         </div>
       </div>
+
+      <BarraFiltrosTickets
+        filtros={filtrosHud}
+        onCambiar={setFiltrosHud}
+        isAdmin={esAdmin}
+        agentes={agentes}
+        emailUsuario={emailUsuario}
+        sugerenciasSolicitante={sugerenciasSolicitante}
+      />
 
       <TicketsTabs
         groups={visibleGroups}
@@ -278,34 +330,49 @@ export default function TicketsPage() {
         loading={loadingGroups}
       />
 
-      <TicketsFilters
-        query={rawQuery}
-        onQueryChange={setRawQuery}
-        status={status}
-        onStatusChange={setStatus}
-        priority={priority}
-        onPriorityChange={handlePriorityChange}
-      />
-
       <TicketsTable
         tickets={tickets}
         loading={loadingTickets}
         actionLoadingId={actionLoadingId}
         onView={(id) => navigate(`/tickets/${id}`)}
-        onReply={(id) => navigate(`/tickets/${id}?mode=reply`)}
-        onNote={(id) => navigate(`/tickets/${id}?mode=note`)}
-        onForward={(id) => navigate(`/tickets/${id}?mode=forward`)}
-        onClose={handleQuickClose}
+        onReply={(id) => navigate(`/tickets/${id}?modo=reply`)}
+        onNote={(id) => navigate(`/tickets/${id}?modo=note`)}
+        onForward={(id) => navigate(`/tickets/${id}?modo=forward`)}
+        onClose={(id) => {
+          const ticket = tickets.find((item) => item.id === id);
+          if (!ticket) return;
+          confirmarCierre(ticket);
+        }}
+      />
+
+      {esAdmin && (
+        <CreateTicketModal
+          open={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          onNotify={showToast}
+          onCreated={(ticketCreated) => {
+            setTickets((prev) => [ticketCreated, ...prev]);
+            void cargarGrupos();
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={Boolean(ticketPendienteCerrar)}
+        title="Cerrar ticket"
+        description="Esta accion marcara el ticket como CERRADO."
+        confirmText="Cerrar ticket"
+        cancelText="Cancelar"
+        variant="danger"
+        onCancel={() => setTicketPendienteCerrar(null)}
+        onConfirm={runCerrarTicket}
       />
 
       {diagnosticOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setDiagnosticOpen(false)}
-          />
-          <div className="relative w-full max-w-4xl bg-white rounded-2xl p-4 shadow-lg z-10 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-3">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDiagnosticOpen(false)} />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-4 shadow-lg">
+            <div className="mb-3 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-medium">Inbox diagnostico</h3>
                 {diagnosticData && (
@@ -316,53 +383,40 @@ export default function TicketsPage() {
               </div>
               <button
                 onClick={() => setDiagnosticOpen(false)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-black/10 bg-white hover:border-black/20"
+                className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs hover:border-black/20"
               >
                 Cerrar
               </button>
             </div>
 
-            {diagnosticLoading && (
-              <p className="text-sm text-black/50">Cargando inbox...</p>
-            )}
-
-            {diagnosticError && (
-              <p className="text-sm text-rose-600">{diagnosticError}</p>
-            )}
+            {diagnosticLoading && <p className="text-sm text-black/50">Cargando inbox...</p>}
+            {diagnosticError && <p className="text-sm text-rose-600">{diagnosticError}</p>}
 
             {!diagnosticLoading && diagnosticData && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-black/50 text-xs border-b border-black/5 uppercase tracking-wider bg-gray-50">
-                      <th className="py-2 px-3 font-semibold">#</th>
-                      <th className="py-2 px-3 font-semibold">Solicitante</th>
-                      <th className="py-2 px-3 font-semibold">Asunto</th>
-                      <th className="py-2 px-3 font-semibold">Fecha</th>
-                      <th className="py-2 px-3 font-semibold text-right">
-                        Accion
-                      </th>
+                    <tr className="border-b border-black/5 bg-gray-50 text-left text-xs uppercase tracking-wider text-black/50">
+                      <th className="px-3 py-2 font-semibold">#</th>
+                      <th className="px-3 py-2 font-semibold">Solicitante</th>
+                      <th className="px-3 py-2 font-semibold">Asunto</th>
+                      <th className="px-3 py-2 font-semibold">Fecha</th>
+                      <th className="px-3 py-2 text-right font-semibold">Accion</th>
                     </tr>
                   </thead>
                   <tbody>
                     {diagnosticData.latest.map((item) => (
                       <tr key={item.id_ticket} className="border-b border-black/5">
-                        <td className="py-2 px-3 text-black/70 font-mono">
-                          #{item.id_ticket}
-                        </td>
-                        <td className="py-2 px-3 text-black/70">
-                          {item.requesterEmail}
-                        </td>
-                        <td className="py-2 px-3">{item.subject}</td>
-                        <td className="py-2 px-3 text-black/60 text-xs">
+                        <td className="px-3 py-2 font-mono text-black/70">#{item.id_ticket}</td>
+                        <td className="px-3 py-2 text-black/70">{item.requesterEmail}</td>
+                        <td className="px-3 py-2">{item.subject}</td>
+                        <td className="px-3 py-2 text-xs text-black/60">
                           {new Date(item.createdAt).toLocaleString()}
                         </td>
-                        <td className="py-2 px-3 text-right">
+                        <td className="px-3 py-2 text-right">
                           <button
-                            onClick={() =>
-                              navigate(`/tickets/${item.id_ticket}`)
-                            }
-                            className="px-2 py-1 text-xs rounded border border-black/10 bg-white hover:border-black/20"
+                            onClick={() => navigate(`/tickets/${item.id_ticket}`)}
+                            className="rounded border border-black/10 bg-white px-2 py-1 text-xs hover:border-black/20"
                           >
                             Abrir
                           </button>

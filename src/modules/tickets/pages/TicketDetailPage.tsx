@@ -472,6 +472,11 @@ export default function TicketDetailPage() {
   }, [id, isNew, navigate]);
 
   useEffect(() => {
+    if (!isNew || esAdmin) return;
+    navigate("/tickets", { replace: true });
+  }, [isNew, esAdmin, navigate]);
+
+  useEffect(() => {
     if (modeParam === "reply") {
       setComposerMode("reply");
       setTipoComposer("PUBLIC_REPLY");
@@ -1074,6 +1079,8 @@ export default function TicketDetailPage() {
   };
 
   if (isNew) {
+    if (!esAdmin) return null;
+
     return (
       <section className="bg-white rounded-2xl border border-black/5 shadow-sm p-6 mt-6">
         <h2 className="text-lg font-semibold text-[var(--primary-color)]">Crear ticket</h2>

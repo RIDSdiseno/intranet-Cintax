@@ -1,9 +1,11 @@
 export type JwtFrontendPayload = {
   id: number;
   email: string;
+  role?: "ADMIN" | "SUPERVISOR" | "AGENTE" | "SOPORTE";
   nombre?: string;
   nombreUsuario?: string;
   isSupervisorOrAdmin?: boolean;
+  isAdmin?: boolean;
   picture?: string;
   avatarUrl?: string;
 };
@@ -44,4 +46,15 @@ export function getAuthPayload(): JwtFrontendPayload | null {
 
 export function isSupervisorOrAdmin(): boolean {
   return Boolean(getAuthPayload()?.isSupervisorOrAdmin);
+}
+
+export function esAdminOSoporte(): boolean {
+  const payload = getAuthPayload();
+  if (!payload) return false;
+
+  const role = String(payload.role || "").toUpperCase();
+  if (["ADMIN", "SUPERVISOR", "SOPORTE"].includes(role)) return true;
+  if (payload.isAdmin) return true;
+  if (payload.isSupervisorOrAdmin) return true;
+  return false;
 }

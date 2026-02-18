@@ -5,6 +5,15 @@ import LoginPage from "../pages/login_page";
 import PersonasPage from "../pages/personasPage";
 import DrivePage from "../pages/DrivePage";
 import TicketsPage from "../pages/ticketsPage";
+import TicketDetailPage from "../modules/tickets/pages/TicketDetailPage";
+import AutomationLayout from "../modules/tickets/automation/layout/AutomationLayout";
+import AutomationPage from "../modules/tickets/automation/pages/AutomationPage";
+import RuleEditorPage from "../modules/tickets/automation/pages/RuleEditorPage";
+import TemplatesPage from "../modules/tickets/automation/pages/TemplatesPage";
+import AutomationsSettingsPage from "../modules/tickets/settings/pages/AutomationsSettingsPage";
+import AutomationsTemplatesPage from "../modules/tickets/settings/pages/AutomationsTemplatesPage";
+import AgentsSettingsPage from "../modules/tickets/settings/pages/AgentsSettingsPage";
+import GroupsSettingsPage from "../modules/tickets/settings/pages/GroupsSettingsPage";
 import ConfigurarPage from "../pages/ConfigurarPage";
 import SoportePage from "../pages/SoportePage";
 import TareasPage from "../pages/TareasPage";
@@ -109,7 +118,26 @@ export default function AppRoutes() {
         <Route path="configurar" element={<ConfigurarPage />} />
 
         <Route path="tickets" element={<TicketsPage />} />
-        <Route path="tickets/:cat" element={<TicketsPage />} />
+        <Route path="tickets/automatizaciones" element={<AutomationLayout />}>
+          <Route index element={<AutomationPage />} />
+          <Route path="new" element={<RuleEditorPage mode="new" />} />
+          <Route path=":id/edit" element={<RuleEditorPage mode="edit" />} />
+          <Route path=":id/clone" element={<RuleEditorPage mode="clone" />} />
+          <Route path="templates" element={<TemplatesPage />} />
+        </Route>
+        <Route
+          path="tickets/settings/automations"
+          element={<AutomationsSettingsPage />}
+        />
+        <Route
+          path="tickets/settings/automations/templates"
+          element={<AutomationsTemplatesPage />}
+        />
+        <Route path="tickets/settings/agents" element={<AgentsSettingsPage />} />
+        <Route path="admin/agentes" element={<AgentsSettingsPage />} />
+        <Route path="agentes" element={<AgentsSettingsPage />} />
+        <Route path="tickets/settings/groups" element={<GroupsSettingsPage />} />
+        <Route path="tickets/:id" element={<TicketDetailPage />} />
 
         <Route path="notas-version" element={<ReleaseNotesPage />} />
 

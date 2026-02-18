@@ -42,6 +42,7 @@ const SpinnerSmall: React.FC<{ label?: string }> = ({ label = "Cargando..." }) =
   </div>
 );
 
+
 const Badge: React.FC<{ children: React.ReactNode; tone?: Tone }> = ({ children, tone = "neutral" }) => {
   const cls =
     tone === "bad"

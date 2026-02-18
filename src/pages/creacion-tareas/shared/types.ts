@@ -24,7 +24,10 @@ export type Trabajador = {
   id_trabajador: number;
   nombre: string;
   email: string;
+  carpetaDriveCodigo?: string | null;
+  areaInterna?: string | null;
 };
+
 
 export type Presentacion = "CLIENTE" | "INTERNO";
 export type Area = "CONTA" | "ADMIN" | "RRHH" | "TRIBUTARIO";

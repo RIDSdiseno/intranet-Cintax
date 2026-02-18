@@ -25,9 +25,13 @@ type TabCreacion = "manual" | "clientes" | "tareas" | "asignaciones" | "edicion"
 
 const API_BASE_URL =
   // @ts-ignore
-  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
-  "http://localhost:3000/api";
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) || "http://localhost:3000/api";
 
+/**
+ * ✅ IMPORTANTE:
+ * - Aquí se consumen APIs de auth/role y /trabajadores.
+ * - ClientesTab consume /clientes y usa `trabajadores` para autocompletar código cartera (carpetaDriveCodigo).
+ */
 const CreacionTareasPage: React.FC = () => {
   const [tab, setTab] = useState<TabCreacion>("manual");
 
@@ -62,6 +66,35 @@ const CreacionTareasPage: React.FC = () => {
   const [loadingTrabajadores, setLoadingTrabajadores] = useState<LoadState>("idle");
   const [errorTrabajadores, setErrorTrabajadores] = useState<string | null>(null);
 
+  // Normaliza el shape que venga del backend (robusto a keys distintas)
+  const normalizeTrabajador = (t: TrabajadorAPI): Trabajador => {
+    const id = Number((t as any).id_trabajador ?? (t as any).id ?? (t as any).trabajadorId);
+    const nombre = String((t as any).nombre ?? (t as any).name ?? "");
+    const email = String((t as any).email ?? "");
+
+    // ✅ Este es el “código de cartera” del ejecutivo en tu modelo Trabajador
+    // Prisma: carpetaDriveCodigo String? @db.VarChar(50)
+    const carpetaDriveCodigoRaw =
+      (t as any).carpetaDriveCodigo ??
+      // fallback por si tu API lo nombra distinto (por compat)
+      (t as any).codigoCartera ??
+      (t as any).carteraCodigo ??
+      (t as any).carpeta_drive_codigo ??
+      null;
+
+    const carpetaDriveCodigo =
+      typeof carpetaDriveCodigoRaw === "string" && carpetaDriveCodigoRaw.trim()
+        ? carpetaDriveCodigoRaw.trim()
+        : null;
+
+    // (opcional) por si lo necesitas en UI
+    const areaInternaRaw = (t as any).areaInterna ?? null;
+    const areaInterna =
+      typeof areaInternaRaw === "string" && areaInternaRaw.trim() ? areaInternaRaw.trim() : null;
+
+    return { id_trabajador: id, nombre, email, carpetaDriveCodigo, areaInterna };
+  };
+
   const fetchTrabajadores = async () => {
     setLoadingTrabajadores("loading");
     setErrorTrabajadores(null);
@@ -83,12 +116,7 @@ const CreacionTareasPage: React.FC = () => {
         : [];
 
       const normalized: Trabajador[] = arr
-        .map((t): Trabajador => {
-          const id = Number(t.id_trabajador ?? t.id ?? t.trabajadorId);
-          const nombre = String(t.nombre ?? t.name ?? "");
-          const email = String(t.email ?? "");
-          return { id_trabajador: id, nombre, email };
-        })
+        .map(normalizeTrabajador)
         .filter(
           (t) =>
             Number.isFinite(t.id_trabajador) &&
@@ -171,8 +199,7 @@ const CreacionTareasPage: React.FC = () => {
               </span>
               <span className="text-black/25">•</span>
               <span>
-                Clientes:{" "}
-                <b>{canManageClientes ? "edición habilitada" : "solo lectura"}</b>
+                Clientes: <b>{canManageClientes ? "edición habilitada" : "solo lectura"}</b>
               </span>
             </div>
           </div>

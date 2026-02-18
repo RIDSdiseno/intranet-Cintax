@@ -12,7 +12,7 @@ type Props = {
   trabajadores: Trabajador[];
 };
 
-const TAKE_ALL = 500; // tamaño de página para traer todo rápido (Railway aguanta bien)
+const TAKE_ALL = 500;
 
 const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabajadores }) => {
   const canManageClientes = role === "ADMIN" || role === "SUPERVISOR";
@@ -29,8 +29,8 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
 
   const [busquedaClientesTabla, setBusquedaClientesTabla] = useState("");
 
-  // ✅ nuevo: filtro por agente/ejecutivo y modo vista
-  const [agenteFiltro, setAgenteFiltro] = useState<string>("ALL"); // ALL | UNASSIGNED | <id>
+  // filtro y vista
+  const [agenteFiltro, setAgenteFiltro] = useState<string>("ALL");
   const [modoVista, setModoVista] = useState<"LISTA" | "AGRUPADO">("AGRUPADO");
 
   // modal edición
@@ -97,7 +97,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
     return parseClientesResponse(raw, opts?.limit ?? TAKE_ALL, opts?.skip ?? 0);
   };
 
-  // ✅ Cargar TODOS los clientes paginando
+  // ✅ Cargar TODOS
   const fetchAllClientes = async () => {
     setLoadingClientes("loading");
     setErrorClientes(null);
@@ -109,22 +109,18 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
       const acc: Cliente[] = [];
       let total = 0;
 
-      // loop paginado
       for (let guard = 0; guard < 200; guard++) {
         const page = await fetchClientesPage({ limit: take, skip });
         total = page.meta.total || total;
 
         acc.push(...page.items);
 
-        // condición de corte robusta
         if (page.items.length < take) break;
         skip += take;
 
-        // si el backend entrega total, cortamos cuando ya alcanzamos
         if (total && acc.length >= total) break;
       }
 
-      // dedupe robusto
       const uniqueByRut = Array.from(new Map(acc.map((c) => [rutKey(c), c])).values());
 
       setClientes(uniqueByRut);
@@ -138,7 +134,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
   };
 
   // -----------------------------
-  // ✅ AUTO LOAD (cuando ya está listo el rol)
+  // Auto load
   // -----------------------------
   const didInit = useRef(false);
   useEffect(() => {
@@ -208,6 +204,14 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
 
   const closeEditarCliente = () => setEditingCliente(null);
 
+  // ✅ obtiene el "codigo de cartera" desde el trabajador (aquí usamos carpetaDriveCodigo)
+  const getCodigoCarteraFromAgente = (agenteId: number | null) => {
+    if (!agenteId) return null;
+    const t = trabajadores.find((x) => x.id_trabajador === agenteId);
+    const code = (t as any)?.carpetaDriveCodigo as string | null | undefined;
+    return (code ?? "").trim() ? (code ?? null) : null;
+  };
+
   const saveEditarCliente = async () => {
     if (!editingCliente?.id) return;
     if (!canManageClientes) return;
@@ -219,11 +223,12 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
     try {
       setSavingCliente(true);
 
+      // 👇 OJO: NO mandamos codigoCartera manual
+      // El backend lo asigna en base al agenteId (o lo dejamos consistente con la lógica)
       const body: any = {
         rut: (editingCliente.rut || "").trim(),
         razonSocial: (editingCliente.razonSocial || "").trim(),
         alias: editingCliente.alias ?? null,
-        codigoCartera: editingCliente.codigoCartera ?? null,
         agenteId: editingCliente.agenteId ?? null,
         activo: Boolean(editingCliente.activo),
       };
@@ -273,7 +278,6 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
     const q = busquedaClientesTabla.trim().toLowerCase();
 
     return clientes.filter((c) => {
-      // filtro agente
       if (agenteFiltro === "UNASSIGNED") {
         if (c.agenteId !== null && typeof c.agenteId !== "undefined") return false;
       } else if (agenteFiltro !== "ALL") {
@@ -290,17 +294,11 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
       const cartera = (c.codigoCartera || "").toLowerCase();
       const ejecutivo = getNombreEjecutivo(c.agenteId).toLowerCase();
 
-      return (
-        rut.includes(q) ||
-        razon.includes(q) ||
-        alias.includes(q) ||
-        cartera.includes(q) ||
-        ejecutivo.includes(q)
-      );
+      return rut.includes(q) || razon.includes(q) || alias.includes(q) || cartera.includes(q) || ejecutivo.includes(q);
     });
   }, [clientes, busquedaClientesTabla, agenteFiltro, trabajadores]);
 
-  // ✅ Agrupado por agente (incluye "Sin asignar")
+  // ✅ Agrupado por agente
   const gruposPorAgente = useMemo(() => {
     const map = new Map<string, { label: string; agenteId: number | null; items: Cliente[] }>();
 
@@ -317,7 +315,6 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
       map.get(k)!.items.push(c);
     }
 
-    // ordenar grupos: primero agentes con más clientes, y al final sin asignar
     const arr = Array.from(map.values()).map((g) => ({
       ...g,
       items: g.items.sort((a, b) => (a.razonSocial || "").localeCompare(b.razonSocial || "", "es")),
@@ -334,7 +331,6 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
     return arr;
   }, [clientesFiltrados, trabajadores]);
 
-  // stats para selector agente
   const conteoPorAgente = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of clientes) {
@@ -393,9 +389,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
             type="submit"
             disabled={creatingCliente || !canManageClientes}
             className={`w-full inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 text-white ${
-              creatingCliente || !canManageClientes
-                ? "bg-black/40 cursor-not-allowed"
-                : "bg-[#D4AF37] hover:brightness-105"
+              creatingCliente || !canManageClientes ? "bg-black/40 cursor-not-allowed" : "bg-[#D4AF37] hover:brightness-105"
             }`}
           >
             {creatingCliente ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
@@ -509,7 +503,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
             <p className="text-xs text-black/50">Aún no tienes clientes registrados.</p>
           )}
 
-          {/* ✅ Vista Agrupada */}
+          {/* Vista Agrupada */}
           {loadingClientes === "success" && modoVista === "AGRUPADO" && (
             <div className="mt-2 flex flex-col gap-3">
               {gruposPorAgente.length === 0 ? (
@@ -520,30 +514,17 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
                     <div className="px-3 py-2 border-b border-black/5 flex items-center justify-between">
                       <div className="text-[12px] font-semibold text-black/80">
                         {g.label}
-                        <span className="ml-2 text-[11px] text-black/45 font-normal">
-                          ({g.items.length})
-                        </span>
+                        <span className="ml-2 text-[11px] text-black/45 font-normal">({g.items.length})</span>
                       </div>
 
-                      {g.agenteId !== null ? (
-                        <button
-                          type="button"
-                          onClick={() => setAgenteFiltro(String(g.agenteId))}
-                          className="text-[11px] px-3 py-1.5 rounded-lg border border-black/10 bg-black/5 hover:bg-black/10"
-                          title="Filtrar solo este agente"
-                        >
-                          Ver solo
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setAgenteFiltro("UNASSIGNED")}
-                          className="text-[11px] px-3 py-1.5 rounded-lg border border-black/10 bg-black/5 hover:bg-black/10"
-                          title="Filtrar sin asignar"
-                        >
-                          Ver solo
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setAgenteFiltro(g.agenteId !== null ? String(g.agenteId) : "UNASSIGNED")}
+                        className="text-[11px] px-3 py-1.5 rounded-lg border border-black/10 bg-black/5 hover:bg-black/10"
+                        title="Filtrar"
+                      >
+                        Ver solo
+                      </button>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -598,7 +579,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
             </div>
           )}
 
-          {/* ✅ Vista Lista */}
+          {/* Vista Lista */}
           {loadingClientes === "success" && modoVista === "LISTA" && (
             <div className="mt-2 overflow-x-auto">
               <table className="min-w-full text-[11px] border-collapse">
@@ -714,24 +695,29 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
                 <span className="font-semibold text-black/70">Código cartera</span>
                 <input
                   value={editingCliente.codigoCartera ?? ""}
-                  onChange={(e) =>
-                    setEditingCliente((p) => (p ? { ...p, codigoCartera: e.target.value || null } : p))
-                  }
-                  placeholder='Ej: "CONTA/A01"'
-                  className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
-                  disabled={savingCliente || !canManageClientes}
+                  readOnly
+                  className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none bg-black/[0.03] text-black/70"
+                  title="Se asigna automáticamente según el ejecutivo"
                 />
+                <p className="mt-1 text-[10px] text-black/45">
+                  Se completa automáticamente desde el ejecutivo seleccionado.
+                </p>
               </label>
 
               <label className="block">
                 <span className="font-semibold text-black/70">Ejecutivo (agente)</span>
                 <select
                   value={editingCliente.agenteId === null ? "" : String(editingCliente.agenteId)}
-                  onChange={(e) =>
-                    setEditingCliente((p) =>
-                      p ? { ...p, agenteId: e.target.value ? Number(e.target.value) : null } : p
-                    )
-                  }
+                  onChange={(e) => {
+                    const newAgenteId = e.target.value ? Number(e.target.value) : null;
+
+                    setEditingCliente((p) => {
+                      if (!p) return p;
+
+                      const newCodigo = getCodigoCarteraFromAgente(newAgenteId);
+                      return { ...p, agenteId: newAgenteId, codigoCartera: newCodigo };
+                    });
+                  }}
                   className="mt-1 w-full border border-black/15 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-[#D4AF37] bg-white"
                   disabled={savingCliente || !canManageClientes}
                 >
@@ -773,9 +759,7 @@ const ClientesTab: React.FC<Props> = ({ API_BASE_URL, role, roleLoading, trabaja
                 onClick={saveEditarCliente}
                 disabled={savingCliente || !canManageClientes}
                 className={`inline-flex items-center gap-1 px-4 py-1.5 rounded-lg text-[11px] font-semibold border border-black/10 text-white ${
-                  savingCliente || !canManageClientes
-                    ? "bg-black/40 cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-700"
+                  savingCliente || !canManageClientes ? "bg-black/40 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
                 }`}
               >
                 {savingCliente && <Loader2 className="w-3 h-3 animate-spin" />}

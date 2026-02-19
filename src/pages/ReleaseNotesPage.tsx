@@ -13,6 +13,21 @@ type ReleaseNote = {
 const NOTES: ReleaseNote[] = [
   // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
   {
+    version: "v1.6.0",
+    date: "2026-02-19",
+    title: "Carga masiva de tareas vía Excel (clientes + plantillas + asignación automática)",
+    items: [
+      "Se incorpora carga masiva de tareas mediante archivo Excel (.xlsx) con columnas estándar (RUT, razón social, tareas, vencimiento y agenteEmail).",
+      "El sistema crea automáticamente clientes faltantes y asigna responsable según prioridad: agenteEmail (fila/query) → agenteId (fila/query) → agenteId del cliente → sin asignar.",
+      "Si el Excel incluye tareas por nombre que no existen como plantilla, ahora se exige configurar la plantilla en la misma hoja (frecuencia y día de vencimiento según corresponda) para evitar crear tareas sin reglas.",
+      "Se normaliza el nombre de plantilla (nombreNorm) para evitar duplicados por mayúsculas/minúsculas, espacios y tildes (ej: “Declaración” y “Declaracion” se consideran la misma tarea).",
+      "Se agrega opción skipDuplicates para evitar duplicación de asignaciones en cargas repetidas (según constraints únicos del sistema).",
+    ],
+    tag: "nuevo",
+  },
+
+  // ✅ VERSIÓN ANTERIOR
+  {
     version: "v1.5.0",
     date: "2026-02-18",
     title: "Supervisión por Tarea/Agente, filtros interactivos y exportación Excel",

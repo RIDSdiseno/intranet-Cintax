@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ApexChart from "react-apexcharts";
 import { API_BASE_URL, fetchJSON, TareaFull, EstadoBack } from "../../lib/api";
-import { useFiltroPeriodo, Periodo } from "./usePeriodo";
+import { filtrarPorPeriodo, Periodo } from "./usePeriodo";
 type MetricasAgente = {
   resumenAgente: {
     pendientes: number;

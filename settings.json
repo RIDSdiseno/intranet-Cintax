@@ -1,0 +1,27 @@
+{
+  "background.editor": {
+    "useFront": true,
+    "style": {
+      "background-position": "100% 100%",
+      "background-size": "auto",
+      "opacity": 0.6
+    },
+    "styles": [{}, {}, {}],
+    // `images` supports online and local images, as well as folders.
+    "images": [
+      // online images, only `https` is allowed.
+      "https://www.reddit.com/r/VALORANT/comments/18xe1sp/jett_painting_i_did_since_her_character_design/?tl=es-419",
+      // local images
+      "file:///local/path/img.jpeg",
+      "/home/xie/downloads/img.gif",
+      "C:/Users/xie/img.bmp",
+      "D:\\downloads\\images\\img.webp",
+      // local folders
+      "/home/xie/images",
+      // data URL
+      "data:image/*;base64,<base64-data>"
+    ],
+    "interval": 0,
+    "random": false
+  }
+}

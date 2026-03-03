@@ -22,11 +22,18 @@ import HomePage from "../pages/HomePage";
 import ReleaseNotesPage from "../pages/ReleaseNotesPage";
 import CreacionTareasPage from "../pages/creacion-tareas/CreacionTareasPage";
 
+// ✅ NUEVO: Bitácora
+import BitacoraPage from "../pages/BitacoraPage";
+import BitacoraEquipoPage from "../pages/BitacoraEquipoPage";
+
 import AppShell from "../layout/AppShell";
 
 // -------- auth helpers (puedes moverlos a /auth si quieres) --------
 function isAuthed() {
+  // ✅ Compat: tu http interceptor usa "token"
   const token =
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
     localStorage.getItem("access_token") ||
     sessionStorage.getItem("access_token") ||
     localStorage.getItem("auth_token") ||
@@ -40,12 +47,16 @@ type JwtFrontendPayload = {
   nombre?: string;
   nombreUsuario?: string;
   isSupervisorOrAdmin?: boolean;
+  isAdmin?: boolean;
+  role?: "ADMIN" | "SUPERVISOR" | "AGENTE";
   picture?: string;
   avatarUrl?: string;
 };
 
 export function getAuthPayload(): JwtFrontendPayload | null {
   const token =
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
     localStorage.getItem("access_token") ||
     sessionStorage.getItem("access_token") ||
     localStorage.getItem("auth_token") ||
@@ -71,7 +82,12 @@ export function getAuthPayload(): JwtFrontendPayload | null {
 
 export function isSupervisorOrAdmin(): boolean {
   const payload = getAuthPayload();
-  return Boolean(payload?.isSupervisorOrAdmin);
+  return Boolean(
+    payload?.isSupervisorOrAdmin ||
+      payload?.role === "ADMIN" ||
+      payload?.role === "SUPERVISOR" ||
+      payload?.isAdmin === true
+  );
 }
 
 function NotFoundPage() {
@@ -116,6 +132,19 @@ export default function AppRoutes() {
         <Route path="tareas" element={<TareasPage />} />
         <Route path="soporte" element={<SoportePage />} />
         <Route path="configurar" element={<ConfigurarPage />} />
+
+        {/* ✅ NUEVO: Bitácora (todos) */}
+        <Route path="bitacora" element={<BitacoraPage />} />
+
+        {/* ✅ NUEVO: Bitácora equipo (solo supervisor/admin) */}
+        <Route
+          path="bitacora/equipo"
+          element={
+            <SupervisorRoute>
+              <BitacoraEquipoPage />
+            </SupervisorRoute>
+          }
+        />
 
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/automatizaciones" element={<AutomationLayout />}>

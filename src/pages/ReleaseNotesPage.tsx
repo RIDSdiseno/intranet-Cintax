@@ -13,6 +13,23 @@ type ReleaseNote = {
 const NOTES: ReleaseNote[] = [
   // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
   {
+    version: "v1.7.0",
+    date: "2026-03-03",
+    title: "Bitácoras: edición controlada, equipo y registro de actualizaciones",
+    items: [
+      "Se incorpora módulo de Bitácora diaria con editor enriquecido (TipTap) para registrar actividad del día.",
+      "Los trabajadores pueden editar únicamente la bitácora del día de hoy (correcciones completas), sin posibilidad de modificar días anteriores.",
+      "Cuando se agrega contenido nuevamente en el mismo día, el sistema lo registra como 'Agregado' y añade marca horaria al bloque agregado (HH:mm).",
+      "En modo edición (corrección), el sistema registra 'Editada' y actualiza la hora de actualización (updatedAt) visible en la UI.",
+      "Se habilita vista 'Bitácoras del equipo' para ADMIN/SUPERVISOR con acciones de edición y eliminación, además de mostrar fecha y hora del último update.",
+      "Se agrega sanitización de HTML en el render del contenido para mayor seguridad (whitelist de tags/atributos).",
+      "Se prepara paginación/orden por más reciente para evitar scroll infinito en listados extensos.",
+    ],
+    tag: "nuevo",
+  },
+
+  // ✅ VERSIÓN ANTERIOR
+  {
     version: "v1.6.0",
     date: "2026-02-19",
     title: "Carga masiva de tareas vía Excel (clientes + plantillas + asignación automática)",

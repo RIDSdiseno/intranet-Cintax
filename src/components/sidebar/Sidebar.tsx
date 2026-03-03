@@ -12,6 +12,8 @@ import {
   ChevronDown,
   LifeBuoy,
   HandHelping,
+  NotebookText,
+  NotebookPen,
 } from "lucide-react";
 
 type NavItem = {
@@ -67,6 +69,7 @@ const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+        type="button"
       >
         <span>Tickets</span>
         <ChevronDown
@@ -85,6 +88,7 @@ const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
         {loadingGroups && (
           <div className="text-xs text-white/50 px-3 py-2">Cargando...</div>
         )}
+
         {!loadingGroups && items.length === 0 && (
           <Link
             to="/tickets"
@@ -94,28 +98,29 @@ const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
             Tickets
           </Link>
         )}
+
         {!loadingGroups &&
           items.map((item) => {
-          const isActive =
-            item.slug === "all"
-              ? currentGroup === "all"
-              : currentGroup === item.slug;
+            const isActive =
+              item.slug === "all"
+                ? currentGroup === "all"
+                : currentGroup === item.slug;
 
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`text-sm px-3 py-2 rounded-lg transition-colors block ${
-                isActive
-                  ? "text-white bg-white/10"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-              onClick={onNavigate}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`text-sm px-3 py-2 rounded-lg transition-colors block ${
+                  isActive
+                    ? "text-white bg-white/10"
+                    : "text-white/80 hover:text-white hover:bg-white/10"
+                }`}
+                onClick={onNavigate}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
       </div>
     </div>
   );
@@ -136,26 +141,42 @@ export default function Sidebar({
 
   const navItems: NavItem[] = [
     { to: "/home", label: "Inicio", icon: <Home size={18} /> },
+
     {
       to: "/personas",
       label: "Personas",
       icon: <Users size={18} />,
       supervisorOnly: true,
     },
+
     { to: "/drive", label: "Google Drive", icon: <Folder size={18} /> },
     { to: "/tareas", label: "Tareas", icon: <BookCheck size={18} /> },
+
+    // ✅ Bitácora (todos pueden escribir/leer la suya)
+    { to: "/bitacora", label: "Mi bitácora", icon: <NotebookPen size={18} /> },
+
+    // ✅ Bitácoras del equipo (solo supervisor/admin)
+    {
+      to: "/bitacora/equipo",
+      label: "Bitácoras equipo",
+      icon: <NotebookText size={18} />,
+      supervisorOnly: true,
+    },
+
     {
       to: "/tareas/creacion",
       label: "Crear tareas",
       icon: <ClipboardList size={18} />,
       supervisorOnly: true,
     },
+
     {
       to: "/supervisor",
       label: "Supervisión tareas",
       icon: <Users size={18} />,
       supervisorOnly: true,
     },
+
     { to: "/notas-version", label: "Notas de versión", icon: <History size={18} /> },
   ];
 
@@ -178,7 +199,6 @@ export default function Sidebar({
             to={item.to}
             className={({ isActive }) => clsActive(isActive)}
             onClick={onNavigate}
-            end={item.to === "/tickets"}
           >
             <span className="shrink-0">{item.icon}</span>
             <span className="truncate text-left">{item.label}</span>
@@ -188,6 +208,7 @@ export default function Sidebar({
         <TicketsNav onNavigate={onNavigate} />
 
         <button
+          type="button"
           onClick={() => {
             navigate("/soporte");
             onNavigate?.();
@@ -205,6 +226,7 @@ export default function Sidebar({
 
       <div className="border-t border-white/10 pt-4">
         <button
+          type="button"
           onClick={onLogout}
           className="w-full rounded-xl px-3 py-2 text-sm font-medium bg-rose-500 text-white hover:bg-rose-600 transition shadow-sm hover:shadow-md"
         >

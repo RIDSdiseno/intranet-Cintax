@@ -13,6 +13,19 @@ type ReleaseNote = {
 const NOTES: ReleaseNote[] = [
   // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
   {
+    version: "v1.7.1",
+    date: "2026-03-09",
+    title: "Clientes: sección y creación/asignación de tareas",
+    items: [
+      "Se habilita nueva sección de Clientes accesible para ADMIN/SUPERVISOR desde el sidebar.",
+      "Permite crear clientes desde la UI con los datos básicos y editar su información.",
+      "Se integra funcionalidad de asignación manual de tareas a clientes y agentes directamente desde la vista de creación.",
+      "El flujo de creación/asignación respeta permisos y validaciones existentes en el backend.",
+    ],
+    tag: "nuevo",
+  },
+  // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
+  {
     version: "v1.7.0",
     date: "2026-03-03",
     title: "Bitácoras: edición controlada, equipo y registro de actualizaciones",

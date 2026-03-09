@@ -20,17 +20,21 @@ import TareasPage from "../pages/TareasPage";
 import TareasSupervisionPage from "../pages/TareasSupervisionPage";
 import HomePage from "../pages/HomePage";
 import ReleaseNotesPage from "../pages/ReleaseNotesPage";
-import CreacionTareasPage from "../pages/creacion-tareas/CreacionTareasPage";
 
-// ✅ NUEVO: Bitácora
+// ✅ NUEVO: Módulo aislado de creación/asignación (pages/)
+import TaskAssignmentPage from "../pages/TaskAssignmentPage";
+
+// ✅ Bitácora
 import BitacoraPage from "../pages/BitacoraPage";
 import BitacoraEquipoPage from "../pages/BitacoraEquipoPage";
 
 import AppShell from "../layout/AppShell";
 
-// -------- auth helpers (puedes moverlos a /auth si quieres) --------
+// ✅ Clientes
+import ClientesPage from "../pages/ClientesPage";
+
+// -------- auth helpers --------
 function isAuthed() {
-  // ✅ Compat: tu http interceptor usa "token"
   const token =
     localStorage.getItem("token") ||
     sessionStorage.getItem("token") ||
@@ -133,10 +137,10 @@ export default function AppRoutes() {
         <Route path="soporte" element={<SoportePage />} />
         <Route path="configurar" element={<ConfigurarPage />} />
 
-        {/* ✅ NUEVO: Bitácora (todos) */}
+        {/* ✅ Bitácora (todos) */}
         <Route path="bitacora" element={<BitacoraPage />} />
 
-        {/* ✅ NUEVO: Bitácora equipo (solo supervisor/admin) */}
+        {/* ✅ Bitácora equipo (solo supervisor/admin) */}
         <Route
           path="bitacora/equipo"
           element={
@@ -146,6 +150,17 @@ export default function AppRoutes() {
           }
         />
 
+        {/* ✅ Clientes (solo supervisor/admin) */}
+        <Route
+          path="clientes"
+          element={
+            <SupervisorRoute>
+              <ClientesPage role={getAuthPayload()?.role ?? "AGENTE"} />
+            </SupervisorRoute>
+          }
+        />
+
+        {/* ✅ Tickets */}
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/automatizaciones" element={<AutomationLayout />}>
           <Route index element={<AutomationPage />} />
@@ -154,6 +169,7 @@ export default function AppRoutes() {
           <Route path=":id/clone" element={<RuleEditorPage mode="clone" />} />
           <Route path="templates" element={<TemplatesPage />} />
         </Route>
+
         <Route
           path="tickets/settings/automations"
           element={<AutomationsSettingsPage />}
@@ -170,7 +186,7 @@ export default function AppRoutes() {
 
         <Route path="notas-version" element={<ReleaseNotesPage />} />
 
-        {/* Supervisor/Admin */}
+        {/* ✅ Supervisor/Admin */}
         <Route
           path="personas"
           element={
@@ -179,6 +195,7 @@ export default function AppRoutes() {
             </SupervisorRoute>
           }
         />
+
         <Route
           path="supervisor"
           element={
@@ -187,11 +204,13 @@ export default function AppRoutes() {
             </SupervisorRoute>
           }
         />
+
+        {/* ✅ NUEVO: módulo aislado creación/asignación de tareas */}
         <Route
-          path="tareas/creacion"
+          path="task-assignment"
           element={
             <SupervisorRoute>
-              <CreacionTareasPage />
+              <TaskAssignmentPage />
             </SupervisorRoute>
           }
         />

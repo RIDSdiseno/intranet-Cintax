@@ -14,6 +14,7 @@ import {
   HandHelping,
   NotebookText,
   NotebookPen,
+  Building2,
 } from "lucide-react";
 
 type NavItem = {
@@ -21,6 +22,7 @@ type NavItem = {
   label: string;
   icon: React.ReactNode;
   supervisorOnly?: boolean;
+  badge?: "nuevo" | "actualizacion";
 };
 
 function clsActive(isActive: boolean) {
@@ -29,6 +31,23 @@ function clsActive(isActive: boolean) {
       ? "bg-white text-[var(--primary-color)] shadow-sm"
       : "text-white/80 hover:text-white hover:bg-white/10"
   }`;
+}
+
+function Badge({ type }: { type: "nuevo" | "actualizacion" }) {
+  const styles =
+    type === "nuevo"
+      ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30"
+      : "bg-amber-500/20 text-amber-200 border border-amber-400/30";
+
+  const label = type === "nuevo" ? "Nuevo" : "Actualización";
+
+  return (
+    <span
+      className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${styles}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
@@ -134,7 +153,7 @@ export default function Sidebar({
 }: {
   canSeeSupervisor: boolean;
   onLogout: () => void;
-  onNavigate?: () => void; // para cerrar sidebar móvil al click
+  onNavigate?: () => void;
   variant?: "desktop" | "mobile";
 }) {
   const navigate = useNavigate();
@@ -149,13 +168,19 @@ export default function Sidebar({
       supervisorOnly: true,
     },
 
+    {
+      to: "/clientes",
+      label: "Clientes",
+      icon: <Building2 size={18} />,
+      supervisorOnly: true,
+      badge: "nuevo",
+    },
+
     { to: "/drive", label: "Google Drive", icon: <Folder size={18} /> },
     { to: "/tareas", label: "Tareas", icon: <BookCheck size={18} /> },
 
-    // ✅ Bitácora (todos pueden escribir/leer la suya)
     { to: "/bitacora", label: "Mi bitácora", icon: <NotebookPen size={18} /> },
 
-    // ✅ Bitácoras del equipo (solo supervisor/admin)
     {
       to: "/bitacora/equipo",
       label: "Bitácoras equipo",
@@ -164,10 +189,11 @@ export default function Sidebar({
     },
 
     {
-      to: "/tareas/creacion",
-      label: "Crear tareas",
+      to: "/task-assignment",
+      label: "Crear/Asignar tareas",
       icon: <ClipboardList size={18} />,
       supervisorOnly: true,
+      badge: "nuevo",
     },
 
     {
@@ -177,7 +203,12 @@ export default function Sidebar({
       supervisorOnly: true,
     },
 
-    { to: "/notas-version", label: "Notas de versión", icon: <History size={18} /> },
+    {
+      to: "/notas-version",
+      label: "Notas de versión",
+      icon: <History size={18} />,
+      badge: "actualizacion",
+    },
   ];
 
   const visible = navItems.filter((x) => !x.supervisorOnly || canSeeSupervisor);
@@ -201,7 +232,11 @@ export default function Sidebar({
             onClick={onNavigate}
           >
             <span className="shrink-0">{item.icon}</span>
-            <span className="truncate text-left">{item.label}</span>
+
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              <span className="truncate text-left">{item.label}</span>
+              {item.badge && <Badge type={item.badge} />}
+            </div>
           </NavLink>
         ))}
 

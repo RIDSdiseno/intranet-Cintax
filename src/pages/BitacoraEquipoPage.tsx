@@ -1,31 +1,37 @@
 // src/pages/BitacoraEquipoPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import sanitizeHtml from "sanitize-html";
+import * as XLSX from "xlsx";
 import {
   deleteBitacoraById,
   getBitacorasEquipo,
   updateBitacoraById,
 } from "../service/bitacora.service";
 import type { AuthUserLite, Bitacora, Role } from "../types/bitacora";
-import { Trash2, Loader2, RefreshCw, Clock, Pencil, Save, X, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Trash2,
+  Loader2,
+  RefreshCw,
+  Clock,
+  Pencil,
+  Save,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet,
+} from "lucide-react";
+import { exportBitacorasToExcelStyled } from "../utils/bitacorasExcel";
 
 type Toast = { type: "ok" | "error"; msg: string };
 
-/** Limpia HTML que genera “espacios gigantes” (párrafos vacíos repetidos, br repetidos, etc.) */
+/** Limpia HTML que genera espacios gigantes */
 function compactHtml(raw: string) {
   const html = raw || "";
 
-  // Normaliza saltos (por si viene con \n extra)
   let out = html.replace(/\r\n/g, "\n");
 
-  // Elimina p vacíos del tipo <p><br></p> / <p>&nbsp;</p> repetidos
-  // (sin ser muy agresivo)
   out = out.replace(/<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<br/>");
-
-  // Colapsa varios <br> seguidos en máximo 2
   out = out.replace(/(<br\s*\/?>\s*){3,}/gi, "<br/><br/>");
-
-  // Quita <br> al inicio
   out = out.replace(/^(<br\s*\/?>\s*)+/gi, "");
 
   return out.trim();
@@ -84,6 +90,8 @@ function safeHtml(html: string) {
 
 function fmtDateCL(iso: string) {
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+
   return d.toLocaleDateString("es-CL", {
     day: "2-digit",
     month: "2-digit",
@@ -93,7 +101,23 @@ function fmtDateCL(iso: string) {
 
 function fmtTimeCL(iso: string) {
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+
   return d.toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fmtDateTimeCL(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  return d.toLocaleString("es-CL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -103,6 +127,35 @@ function stripHtmlToText(html: string) {
   const tmp = document.createElement("div");
   tmp.innerHTML = html || "";
   return (tmp.textContent || tmp.innerText || "").trim();
+}
+
+function htmlToReadableText(html: string) {
+  const div = document.createElement("div");
+  div.innerHTML = html || "";
+
+  div.querySelectorAll("br").forEach((br) => {
+    br.replaceWith("\n");
+  });
+
+  div.querySelectorAll("li").forEach((li) => {
+    const text = li.textContent?.trim() || "";
+    li.textContent = text ? `• ${text}\n` : "\n";
+  });
+
+  div.querySelectorAll("p, blockquote, h1, h2, h3, pre").forEach((el) => {
+    if (el.textContent && !el.textContent.endsWith("\n")) {
+      el.appendChild(document.createTextNode("\n"));
+    }
+  });
+
+  const text = (div.textContent || div.innerText || "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .trim();
+
+  return text;
 }
 
 /** Lee el user desde varias keys típicas */
@@ -179,26 +232,199 @@ function parseIsoTime(s?: string) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
+function autoFitColumnsFromAoA(aoa: (string | number | null)[][]) {
+  if (!aoa.length) return [];
+
+  const colCount = Math.max(...aoa.map((row) => row.length));
+
+  return Array.from({ length: colCount }, (_, colIndex) => {
+    let max = 10;
+
+    for (const row of aoa) {
+      const value = row[colIndex];
+      const text = value == null ? "" : String(value);
+      const lines = text.split("\n");
+      const widest = Math.max(...lines.map((line) => line.length), 0);
+      max = Math.max(max, widest);
+    }
+
+    return { wch: Math.min(max + 2, 80) };
+  });
+}
+
+function exportBitacorasToExcel(rows: Bitacora[]) {
+  const workbook = XLSX.utils.book_new();
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const au = parseIsoTime(a.updatedAt || a.fecha);
+    const bu = parseIsoTime(b.updatedAt || b.fecha);
+    if (bu !== au) return bu - au;
+
+    const af = parseIsoTime(a.fecha);
+    const bf = parseIsoTime(b.fecha);
+    if (bf !== af) return bf - af;
+
+    return (b.id || 0) - (a.id || 0);
+  });
+
+  const grouped = new Map<
+    string,
+    {
+      trabajador: string;
+      total: number;
+      ultimaFechaIso: string;
+      ultimaActualizacionIso: string;
+      conTitulo: number;
+      sinTitulo: number;
+    }
+  >();
+
+  for (const b of sortedRows) {
+    const trabajador = b.trabajador?.nombre?.trim() || "Sin nombre";
+    const updatedIso = b.updatedAt || b.fecha || "";
+    const current = grouped.get(trabajador);
+
+    if (!current) {
+      grouped.set(trabajador, {
+        trabajador,
+        total: 1,
+        ultimaFechaIso: b.fecha || "",
+        ultimaActualizacionIso: updatedIso,
+        conTitulo: b.titulo?.trim() ? 1 : 0,
+        sinTitulo: b.titulo?.trim() ? 0 : 1,
+      });
+    } else {
+      current.total += 1;
+      if (b.titulo?.trim()) current.conTitulo += 1;
+      else current.sinTitulo += 1;
+
+      if (parseIsoTime(updatedIso) > parseIsoTime(current.ultimaActualizacionIso)) {
+        current.ultimaActualizacionIso = updatedIso;
+        current.ultimaFechaIso = b.fecha || current.ultimaFechaIso;
+      }
+    }
+  }
+
+  const resumenData = Array.from(grouped.values()).sort((a, b) =>
+    a.trabajador.localeCompare(b.trabajador, "es")
+  );
+
+  const totalBitacoras = sortedRows.length;
+  const totalTrabajadores = resumenData.length;
+  const bitacorasConTitulo = sortedRows.filter((b) => !!b.titulo?.trim()).length;
+  const bitacorasSinTitulo = totalBitacoras - bitacorasConTitulo;
+
+  const resumenAoA: (string | number)[][] = [
+    ["BITÁCORAS DEL EQUIPO - RESUMEN POR PERSONA"],
+    [`Generado el: ${fmtDateTimeCL(new Date().toISOString())}`],
+    [],
+    [
+      "Trabajador",
+      "Total bitácoras",
+      "Con título",
+      "Sin título",
+      "Última fecha",
+      "Última actualización",
+    ],
+    ...resumenData.map((r) => [
+      r.trabajador,
+      r.total,
+      r.conTitulo,
+      r.sinTitulo,
+      fmtDateCL(r.ultimaFechaIso),
+      fmtDateTimeCL(r.ultimaActualizacionIso),
+    ]),
+  ];
+
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoA);
+  wsResumen["!cols"] = autoFitColumnsFromAoA(resumenAoA);
+  wsResumen["!freeze"] = { xSplit: 0, ySplit: 4 };
+  wsResumen["!autofilter"] = {
+    ref: `A4:F${Math.max(resumenAoA.length, 4)}`,
+  };
+
+  const detalleAoA: (string | number)[][] = [
+    ["BITÁCORAS DEL EQUIPO - DETALLE COMPLETO"],
+    [`Generado el: ${fmtDateTimeCL(new Date().toISOString())}`],
+    [],
+    [
+      "ID",
+      "Trabajador",
+      "Fecha bitácora",
+      "Hora actualización",
+      "Fecha actualización completa",
+      "Título",
+      "Contenido",
+    ],
+    ...sortedRows.map((b) => [
+      b.id,
+      b.trabajador?.nombre?.trim() || "Sin nombre",
+      fmtDateCL(b.fecha),
+      fmtTimeCL(b.updatedAt || b.fecha),
+      fmtDateTimeCL(b.updatedAt || b.fecha),
+      b.titulo?.trim() || "Sin título",
+      htmlToReadableText(b.contenido),
+    ]),
+  ];
+
+  const wsDetalle = XLSX.utils.aoa_to_sheet(detalleAoA);
+  wsDetalle["!cols"] = [
+    { wch: 10 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 24 },
+    { wch: 30 },
+    { wch: 90 },
+  ];
+  wsDetalle["!freeze"] = { xSplit: 0, ySplit: 4 };
+  wsDetalle["!autofilter"] = {
+    ref: `A4:G${Math.max(detalleAoA.length, 4)}`,
+  };
+
+  const metricasAoA: (string | number)[][] = [
+    ["BITÁCORAS DEL EQUIPO - MÉTRICAS"],
+    [],
+    ["Indicador", "Valor"],
+    ["Total de bitácoras", totalBitacoras],
+    ["Total de trabajadores con bitácoras", totalTrabajadores],
+    ["Bitácoras con título", bitacorasConTitulo],
+    ["Bitácoras sin título", bitacorasSinTitulo],
+  ];
+
+  const wsMetricas = XLSX.utils.aoa_to_sheet(metricasAoA);
+  wsMetricas["!cols"] = [{ wch: 38 }, { wch: 16 }];
+
+  XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen por persona");
+  XLSX.utils.book_append_sheet(workbook, wsDetalle, "Detalle completo");
+  XLSX.utils.book_append_sheet(workbook, wsMetricas, "Métricas");
+
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+
+  XLSX.writeFile(workbook, `bitacoras_equipo_${y}-${m}-${d}.xlsx`);
+}
+
 export default function BitacoraEquipoPage() {
   const [data, setData] = useState<Bitacora[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
 
-  // edición inline
   const [editId, setEditId] = useState<number | null>(null);
   const [editTitulo, setEditTitulo] = useState<string>("");
   const [editContenido, setEditContenido] = useState<string>("");
 
-  // perms (storage + server)
   const storageCanManage = useMemo(() => canManageFromStorage(), []);
   const [serverCanManage, setServerCanManage] = useState(false);
   const canManage = storageCanManage || serverCanManage;
 
-  // paginación
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -209,8 +435,6 @@ export default function BitacoraEquipoPage() {
     try {
       const rows = await getBitacorasEquipo();
       setData(rows);
-
-      // Si este endpoint es solo ADMIN/SUPERVISOR, entonces el que lo consulta puede administrar
       setServerCanManage(true);
     } catch (e: any) {
       setServerCanManage(false);
@@ -225,7 +449,6 @@ export default function BitacoraEquipoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ orden “más nuevo arriba”
   const sorted = useMemo(() => {
     const copy = [...data];
     copy.sort((a, b) => {
@@ -242,11 +465,9 @@ export default function BitacoraEquipoPage() {
     return copy;
   }, [data]);
 
-  // ✅ paginación client-side
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // si cambia pageSize o data y quedas fuera de rango
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
     if (page < 1) setPage(1);
@@ -327,9 +548,30 @@ export default function BitacoraEquipoPage() {
     }
   }
 
+  async function handleExportExcel() {
+    try {
+      setExporting(true);
+      setToast(null);
+
+      await exportBitacorasToExcelStyled(sorted);
+
+      setToast({
+        type: "ok",
+        msg: "Excel exportado correctamente.",
+      });
+    } catch (e: any) {
+      setToast({
+        type: "error",
+        msg: e?.message || "No se pudo exportar el Excel.",
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5">
           <h1 className="text-xl font-semibold">Bitácoras del equipo</h1>
           {!canManage ? (
@@ -339,15 +581,31 @@ export default function BitacoraEquipoPage() {
           ) : null}
         </div>
 
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-2 rounded-xl border border-vp-border bg-vp-bg/30 px-3 py-2 text-sm text-vp-text hover:bg-vp-bg/50 disabled:opacity-60"
-          disabled={loading}
-          title="Recargar"
-        >
-          {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          Recargar
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+            disabled={loading || exporting || sorted.length === 0}
+            title="Exportar a Excel"
+          >
+            {exporting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <FileSpreadsheet size={16} />
+            )}
+            Exportar Excel
+          </button>
+
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded-xl border border-vp-border bg-vp-bg/30 px-3 py-2 text-sm text-vp-text hover:bg-vp-bg/50 disabled:opacity-60"
+            disabled={loading}
+            title="Recargar"
+          >
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Recargar
+          </button>
+        </div>
       </div>
 
       {toast ? (
@@ -363,7 +621,6 @@ export default function BitacoraEquipoPage() {
         </div>
       ) : null}
 
-      {/* ✅ Barra de paginación / tamaño */}
       {!loading && total > 0 ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-vp-muted">
@@ -467,7 +724,11 @@ export default function BitacoraEquipoPage() {
                             className="inline-flex items-center gap-2 rounded-xl border border-vp-border bg-vp-bg/30 px-3 py-2 text-sm text-vp-text hover:bg-vp-bg/50 disabled:opacity-60"
                             title="Guardar cambios"
                           >
-                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {isSaving ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Save size={16} />
+                            )}
                             Guardar
                           </button>
 
@@ -499,14 +760,17 @@ export default function BitacoraEquipoPage() {
                         className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100 disabled:opacity-60"
                         title="Eliminar bitácora"
                       >
-                        {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        {isDeleting ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
                         Eliminar
                       </button>
                     </div>
                   ) : null}
                 </div>
 
-                {/* ✅ Edición */}
                 {isEditing ? (
                   <div className="mt-3 space-y-3">
                     <div className="grid gap-2">
@@ -538,7 +802,6 @@ export default function BitacoraEquipoPage() {
                   <div
                     className={[
                       "mt-3 text-sm text-gray-800 break-words",
-                      // ✅ compacta márgenes del contenido renderizado (evita “espacios gigantes”)
                       "[&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:my-1 [&_pre]:my-1",
                       "[&_h1]:my-1 [&_h2]:my-1 [&_h3]:my-1",
                       "leading-relaxed",

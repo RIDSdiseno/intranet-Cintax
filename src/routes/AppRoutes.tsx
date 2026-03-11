@@ -18,6 +18,7 @@ import ConfigurarPage from "../pages/ConfigurarPage";
 import SoportePage from "../pages/SoportePage";
 import TareasPage from "../pages/TareasPage";
 import TareasSupervisionPage from "../pages/TareasSupervisionPage";
+import CierreTareasPage from "../pages/CierreTareasPage";
 import HomePage from "../pages/HomePage";
 import ReleaseNotesPage from "../pages/ReleaseNotesPage";
 
@@ -201,6 +202,15 @@ export default function AppRoutes() {
           element={
             <SupervisorRoute>
               <TareasSupervisionPage />
+            </SupervisorRoute>
+          }
+        />
+
+        <Route
+          path="cierre-tareas"
+          element={
+            <SupervisorRoute>
+              <CierreTareasPage />
             </SupervisorRoute>
           }
         />

@@ -15,6 +15,7 @@ import {
   NotebookText,
   NotebookPen,
   Building2,
+  CheckCircle2,
 } from "lucide-react";
 
 type NavItem = {
@@ -201,6 +202,14 @@ export default function Sidebar({
       label: "Supervisión tareas",
       icon: <Users size={18} />,
       supervisorOnly: true,
+    },
+
+    {
+      to: "/cierre-tareas",
+      label: "Cierre de tareas",
+      icon: <CheckCircle2 size={18} />,
+      supervisorOnly: true,
+      badge: "nuevo",
     },
 
     {

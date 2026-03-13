@@ -425,16 +425,6 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
   const handleMultiConfirm = async (_sendEmail?: boolean) => {
     if (!tareasParaMultiCompletar.length) return;
 
-    const faltantes = tareasParaMultiCompletar.filter(
-      (t) => !filesMap[t.id_tarea_asignada]
-    );
-    if (faltantes.length > 0) {
-      setMultiError(
-        "Debes seleccionar un archivo para todas las tareas seleccionadas."
-      );
-      return;
-    }
-
     try {
       setIsSubmittingMulti(true);
       setMultiError(null);
@@ -445,25 +435,26 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
         tareasParaMultiCompletar.map(async (t) => {
           const tareaId = t.id_tarea_asignada;
           const archivo = filesMap[tareaId];
-          if (!archivo) return;
 
-          // 1) subir archivo
-          const formData = new FormData();
-          formData.append("archivo", archivo);
+          // 1) subir archivo SOLO si existe
+          if (archivo) {
+            const formData = new FormData();
+            formData.append("archivo", archivo);
 
-          const uploadRes = await fetch(
-            `${API_BASE_URL}/tareas/${tareaId}/archivos`,
-            {
-              method: "POST",
-              headers: getAuthHeaders(),
-              body: formData,
-            }
-          );
-
-          if (!uploadRes.ok) {
-            throw new Error(
-              `Error subiendo archivo para tarea ${tareaId} (${uploadRes.status})`
+            const uploadRes = await fetch(
+              `${API_BASE_URL}/tareas/${tareaId}/archivos`,
+              {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: formData,
+              }
             );
+
+            if (!uploadRes.ok) {
+              throw new Error(
+                `Error subiendo archivo para tarea ${tareaId} (${uploadRes.status})`
+              );
+            }
           }
 
           // 2) actualizar estado a COMPLETADA
@@ -510,7 +501,7 @@ const VistaPorTarea: React.FC<VistaPorTareaProps> = ({
     } catch (err) {
       console.error("[Front] Error en completado múltiple", err);
       setMultiError(
-        "Ocurrió un error al subir los archivos y completar las tareas. Revisa e intenta nuevamente."
+        "Ocurrió un error al completar las tareas. Revisa e intenta nuevamente."
       );
     } finally {
       setIsSubmittingMulti(false);

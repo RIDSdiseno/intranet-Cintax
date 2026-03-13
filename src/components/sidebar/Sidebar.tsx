@@ -174,11 +174,16 @@ export default function Sidebar({
       label: "Clientes",
       icon: <Building2 size={18} />,
       supervisorOnly: true,
-      badge: "nuevo",
     },
 
     { to: "/drive", label: "Google Drive", icon: <Folder size={18} /> },
-    { to: "/tareas", label: "Tareas", icon: <BookCheck size={18} /> },
+
+    { 
+      to: "/tareas", 
+      label: "Tareas", 
+      icon: <BookCheck size={18} />,
+      badge: "actualizacion",
+    },
 
     { to: "/bitacora", label: "Mi bitácora", icon: <NotebookPen size={18} /> },
 
@@ -194,7 +199,6 @@ export default function Sidebar({
       label: "Crear/Asignar tareas",
       icon: <ClipboardList size={18} />,
       supervisorOnly: true,
-      badge: "nuevo",
     },
 
     {
@@ -209,7 +213,6 @@ export default function Sidebar({
       label: "Cierre de tareas",
       icon: <CheckCircle2 size={18} />,
       supervisorOnly: true,
-      badge: "nuevo",
     },
 
     {

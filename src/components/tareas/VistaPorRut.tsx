@@ -673,17 +673,6 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
   const handleConfirmCompletarMasivo = async (sendEmail: boolean) => {
     if (!multiTareasSeleccionadas.length) return;
 
-    // validar que TODAS tengan archivo
-    const faltantes = multiTareasSeleccionadas.filter(
-      (t) => !multiFilesMap[t.id_tarea_asignada]
-    );
-    if (faltantes.length > 0) {
-      setMultiModalError(
-        "Debes seleccionar un archivo para cada tarea antes de completar."
-      );
-      return;
-    }
-
     setMultiModalLoading(true);
     setMultiModalError(null);
 
@@ -692,7 +681,6 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       ...getAuthHeaders(),
     };
 
-    // guardamos copia antes de limpiar, por si hay que abrir correo
     const tareasParaCorreo = [...multiTareasSeleccionadas];
 
     try {
@@ -701,25 +689,26 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
       for (const t of multiTareasSeleccionadas) {
         const tareaId = t.id_tarea_asignada;
         const file = multiFilesMap[tareaId];
-        if (!file) continue; // seguridad
 
-        // 1) subir archivo
-        const formData = new FormData();
-        formData.append("archivo", file);
+        // 1) subir archivo SOLO si existe
+        if (file) {
+          const formData = new FormData();
+          formData.append("archivo", file);
 
-        const uploadRes = await fetch(
-          `${API_BASE_URL}/tareas/${tareaId}/archivos`,
-          {
-            method: "POST",
-            headers: getAuthHeaders(), // Authorization solamente
-            body: formData,
-          }
-        );
-
-        if (!uploadRes.ok) {
-          throw new Error(
-            `Error subiendo archivo para la tarea ${tareaId} (${uploadRes.status})`
+          const uploadRes = await fetch(
+            `${API_BASE_URL}/tareas/${tareaId}/archivos`,
+            {
+              method: "POST",
+              headers: getAuthHeaders(),
+              body: formData,
+            }
           );
+
+          if (!uploadRes.ok) {
+            throw new Error(
+              `Error subiendo archivo para la tarea ${tareaId} (${uploadRes.status})`
+            );
+          }
         }
 
         // 2) marcar COMPLETADA
@@ -743,7 +732,6 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
 
         const updated: TareaAsignada = await patchRes.json();
 
-        // actualizar en memoria
         setTareas((prev) =>
           prev.map((x) =>
             x.id_tarea_asignada === tareaId
@@ -756,6 +744,7 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
               : x
           )
         );
+
         setTodasTareas((prev) =>
           prev.map((x) =>
             x.id_tarea_asignada === tareaId
@@ -770,24 +759,19 @@ const VistaPorRut: React.FC<VistaPorRutProps> = ({ trabajadorIdFiltro }) => {
         );
       }
 
-      // forzar recarga por si hay cambios externos
       setReloadKey((prev) => prev + 1);
-
-      // limpiar selección y cerrar
       setSelectedIds([]);
       setMultiModalOpen(false);
       setMultiTareasSeleccionadas([]);
       setMultiFilesMap({});
 
-      // 👉 si marcaron "Enviar correo", abrimos el modal de correo
       if (sendEmail && tareasParaCorreo.length > 0) {
         abrirCorreoParaTarea(tareasParaCorreo[0]);
       }
     } catch (err: any) {
       console.error("[Front] Error en completar masivo con archivos", err);
       setMultiModalError(
-        err?.message ??
-          "Ocurrió un error completando las tareas. Intenta nuevamente."
+        err?.message ?? "Ocurrió un error completando las tareas."
       );
     } finally {
       setMultiModalLoading(false);

@@ -11,7 +11,21 @@ type ReleaseNote = {
 };
 
 const NOTES: ReleaseNote[] = [
-  // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
+  // ✅ ÚLTIMA VERSIÓN
+  {
+    version: "v1.7.2",
+    date: "2026-03-13",
+    title: "Tareas: completar sin archivo obligatorio",
+    items: [
+      "Se elimina la restricción que obligaba a subir un documento para completar tareas.",
+      "Ahora las tareas pueden marcarse como completadas con o sin archivo adjunto.",
+      "Si el usuario adjunta un archivo, el sistema lo sigue cargando normalmente antes de completar la tarea.",
+      "La mejora aplica a las vistas Por RUT, Por tarea y flujos de cierre/supervisión relacionados.",
+      "Se simplifica el flujo operativo para evitar bloqueos cuando una tarea no requiere respaldo documental.",
+    ],
+    tag: "mejora",
+  },
+
   {
     version: "v1.7.1",
     date: "2026-03-09",
@@ -24,7 +38,7 @@ const NOTES: ReleaseNote[] = [
     ],
     tag: "nuevo",
   },
-  // ✅ NUEVA VERSIÓN (ACTUALIZACIÓN)
+
   {
     version: "v1.7.0",
     date: "2026-03-03",
@@ -41,7 +55,6 @@ const NOTES: ReleaseNote[] = [
     tag: "nuevo",
   },
 
-  // ✅ VERSIÓN ANTERIOR
   {
     version: "v1.6.0",
     date: "2026-02-19",
@@ -56,7 +69,6 @@ const NOTES: ReleaseNote[] = [
     tag: "nuevo",
   },
 
-  // ✅ VERSIÓN ANTERIOR
   {
     version: "v1.5.0",
     date: "2026-02-18",
@@ -71,7 +83,6 @@ const NOTES: ReleaseNote[] = [
     tag: "nuevo",
   },
 
-  // HISTÓRICO (EXISTENTE)
   {
     version: "v1.4.0",
     date: "2025-12-18",
@@ -113,10 +124,14 @@ const tagClass: Record<NonNullable<ReleaseNote["tag"]>, string> = {
 };
 
 const formatDateCL = (yyyyMmDd: string) => {
-  const d = new Date(`${yyyyMmDd}T12:00:00`); // seguro para TZ
+  const d = new Date(`${yyyyMmDd}T12:00:00`);
   return Number.isNaN(d.getTime())
     ? yyyyMmDd
-    : d.toLocaleDateString("es-CL", { year: "numeric", month: "2-digit", day: "2-digit" });
+    : d.toLocaleDateString("es-CL", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
 };
 
 const ReleaseNotesPage: React.FC = () => {
@@ -128,16 +143,16 @@ const ReleaseNotesPage: React.FC = () => {
 
   return (
     <div className="space-y-6 mt-4">
-      {/* HEADER */}
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <History size={22} />
           Notas de versión
         </h1>
-        <p className="text-sm text-black/60">Registro de cambios y mejoras de la intranet Cintax.</p>
+        <p className="text-sm text-black/60">
+          Registro de cambios y mejoras de la intranet Cintax.
+        </p>
       </header>
 
-      {/* ÚLTIMA VERSIÓN DESTACADA */}
       {latest && (
         <section className="rounded-2xl bg-white border border-black/5 shadow-sm px-4 py-4 md:px-6 md:py-5 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
@@ -146,7 +161,10 @@ const ReleaseNotesPage: React.FC = () => {
                 <Sparkles size={20} />
               </div>
               <div>
-                <p className="text-sm font-medium" style={{ color: "var(--primary-color)" }}>
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: "var(--primary-color)" }}
+                >
                   Última actualización
                 </p>
                 <p className="text-xs text-black/55">
@@ -154,7 +172,9 @@ const ReleaseNotesPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <span className="text-[11px] text-black/45">Más abajo verás el historial de versiones.</span>
+            <span className="text-[11px] text-black/45">
+              Más abajo verás el historial de versiones.
+            </span>
           </div>
 
           <p className="text-sm font-medium">{latest.title}</p>
@@ -166,7 +186,6 @@ const ReleaseNotesPage: React.FC = () => {
         </section>
       )}
 
-      {/* HISTORIAL COMPLETO */}
       <section className="space-y-3">
         {notesSorted.map((note) => (
           <article
@@ -176,7 +195,9 @@ const ReleaseNotesPage: React.FC = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-black/50">{formatDateCL(note.date)}</span>
+                  <span className="text-xs font-mono text-black/50">
+                    {formatDateCL(note.date)}
+                  </span>
                   {note.tag && (
                     <span
                       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${tagClass[note.tag]}`}

@@ -20,6 +20,11 @@ export type ClienteRow = {
   updatedAt: string;
 };
 
+/**
+ * Alias útil para pantallas como ClienteBitacoraPage
+ */
+export type ClienteOption = ClienteRow;
+
 export type ListClientesResponse = {
   items: ClienteRow[];
   total: number;
@@ -61,6 +66,40 @@ export async function listClientes(params: {
       ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
       ...(typeof params.skip === "number" ? { skip: params.skip } : {}),
     },
+    headers: authHeaders(),
+  });
+}
+
+/**
+ * Helper simple que devuelve directamente Cliente[]
+ * Ideal para selects, búsquedas rápidas y ClienteBitacoraPage
+ */
+export async function getClientes(params?: {
+  search?: string;
+  cartera?: string;
+  agenteId?: number | null;
+  soloActivos?: boolean;
+  limit?: number;
+  skip?: number;
+}): Promise<ClienteOption[]> {
+  const res = await listClientes({
+    search: params?.search,
+    cartera: params?.cartera,
+    agenteId: params?.agenteId,
+    soloActivos: params?.soloActivos,
+    limit: params?.limit,
+    skip: params?.skip,
+  });
+
+  return Array.isArray(res.data?.items) ? res.data.items : [];
+}
+
+/**
+ * GET /api/clientes/:id
+ * Por si después lo necesitas en detalle
+ */
+export async function getClienteById(id: number) {
+  return api.get<ClienteRow>(`/clientes/${id}`, {
     headers: authHeaders(),
   });
 }
@@ -182,10 +221,10 @@ export async function uploadClientesMasivoExcel(args: {
 }
 
 /**
- * GET /api/trabajadores?soloActivos=true (según tu backend)
+ * GET /api/trabajadores?soloActivos=true
  */
 export async function listTrabajadoresLite(params?: { soloActivos?: boolean }) {
-  return api.get<{ items: TrabajadorLite[] }>(`/trabajadores`, {
+  return api.get<{ items: TrabajadorLite[] }>("/trabajadores", {
     params: {
       ...(params?.soloActivos ? { soloActivos: "true" } : {}),
     },

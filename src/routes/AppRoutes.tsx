@@ -162,7 +162,7 @@ export default function AppRoutes() {
         />
 
         {/* ✅ Tickets */}
-        <Route path="tickets" element={<TicketsPage />} />
+        {/*<Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/automatizaciones" element={<AutomationLayout />}>
           <Route index element={<AutomationPage />} />
           <Route path="new" element={<RuleEditorPage mode="new" />} />
@@ -170,7 +170,8 @@ export default function AppRoutes() {
           <Route path=":id/clone" element={<RuleEditorPage mode="clone" />} />
           <Route path="templates" element={<TemplatesPage />} />
         </Route>
-
+*/}
+       {/*
         <Route
           path="tickets/settings/automations"
           element={<AutomationsSettingsPage />}
@@ -179,12 +180,16 @@ export default function AppRoutes() {
           path="tickets/settings/automations/templates"
           element={<AutomationsTemplatesPage />}
         />
-        <Route path="tickets/settings/agents" element={<AgentsSettingsPage />} />
+       */}
+        
+        {
+        /*<Route path="tickets/settings/agents" element={<AgentsSettingsPage />} />
         <Route path="admin/agentes" element={<AgentsSettingsPage />} />
         <Route path="agentes" element={<AgentsSettingsPage />} />
         <Route path="tickets/settings/groups" element={<GroupsSettingsPage />} />
         <Route path="tickets/:id" element={<TicketDetailPage />} />
-
+        */}
+    
         <Route path="notas-version" element={<ReleaseNotesPage />} />
 
         {/* ✅ Supervisor/Admin */}

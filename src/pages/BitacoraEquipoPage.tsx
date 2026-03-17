@@ -1,13 +1,13 @@
 // src/pages/BitacoraEquipoPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import sanitizeHtml from "sanitize-html";
-import * as XLSX from "xlsx";
 import {
-  deleteBitacoraById,
-  getBitacorasEquipo,
-  updateBitacoraById,
+  deleteClienteBitacoraById,
+  getClienteBitacorasEquipo,
+  updateClienteBitacoraById,
+  type ClienteBitacora,
 } from "../service/bitacora.service";
-import type { AuthUserLite, Bitacora, Role } from "../types/bitacora";
+import type { Role } from "../types/bitacora";
 import {
   Trash2,
   Loader2,
@@ -19,17 +19,116 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
+  Search,
+  Building2,
+  User2,
 } from "lucide-react";
 import { exportBitacorasToExcelStyled } from "../utils/bitacorasExcel";
 
 type Toast = { type: "ok" | "error"; msg: string };
 
-/** Limpia HTML que genera espacios gigantes */
+type JwtFrontendPayload = {
+  id: number;
+  email: string;
+  nombre?: string;
+  nombreUsuario?: string;
+  isSupervisorOrAdmin?: boolean;
+  isAdmin?: boolean;
+  isSupervisor?: boolean;
+  picture?: string;
+  avatarUrl?: string;
+  role?: string | number;
+  rol?: string | number;
+  roleId?: string | number;
+  role_id?: string | number;
+  roleName?: string;
+  role_name?: string;
+};
+
+type FilterOption = {
+  id: string;
+  label: string;
+};
+
+function getAuthToken(): string | null {
+  return (
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("accessToken") ||
+    null
+  );
+}
+
+function getAuthPayload(): JwtFrontendPayload | null {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => `%${("00" + c.charCodeAt(0).toString(16)).slice(-2)}`)
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload) as JwtFrontendPayload;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRole(v: any): Role | undefined {
+  if (v == null) return undefined;
+
+  if (typeof v === "string") {
+    const s = v.trim().toUpperCase();
+    if (s === "ADMIN" || s === "ADMINISTRADOR") return "ADMIN";
+    if (s === "SUPERVISOR") return "SUPERVISOR";
+    if (s === "AGENTE" || s === "TRABAJADOR" || s === "USER") return "AGENTE";
+  }
+
+  if (typeof v === "number") {
+    if (v === 1) return "ADMIN";
+    if (v === 2) return "SUPERVISOR";
+    if (v === 3) return "AGENTE";
+  }
+
+  return undefined;
+}
+
+function canManageFromToken(): boolean {
+  const payload = getAuthPayload();
+
+  if (!payload) return false;
+
+  if (payload.isAdmin === true) return true;
+  if (payload.isSupervisor === true) return true;
+  if (payload.isSupervisorOrAdmin === true) return true;
+
+  const role =
+    normalizeRole(payload.role) ||
+    normalizeRole(payload.rol) ||
+    normalizeRole(payload.roleId) ||
+    normalizeRole(payload.role_id) ||
+    normalizeRole(payload.roleName) ||
+    normalizeRole(payload.role_name);
+
+  return role === "ADMIN" || role === "SUPERVISOR";
+}
+
 function compactHtml(raw: string) {
   const html = raw || "";
 
   let out = html.replace(/\r\n/g, "\n");
-
   out = out.replace(/<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<br/>");
   out = out.replace(/(<br\s*\/?>\s*){3,}/gi, "<br/><br/>");
   out = out.replace(/^(<br\s*\/?>\s*)+/gi, "");
@@ -109,121 +208,10 @@ function fmtTimeCL(iso: string) {
   });
 }
 
-function fmtDateTimeCL(iso?: string) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-
-  return d.toLocaleString("es-CL", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function stripHtmlToText(html: string) {
   const tmp = document.createElement("div");
   tmp.innerHTML = html || "";
   return (tmp.textContent || tmp.innerText || "").trim();
-}
-
-function htmlToReadableText(html: string) {
-  const div = document.createElement("div");
-  div.innerHTML = html || "";
-
-  div.querySelectorAll("br").forEach((br) => {
-    br.replaceWith("\n");
-  });
-
-  div.querySelectorAll("li").forEach((li) => {
-    const text = li.textContent?.trim() || "";
-    li.textContent = text ? `• ${text}\n` : "\n";
-  });
-
-  div.querySelectorAll("p, blockquote, h1, h2, h3, pre").forEach((el) => {
-    if (el.textContent && !el.textContent.endsWith("\n")) {
-      el.appendChild(document.createTextNode("\n"));
-    }
-  });
-
-  const text = (div.textContent || div.innerText || "")
-    .replace(/\u00A0/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .trim();
-
-  return text;
-}
-
-/** Lee el user desde varias keys típicas */
-function readAuthUser(): AuthUserLite | undefined {
-  try {
-    const raw =
-      localStorage.getItem("user") ||
-      sessionStorage.getItem("user") ||
-      localStorage.getItem("auth") ||
-      sessionStorage.getItem("auth") ||
-      localStorage.getItem("session") ||
-      sessionStorage.getItem("session");
-
-    if (!raw) return undefined;
-
-    const parsed = JSON.parse(raw) as any;
-
-    const candidate =
-      parsed?.user ||
-      parsed?.data?.user ||
-      parsed?.data ||
-      parsed?.profile ||
-      parsed?.me ||
-      parsed;
-
-    return candidate as AuthUserLite;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeRole(v: any): Role | undefined {
-  if (v == null) return undefined;
-
-  if (typeof v === "string") {
-    const s = v.trim().toUpperCase();
-    if (s === "ADMIN" || s === "ADMINISTRADOR") return "ADMIN";
-    if (s === "SUPERVISOR") return "SUPERVISOR";
-    if (s === "AGENTE" || s === "TRABAJADOR" || s === "USER") return "AGENTE";
-  }
-
-  if (typeof v === "number") {
-    if (v === 1) return "ADMIN";
-    if (v === 2) return "SUPERVISOR";
-    if (v === 3) return "AGENTE";
-  }
-
-  return undefined;
-}
-
-function canManageFromStorage(): boolean {
-  const u = readAuthUser();
-  if (!u) return false;
-
-  if (u.isAdmin === true) return true;
-  if (u.isSupervisorOrAdmin === true) return true;
-  if ((u as any).isSupervisor === true) return true;
-
-  const role =
-    normalizeRole((u as any).role) ||
-    normalizeRole((u as any).rol) ||
-    normalizeRole((u as any).roleId) ||
-    normalizeRole((u as any).role_id) ||
-    normalizeRole((u as any).roleName) ||
-    normalizeRole((u as any).role_name) ||
-    normalizeRole((u as any)?.role?.name);
-
-  return role === "ADMIN" || role === "SUPERVISOR";
 }
 
 function parseIsoTime(s?: string) {
@@ -232,183 +220,47 @@ function parseIsoTime(s?: string) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-function autoFitColumnsFromAoA(aoa: (string | number | null)[][]) {
-  if (!aoa.length) return [];
-
-  const colCount = Math.max(...aoa.map((row) => row.length));
-
-  return Array.from({ length: colCount }, (_, colIndex) => {
-    let max = 10;
-
-    for (const row of aoa) {
-      const value = row[colIndex];
-      const text = value == null ? "" : String(value);
-      const lines = text.split("\n");
-      const widest = Math.max(...lines.map((line) => line.length), 0);
-      max = Math.max(max, widest);
-    }
-
-    return { wch: Math.min(max + 2, 80) };
-  });
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
-function exportBitacorasToExcel(rows: Bitacora[]) {
-  const workbook = XLSX.utils.book_new();
+function getTrabajadorId(b: ClienteBitacora): string {
+  return String(b.trabajador?.id_trabajador ?? "");
+}
 
-  const sortedRows = [...rows].sort((a, b) => {
-    const au = parseIsoTime(a.updatedAt || a.fecha);
-    const bu = parseIsoTime(b.updatedAt || b.fecha);
-    if (bu !== au) return bu - au;
+function getTrabajadorNombre(b: ClienteBitacora): string {
+  return b.trabajador?.nombre ?? "Sin agente";
+}
 
-    const af = parseIsoTime(a.fecha);
-    const bf = parseIsoTime(b.fecha);
-    if (bf !== af) return bf - af;
+function getClienteId(b: ClienteBitacora): string {
+  return String(b.cliente?.id ?? b.clienteId ?? "");
+}
 
-    return (b.id || 0) - (a.id || 0);
-  });
+function getClienteNombre(b: ClienteBitacora): string {
+  const razonSocial = b.cliente?.razonSocial ?? "Sin cliente";
+  const alias = b.cliente?.alias ?? "";
+  const rut = b.cliente?.rut ?? "";
 
-  const grouped = new Map<
-    string,
-    {
-      trabajador: string;
-      total: number;
-      ultimaFechaIso: string;
-      ultimaActualizacionIso: string;
-      conTitulo: number;
-      sinTitulo: number;
-    }
-  >();
+  if (alias && rut) return `${razonSocial} (${alias}) · ${rut}`;
+  if (alias) return `${razonSocial} (${alias})`;
+  if (rut) return `${razonSocial} · ${rut}`;
+  return razonSocial;
+}
 
-  for (const b of sortedRows) {
-    const trabajador = b.trabajador?.nombre?.trim() || "Sin nombre";
-    const updatedIso = b.updatedAt || b.fecha || "";
-    const current = grouped.get(trabajador);
-
-    if (!current) {
-      grouped.set(trabajador, {
-        trabajador,
-        total: 1,
-        ultimaFechaIso: b.fecha || "",
-        ultimaActualizacionIso: updatedIso,
-        conTitulo: b.titulo?.trim() ? 1 : 0,
-        sinTitulo: b.titulo?.trim() ? 0 : 1,
-      });
-    } else {
-      current.total += 1;
-      if (b.titulo?.trim()) current.conTitulo += 1;
-      else current.sinTitulo += 1;
-
-      if (parseIsoTime(updatedIso) > parseIsoTime(current.ultimaActualizacionIso)) {
-        current.ultimaActualizacionIso = updatedIso;
-        current.ultimaFechaIso = b.fecha || current.ultimaFechaIso;
-      }
-    }
-  }
-
-  const resumenData = Array.from(grouped.values()).sort((a, b) =>
-    a.trabajador.localeCompare(b.trabajador, "es")
+function getClienteSearchBlob(b: ClienteBitacora): string {
+  return normalizeText(
+    [b.cliente?.razonSocial, b.cliente?.alias, b.cliente?.rut]
+      .filter(Boolean)
+      .join(" ")
   );
-
-  const totalBitacoras = sortedRows.length;
-  const totalTrabajadores = resumenData.length;
-  const bitacorasConTitulo = sortedRows.filter((b) => !!b.titulo?.trim()).length;
-  const bitacorasSinTitulo = totalBitacoras - bitacorasConTitulo;
-
-  const resumenAoA: (string | number)[][] = [
-    ["BITÁCORAS DEL EQUIPO - RESUMEN POR PERSONA"],
-    [`Generado el: ${fmtDateTimeCL(new Date().toISOString())}`],
-    [],
-    [
-      "Trabajador",
-      "Total bitácoras",
-      "Con título",
-      "Sin título",
-      "Última fecha",
-      "Última actualización",
-    ],
-    ...resumenData.map((r) => [
-      r.trabajador,
-      r.total,
-      r.conTitulo,
-      r.sinTitulo,
-      fmtDateCL(r.ultimaFechaIso),
-      fmtDateTimeCL(r.ultimaActualizacionIso),
-    ]),
-  ];
-
-  const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoA);
-  wsResumen["!cols"] = autoFitColumnsFromAoA(resumenAoA);
-  wsResumen["!freeze"] = { xSplit: 0, ySplit: 4 };
-  wsResumen["!autofilter"] = {
-    ref: `A4:F${Math.max(resumenAoA.length, 4)}`,
-  };
-
-  const detalleAoA: (string | number)[][] = [
-    ["BITÁCORAS DEL EQUIPO - DETALLE COMPLETO"],
-    [`Generado el: ${fmtDateTimeCL(new Date().toISOString())}`],
-    [],
-    [
-      "ID",
-      "Trabajador",
-      "Fecha bitácora",
-      "Hora actualización",
-      "Fecha actualización completa",
-      "Título",
-      "Contenido",
-    ],
-    ...sortedRows.map((b) => [
-      b.id,
-      b.trabajador?.nombre?.trim() || "Sin nombre",
-      fmtDateCL(b.fecha),
-      fmtTimeCL(b.updatedAt || b.fecha),
-      fmtDateTimeCL(b.updatedAt || b.fecha),
-      b.titulo?.trim() || "Sin título",
-      htmlToReadableText(b.contenido),
-    ]),
-  ];
-
-  const wsDetalle = XLSX.utils.aoa_to_sheet(detalleAoA);
-  wsDetalle["!cols"] = [
-    { wch: 10 },
-    { wch: 28 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 24 },
-    { wch: 30 },
-    { wch: 90 },
-  ];
-  wsDetalle["!freeze"] = { xSplit: 0, ySplit: 4 };
-  wsDetalle["!autofilter"] = {
-    ref: `A4:G${Math.max(detalleAoA.length, 4)}`,
-  };
-
-  const metricasAoA: (string | number)[][] = [
-    ["BITÁCORAS DEL EQUIPO - MÉTRICAS"],
-    [],
-    ["Indicador", "Valor"],
-    ["Total de bitácoras", totalBitacoras],
-    ["Total de trabajadores con bitácoras", totalTrabajadores],
-    ["Bitácoras con título", bitacorasConTitulo],
-    ["Bitácoras sin título", bitacorasSinTitulo],
-  ];
-
-  const wsMetricas = XLSX.utils.aoa_to_sheet(metricasAoA);
-  wsMetricas["!cols"] = [{ wch: 38 }, { wch: 16 }];
-
-  XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen por persona");
-  XLSX.utils.book_append_sheet(workbook, wsDetalle, "Detalle completo");
-  XLSX.utils.book_append_sheet(workbook, wsMetricas, "Métricas");
-
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, "0");
-  const d = String(today.getDate()).padStart(2, "0");
-
-  XLSX.writeFile(workbook, `bitacoras_equipo_${y}-${m}-${d}.xlsx`);
 }
 
 export default function BitacoraEquipoPage() {
-  const [data, setData] = useState<Bitacora[]>([]);
+  const [data, setData] = useState<ClienteBitacora[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
@@ -421,9 +273,13 @@ export default function BitacoraEquipoPage() {
   const [editTitulo, setEditTitulo] = useState<string>("");
   const [editContenido, setEditContenido] = useState<string>("");
 
-  const storageCanManage = useMemo(() => canManageFromStorage(), []);
+  const tokenCanManage = useMemo(() => canManageFromToken(), []);
   const [serverCanManage, setServerCanManage] = useState(false);
-  const canManage = storageCanManage || serverCanManage;
+  const canManage = tokenCanManage || serverCanManage;
+
+  const [search, setSearch] = useState("");
+  const [selectedAgente, setSelectedAgente] = useState("");
+  const [selectedCliente, setSelectedCliente] = useState("");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -433,7 +289,9 @@ export default function BitacoraEquipoPage() {
     setToast(null);
 
     try {
-      const rows = await getBitacorasEquipo();
+      console.log("Auth payload BitacoraEquipo:", getAuthPayload());
+
+      const rows = await getClienteBitacorasEquipo();
       setData(rows);
       setServerCanManage(true);
     } catch (e: any) {
@@ -446,18 +304,17 @@ export default function BitacoraEquipoPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sorted = useMemo(() => {
     const copy = [...data];
     copy.sort((a, b) => {
-      const au = parseIsoTime(a.updatedAt || a.fecha);
-      const bu = parseIsoTime(b.updatedAt || b.fecha);
+      const au = parseIsoTime(a.updatedAt || a.fechaGestion);
+      const bu = parseIsoTime(b.updatedAt || b.fechaGestion);
       if (bu !== au) return bu - au;
 
-      const af = parseIsoTime(a.fecha);
-      const bf = parseIsoTime(b.fecha);
+      const af = parseIsoTime(a.fechaGestion);
+      const bf = parseIsoTime(b.fechaGestion);
       if (bf !== af) return bf - af;
 
       return (b.id || 0) - (a.id || 0);
@@ -465,8 +322,64 @@ export default function BitacoraEquipoPage() {
     return copy;
   }, [data]);
 
-  const total = sorted.length;
+  const agenteOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, string>();
+
+    for (const b of sorted) {
+      const id = getTrabajadorId(b);
+      const nombre = getTrabajadorNombre(b);
+
+      if (!id || map.has(id)) continue;
+      map.set(id, nombre);
+    }
+
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+  }, [sorted]);
+
+  const clienteOptions = useMemo<FilterOption[]>(() => {
+    const map = new Map<string, string>();
+
+    for (const b of sorted) {
+      const id = getClienteId(b);
+      const nombre = getClienteNombre(b);
+
+      if (!id || map.has(id)) continue;
+      map.set(id, nombre);
+    }
+
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+  }, [sorted]);
+
+  const filtered = useMemo(() => {
+    const q = normalizeText(search);
+
+    return sorted.filter((b) => {
+      const matchAgente = !selectedAgente || getTrabajadorId(b) === selectedAgente;
+      const matchCliente = !selectedCliente || getClienteId(b) === selectedCliente;
+
+      if (!matchAgente || !matchCliente) return false;
+      if (!q) return true;
+
+      const worker = normalizeText(getTrabajadorNombre(b));
+      const client = getClienteSearchBlob(b);
+      const title = normalizeText(b.titulo || "");
+      const content = normalizeText(stripHtmlToText(b.contenido || ""));
+      const date = normalizeText(String(b.fechaGestion || ""));
+
+      return [worker, client, title, content, date].some((text) => text.includes(q));
+    });
+  }, [sorted, selectedAgente, selectedCliente, search]);
+
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedAgente, selectedCliente, search, pageSize]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -475,9 +388,9 @@ export default function BitacoraEquipoPage() {
 
   const pageStartIdx = (page - 1) * pageSize;
   const pageEndIdx = Math.min(pageStartIdx + pageSize, total);
-  const paged = sorted.slice(pageStartIdx, pageEndIdx);
+  const paged = filtered.slice(pageStartIdx, pageEndIdx);
 
-  function startEdit(b: Bitacora) {
+  function startEdit(b: ClienteBitacora) {
     if (!canManage) return;
     setToast(null);
     setEditId(b.id);
@@ -491,7 +404,7 @@ export default function BitacoraEquipoPage() {
     setEditContenido("");
   }
 
-  async function handleSave(b: Bitacora) {
+  async function handleSave(b: ClienteBitacora) {
     if (!canManage) return;
 
     const titulo = editTitulo.trim();
@@ -506,10 +419,9 @@ export default function BitacoraEquipoPage() {
     setToast(null);
 
     try {
-      const saved = await updateBitacoraById(b.id, {
+      const saved = await updateClienteBitacoraById(b.id, {
         titulo: titulo ? titulo : null,
         contenido,
-        mode: "replace",
       });
 
       setData((prev) => prev.map((x) => (x.id === b.id ? saved : x)));
@@ -522,11 +434,11 @@ export default function BitacoraEquipoPage() {
     }
   }
 
-  async function handleDelete(b: Bitacora) {
+  async function handleDelete(b: ClienteBitacora) {
     if (!canManage) return;
 
-    const who = b.trabajador?.nombre ? `de ${b.trabajador.nombre}` : "";
-    const when = fmtDateCL(b.fecha);
+    const who = getTrabajadorNombre(b) ? `de ${getTrabajadorNombre(b)}` : "";
+    const when = fmtDateCL(b.fechaGestion);
     const okConfirm = window.confirm(`¿Eliminar esta bitácora ${who} (${when})?`);
     if (!okConfirm) return;
 
@@ -534,7 +446,7 @@ export default function BitacoraEquipoPage() {
     setToast(null);
 
     try {
-      await deleteBitacoraById(b.id);
+      await deleteClienteBitacoraById(b.id);
       setData((prev) => prev.filter((x) => x.id !== b.id));
       setToast({ type: "ok", msg: "Bitácora eliminada." });
       if (editId === b.id) cancelEdit();
@@ -553,7 +465,7 @@ export default function BitacoraEquipoPage() {
       setExporting(true);
       setToast(null);
 
-      await exportBitacorasToExcelStyled(sorted);
+      await exportBitacorasToExcelStyled(filtered as any);
 
       setToast({
         type: "ok",
@@ -569,14 +481,23 @@ export default function BitacoraEquipoPage() {
     }
   }
 
+  function clearFilters() {
+    setSearch("");
+    setSelectedAgente("");
+    setSelectedCliente("");
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5">
           <h1 className="text-xl font-semibold">Bitácoras del equipo</h1>
+          <p className="text-sm text-gray-500">
+            Vista general de bitácoras por cliente, con filtros por agente y cliente.
+          </p>
           {!canManage ? (
             <p className="text-xs text-vp-muted">
-              Sin permisos detectados para administrar (revisa cómo guardas el user en storage).
+              Sin permisos detectados para administrar.
             </p>
           ) : null}
         </div>
@@ -585,7 +506,7 @@ export default function BitacoraEquipoPage() {
           <button
             onClick={handleExportExcel}
             className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-            disabled={loading || exporting || sorted.length === 0}
+            disabled={loading || exporting || filtered.length === 0}
             title="Exportar a Excel"
           >
             {exporting ? (
@@ -620,6 +541,83 @@ export default function BitacoraEquipoPage() {
           {toast.msg}
         </div>
       ) : null}
+
+      <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+          <div className="xl:col-span-5">
+            <label className="mb-2 block text-sm text-gray-500">Buscar</label>
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Busca por agente, cliente, título o contenido"
+                className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="xl:col-span-3">
+            <label className="mb-2 block text-sm text-gray-500">Agente</label>
+            <div className="relative">
+              <User2
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <select
+                value={selectedAgente}
+                onChange={(e) => setSelectedAgente(e.target.value)}
+                className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm"
+              >
+                <option value="">Todos los agentes</option>
+                {agenteOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="xl:col-span-3">
+            <label className="mb-2 block text-sm text-gray-500">Cliente</label>
+            <div className="relative">
+              <Building2
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <select
+                value={selectedCliente}
+                onChange={(e) => setSelectedCliente(e.target.value)}
+                className="w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm"
+              >
+                <option value="">Todos los clientes</option>
+                {clienteOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="xl:col-span-1 flex items-end">
+            <button
+              onClick={clearFilters}
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 text-xs text-gray-400">
+          Total filtrado: {filtered.length} bitácora(s)
+        </div>
+      </div>
 
       {!loading && total > 0 ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -683,7 +681,10 @@ export default function BitacoraEquipoPage() {
             const isSaving = savingId === b.id;
             const isEditing = editId === b.id;
 
-            const updatedIso = b.updatedAt || b.fecha;
+            const fecha = b.fechaGestion;
+            const updatedIso = b.updatedAt || fecha;
+            const trabajadorNombre = getTrabajadorNombre(b);
+            const clienteNombre = getClienteNombre(b);
 
             return (
               <div key={b.id} className="rounded-2xl border border-vp-border bg-white p-4 shadow-sm">
@@ -691,16 +692,22 @@ export default function BitacoraEquipoPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
                       <span className="truncate font-medium text-gray-800">
-                        {b.trabajador?.nombre ?? "—"}
+                        {trabajadorNombre}
                       </span>
 
                       <span className="text-gray-300">•</span>
-                      <span>{fmtDateCL(b.fecha)}</span>
+                      <span>{fmtDateCL(fecha)}</span>
 
                       <span className="text-gray-300">•</span>
                       <span className="inline-flex items-center gap-1">
                         <Clock size={14} className="text-gray-400" />
                         Actualizado {fmtTimeCL(updatedIso)}
+                      </span>
+
+                      <span className="text-gray-300">•</span>
+                      <span className="inline-flex items-center gap-1 text-gray-700">
+                        <Building2 size={14} className="text-gray-400" />
+                        {clienteNombre}
                       </span>
 
                       {b.titulo ? (
@@ -794,7 +801,7 @@ export default function BitacoraEquipoPage() {
                         disabled={isSaving}
                       />
                       <p className="text-xs text-gray-500">
-                        Nota: esta edición guarda como texto plano (sin formato).
+                        Nota: esta edición guarda como texto plano.
                       </p>
                     </div>
                   </div>

@@ -252,7 +252,7 @@ export default function Sidebar({
           </NavLink>
         ))}
 
-        <TicketsNav onNavigate={onNavigate} />
+        {/*<TicketsNav onNavigate={onNavigate} />*/}
 
         <button
           type="button"

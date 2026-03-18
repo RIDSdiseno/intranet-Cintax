@@ -5,6 +5,7 @@ import type { Periodo } from "../../../../components/supervision/usePeriodo";
 import type { GlobalFilters } from "../../../../utils/supervisionMetrics";
 
 import ExportTaskExcelButton from "../../ExportTaskExcelButton";
+import ExportAllTasksExcelButton, { type ExportEstadoFilter } from "../../ExportAllTasksExcelButton";
 
 type Props = {
   resumen: ResumenAgente[];
@@ -42,7 +43,6 @@ const SpinnerSmall: React.FC<{ label?: string }> = ({ label = "Cargando..." }) =
   </div>
 );
 
-
 const Badge: React.FC<{ children: React.ReactNode; tone?: Tone }> = ({ children, tone = "neutral" }) => {
   const cls =
     tone === "bad"
@@ -52,6 +52,7 @@ const Badge: React.FC<{ children: React.ReactNode; tone?: Tone }> = ({ children,
       : tone === "ok"
       ? "bg-emerald-50 text-emerald-700 border-emerald-100"
       : "bg-slate-50 text-slate-700 border-slate-100";
+
   return <span className={`px-2 py-1 rounded-full text-[11px] border ${cls}`}>{children}</span>;
 };
 
@@ -64,6 +65,7 @@ function getTaskKey(t: TareaFull) {
   const nombre = t.tareaPlantilla?.nombre || `Tarea #${(t as any)?.id_tarea_asignada ?? "-"}`;
   return String(pid ?? `${codigo}__${nombre}`);
 }
+
 function getTaskLabel(t: TareaFull) {
   const nombre = t.tareaPlantilla?.nombre || `Tarea #${(t as any)?.id_tarea_asignada ?? "-"}`;
   const codigo = t.tareaPlantilla?.codigoDocumento || "-";
@@ -77,25 +79,33 @@ function pickFechaMasProxima(isoList: Array<string | null | undefined>): string 
     .map((iso) => new Date(String(iso)))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a.getTime() - b.getTime());
+
   return fechas[0] ? fechas[0].toISOString() : null;
 }
+
 function calcAtrasoDias(iso: string | null): number | null {
   if (!iso) return null;
+
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+
   const d = new Date(iso);
   d.setHours(0, 0, 0, 0);
+
   if (Number.isNaN(d.getTime())) return null;
   if (d.getTime() >= hoy.getTime()) return 0;
+
   const diff = hoy.getTime() - d.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
+
 function toneEstado(st: EstadoEmpresa): Tone {
   if (st === "VENCIDA") return "bad";
   if (st === "PENDIENTE" || st === "NO_INICIADA") return "warn";
   if (st === "COMPLETADA") return "ok";
   return "neutral";
 }
+
 function labelEstado(st: EstadoEmpresa) {
   if (st === "NO_INICIADA") return "No iniciada";
   if (st === "EN_PROCESO") return "En proceso";
@@ -104,6 +114,7 @@ function labelEstado(st: EstadoEmpresa) {
   if (st === "COMPLETADA") return "Completada";
   return st;
 }
+
 function getFechaComplecion(t: any): string | null {
   return t?.fechaComplecion || t?.fechaCompletada || t?.fechaCierre || t?.updatedAt || null;
 }
@@ -125,7 +136,6 @@ function PeriodoLabel(periodo: Periodo, mes: number, anio: number) {
   return `Mes ${mes} / ${anio}`;
 }
 
-/** ✅ chips EXACTOS como tu imagen */
 const EstadoChips: React.FC<{
   counters: { venc: number; pend: number; proc: number; noini: number; comp: number };
   value: "ALL" | EstadoEmpresa;
@@ -145,6 +155,7 @@ const EstadoChips: React.FC<{
     clsActive: string;
   }) => {
     const active = value === k;
+
     return (
       <button
         type="button"
@@ -216,7 +227,6 @@ export default function TaskSupervisionPanel({
   formatFecha,
   onBack,
 }: Props) {
-  // UI
   const [taskSearch, setTaskSearch] = useState("");
   const [selectedTaskKey, setSelectedTaskKey] = useState<string | null>(null);
 
@@ -224,13 +234,14 @@ export default function TaskSupervisionPanel({
   const [estadoFilter, setEstadoFilter] = useState<"ALL" | EstadoEmpresa>("ALL");
   const [selectedRut, setSelectedRut] = useState<string | null>(null);
 
+  const [exportStatusFilter, setExportStatusFilter] = useState<ExportEstadoFilter>("ALL");
+
   const agentesMap = useMemo(() => {
     const m = new Map<number, { nombre: string; email?: string }>();
     (resumen || []).forEach((r) => m.set(r.trabajadorId, { nombre: r.nombre, email: r.email }));
     return m;
   }, [resumen]);
 
-  // catálogo tareas
   const taskCatalog = useMemo(() => {
     const map = new Map<string, { key: string; nombre: string; codigo: string; area: string; total: number }>();
 
@@ -238,6 +249,7 @@ export default function TaskSupervisionPanel({
       const key = getTaskKey(t);
       const meta = getTaskLabel(t);
       const prev = map.get(key);
+
       if (!prev) map.set(key, { key, ...meta, total: 1 });
       else prev.total += 1;
     }
@@ -262,13 +274,14 @@ export default function TaskSupervisionPanel({
     return taskCatalog.map.get(selectedTaskKey) || null;
   }, [selectedTaskKey, taskCatalog]);
 
-  // empresas + agentes para tarea seleccionada
   const empresasPorTarea = useMemo<RowEmpresa[]>(() => {
     if (!selectedTaskKey) return [];
 
     const byRut = new Map<string, TareaFull[]>();
+
     for (const t of tareasGlobalesFiltradas) {
       if (getTaskKey(t) !== selectedTaskKey) continue;
+
       const rut = (t.rutCliente || "SIN_RUT") as string;
       if (!byRut.has(rut)) byRut.set(rut, []);
       byRut.get(rut)!.push(t);
@@ -278,6 +291,7 @@ export default function TaskSupervisionPanel({
 
     for (const e of carteraGlobal) {
       const inst = byRut.get(e.rut) || [];
+
       if (inst.length === 0) {
         out.push({
           rut: e.rut,
@@ -356,9 +370,11 @@ export default function TaskSupervisionPanel({
     return out.sort((a, b) => {
       const r = rank[a.estado] - rank[b.estado];
       if (r !== 0) return r;
+
       const da = a.atrasoDias ?? -1;
       const db = b.atrasoDias ?? -1;
       if (db !== da) return db - da;
+
       return a.razonSocial.localeCompare(b.razonSocial);
     });
   }, [selectedTaskKey, tareasGlobalesFiltradas, carteraGlobal, agentesMap]);
@@ -377,8 +393,10 @@ export default function TaskSupervisionPanel({
   const empresasFiltradas = useMemo(() => {
     const term = norm(empresaSearch);
     let base = empresasPorTarea;
+
     if (estadoFilter !== "ALL") base = base.filter((r) => r.estado === estadoFilter);
     if (!term) return base;
+
     return base.filter((r) => norm(`${r.razonSocial} ${r.rut}`).includes(term));
   }, [empresasPorTarea, empresaSearch, estadoFilter]);
 
@@ -389,7 +407,9 @@ export default function TaskSupervisionPanel({
 
   const groupedByAgente = useMemo(() => {
     if (!selectedEmpresa) return [];
+
     const map = new Map<number, TareaFull[]>();
+
     (selectedEmpresa.tareas as any[]).forEach((t) => {
       const tid = t.trabajadorId || 0;
       if (!map.has(tid)) map.set(tid, []);
@@ -415,7 +435,6 @@ export default function TaskSupervisionPanel({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-xs text-black/50">Módulo</div>
@@ -423,10 +442,34 @@ export default function TaskSupervisionPanel({
           <div className="text-xs text-black/60 mt-1">Tarea → Empresas (con agente) → Detalle por empresa</div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {globalLoading && <SpinnerSmall label="Cargando datos..." />}
 
-          {/* ✅ Botón exporta SOLO lo filtrado */}
+          <select
+            value={exportStatusFilter}
+            onChange={(e) => setExportStatusFilter(e.target.value as ExportEstadoFilter)}
+            className="bg-white border border-black/10 rounded-xl px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
+            title="Estado a exportar"
+          >
+            <option value="ALL">Exportar: Todas</option>
+            <option value="PENDIENTE">Solo pendientes</option>
+            <option value="COMPLETADA">Solo completadas</option>
+            <option value="NO_INICIADA">Solo no iniciadas</option>
+            <option value="VENCIDA">Solo vencidas</option>
+            <option value="EN_PROCESO">Solo en proceso</option>
+          </select>
+
+          <ExportAllTasksExcelButton
+            disabled={globalLoading || !taskCatalog.arr.length || !carteraGlobal.length}
+            periodoLabel={periodoLabel}
+            taskCatalog={taskCatalog.arr}
+            carteraGlobal={carteraGlobal}
+            tareasGlobalesFiltradas={tareasGlobalesFiltradas}
+            resumen={resumen}
+            formatFecha={formatFecha}
+            exportEstadoFilter={exportStatusFilter}
+          />
+
           <ExportTaskExcelButton
             disabled={globalLoading || !selectedTaskKey}
             periodoLabel={periodoLabel}
@@ -449,7 +492,6 @@ export default function TaskSupervisionPanel({
         </div>
       </div>
 
-      {/* Periodo */}
       <div className="bg-[#f5f4f0] border border-black/5 rounded-2xl px-3 py-3 shadow-sm">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 text-xs">
@@ -481,9 +523,7 @@ export default function TaskSupervisionPanel({
         </div>
       </div>
 
-      {/* Layout 2 columnas */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        {/* Col: selector tarea */}
         <div className="xl:col-span-4 bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-3 border-b border-black/5">
             <div className="text-xs font-semibold text-[#1d1e1c]">1) Selecciona tarea</div>
@@ -498,6 +538,7 @@ export default function TaskSupervisionPanel({
           <div className="max-h-[640px] overflow-auto">
             {tasksFiltered.map((t) => {
               const selected = selectedTaskKey === t.key;
+
               return (
                 <button
                   key={t.key}
@@ -529,7 +570,6 @@ export default function TaskSupervisionPanel({
           </div>
         </div>
 
-        {/* Col: empresas + detalle */}
         <div className="xl:col-span-8 space-y-4">
           {!selectedTaskKey || !selectedTaskMeta ? (
             <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-6 text-sm text-black/60">
@@ -537,7 +577,6 @@ export default function TaskSupervisionPanel({
             </div>
           ) : (
             <>
-              {/* Header tarea + filtros empresa */}
               <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
@@ -548,7 +587,6 @@ export default function TaskSupervisionPanel({
                     </div>
                   </div>
 
-                  {/* ✅ CHIPS como tu imagen => FILTRO */}
                   <EstadoChips counters={counters} value={estadoFilter} onChange={setEstadoFilter} />
                 </div>
 
@@ -573,7 +611,6 @@ export default function TaskSupervisionPanel({
                 </div>
               </div>
 
-              {/* Empresas table */}
               <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
                 <div className="px-4 py-3 bg-[#f5f4f0] border-b border-black/5 flex items-center justify-between">
                   <div className="text-xs font-semibold text-[#1d1e1c]">2) Empresas</div>
@@ -640,7 +677,6 @@ export default function TaskSupervisionPanel({
                 </div>
               </div>
 
-              {/* Detalle empresa */}
               {selectedEmpresa && (
                 <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-[#f5f4f0] border-b border-black/5 flex items-center justify-between">

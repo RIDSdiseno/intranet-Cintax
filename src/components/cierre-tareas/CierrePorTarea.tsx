@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Ban,
   CheckCircle2,
   ClipboardList,
   Filter,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   completarTareasSupervision,
+  desactivarTareasSupervision,
   getTareasPlantilla,
   getTareasPorPlantillaSupervision,
   type EstadoTarea,
@@ -63,7 +65,11 @@ export default function CierrePorTarea({ onBack }: Props) {
 
   const [error, setError] = useState<string | null>(null);
 
-  const loadTareas = async (plantillaId: number, year: number, month: number) => {
+  const loadTareas = async (
+    plantillaId: number,
+    year: number,
+    month: number
+  ) => {
     try {
       setLoadingTareas(true);
       setError(null);
@@ -247,6 +253,99 @@ export default function CierrePorTarea({ onBack }: Props) {
     }
   };
 
+  const desactivarSeleccionadas = async () => {
+    if (!selectedIds.length) {
+      alert("Debes seleccionar al menos una tarea.");
+      return;
+    }
+
+    if (!tareaPlantillaId) {
+      alert("Debes seleccionar una tarea.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        tareaIds: selectedIds,
+        comentario,
+      });
+
+      await loadTareas(Number(tareaPlantillaId), anio, mes);
+      setComentario("");
+      setSelectedIds([]);
+      alert("Tareas desactivadas correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        err?.response?.data?.message ||
+          "No se pudieron desactivar las tareas seleccionadas."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const desactivarTodasFiltradas = async () => {
+    if (!tareaPlantillaId) {
+      alert("Debes seleccionar una tarea.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        tareaPlantillaId: Number(tareaPlantillaId),
+        anio,
+        mes,
+        incluirPendientes:
+          estadoFiltro === "TODOS" || estadoFiltro === "PENDIENTE",
+        incluirEnProceso:
+          estadoFiltro === "TODOS" || estadoFiltro === "EN_PROCESO",
+        incluirVencidas:
+          estadoFiltro === "TODOS" || estadoFiltro === "VENCIDA",
+        comentario,
+      });
+
+      await loadTareas(Number(tareaPlantillaId), anio, mes);
+      setComentario("");
+      setSelectedIds([]);
+      alert("Tareas desactivadas correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        err?.response?.data?.message ||
+          "No se pudieron desactivar las tareas filtradas."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const desactivarUna = async (id: number) => {
+    if (!tareaPlantillaId) return;
+
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        tareaIds: [id],
+        comentario,
+      });
+
+      await loadTareas(Number(tareaPlantillaId), anio, mes);
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
+      alert("Tarea desactivada correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.response?.data?.message || "No se pudo desactivar la tarea.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const badgeEstado = (estado: EstadoTarea) => {
     const base =
       "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold";
@@ -291,7 +390,9 @@ export default function CierrePorTarea({ onBack }: Props) {
       );
     }
 
-    return <span className={`${base} bg-slate-100 text-slate-700`}>{estado}</span>;
+    return (
+      <span className={`${base} bg-slate-100 text-slate-700`}>{estado}</span>
+    );
   };
 
   return (
@@ -434,6 +535,19 @@ export default function CierrePorTarea({ onBack }: Props) {
           </button>
 
           <button
+            onClick={desactivarSeleccionadas}
+            disabled={submitting || selectedIds.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            Desactivar seleccionadas ({selectedIds.length})
+          </button>
+
+          <button
             onClick={completarTodasFiltradas}
             disabled={submitting || !tareaPlantillaId}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -444,6 +558,23 @@ export default function CierrePorTarea({ onBack }: Props) {
               <CheckCircle2 className="h-4 w-4" />
             )}
             Completar todas las filtradas
+          </button>
+
+          <button
+            onClick={desactivarTodasFiltradas}
+            disabled={
+              submitting ||
+              !tareaPlantillaId ||
+              estadoFiltro === "COMPLETADA"
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-900 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            Desactivar todas las filtradas
           </button>
         </div>
       </div>
@@ -469,7 +600,10 @@ export default function CierrePorTarea({ onBack }: Props) {
             <tbody>
               {loadingTareas ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={10}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     <div className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Cargando tareas...
@@ -478,7 +612,10 @@ export default function CierrePorTarea({ onBack }: Props) {
                 </tr>
               ) : tareasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={10}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     {error || "No hay tareas para mostrar."}
                   </td>
                 </tr>
@@ -521,13 +658,23 @@ export default function CierrePorTarea({ onBack }: Props) {
                           : "-"}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => completarUna(t.id_tarea_asignada)}
-                          disabled={disabled || submitting}
-                          className="rounded-lg bg-[var(--primary-color)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Completar
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => completarUna(t.id_tarea_asignada)}
+                            disabled={disabled || submitting}
+                            className="rounded-lg bg-[var(--primary-color)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Completar
+                          </button>
+
+                          <button
+                            onClick={() => desactivarUna(t.id_tarea_asignada)}
+                            disabled={disabled || submitting}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Desactivar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

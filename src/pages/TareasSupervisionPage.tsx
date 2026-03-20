@@ -27,7 +27,6 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Wrapper para no “pisar” Authorization cuando pasas headers
 async function fetchJSONAuth<T>(url: string, init?: RequestInit): Promise<T> {
   const mergedHeaders = {
     ...(init?.headers || {}),
@@ -44,7 +43,6 @@ async function fetchDataAgente(
   trabajadorId: number,
   opts?: { signal?: AbortSignal }
 ): Promise<{ tareas: TareaFull[]; ruts: RutCliente[] }> {
-  // 1) RUTs del agente
   const ruts = await fetchJSONAuth<RutCliente[]>(
     `${API_BASE_URL}/tareas/mis-ruts?trabajadorId=${trabajadorId}`,
     { signal: opts?.signal }
@@ -53,13 +51,15 @@ async function fetchDataAgente(
   const rutList = (ruts || []).map((r) => r.rut).filter(Boolean);
   if (rutList.length === 0) return { tareas: [], ruts: ruts || [] };
 
-  // 2) Bulk tareas por ruts
-  const resBulk = await fetchJSONAuth<{ tareas: TareaFull[] }>(`${API_BASE_URL}/tareas/por-ruts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: opts?.signal,
-    body: JSON.stringify({ trabajadorId, ruts: rutList }),
-  });
+  const resBulk = await fetchJSONAuth<{ tareas: TareaFull[] }>(
+    `${API_BASE_URL}/tareas/por-ruts`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: opts?.signal,
+      body: JSON.stringify({ trabajadorId, ruts: rutList }),
+    }
+  );
 
   return { tareas: resBulk?.tareas ?? [], ruts: ruts || [] };
 }
@@ -67,31 +67,26 @@ async function fetchDataAgente(
 type MainMode = "agente" | "tarea";
 type AgentView = "dashboard" | "empresas" | "impacto" | "comparativa";
 
-// =========================
-// Comparativa types/helpers
-// =========================
 type AgenteComparativa = {
   trabajadorId: number;
   nombre: string;
   email?: string;
-
   pendientes: number;
   enProceso: number;
   vencidas: number;
   completadas: number;
-
   total: number;
   abiertas: number;
-  cierre: number; // %
-  riesgo: number; // %
+  cierre: number;
+  riesgo: number;
 };
 
 type ComparativaTotals = {
   totalAgentes: number;
   totalTareas: number;
   backlog: number;
-  tasaGlobal: number; // % cierre global
-  promedioCierre: number; // promedio de cierre por agente (simple)
+  tasaGlobal: number;
+  promedioCierre: number;
   top: AgenteComparativa | null;
 };
 
@@ -100,14 +95,12 @@ type ChartSeries = Array<{ name: string; data: number[] }>;
 function round0(n: number) {
   return Math.round(n);
 }
+
 function pct(num: number, den: number) {
   return den > 0 ? round0((num / den) * 100) : 0;
 }
 
 const TareasSupervisionPage: React.FC = () => {
-  // =========================
-  // Estado base / data
-  // =========================
   const [resumen, setResumen] = useState<ResumenAgente[]>([]);
   const [tareasCache, setTareasCache] = useState<Record<number, TareaFull[]>>({});
   const [rutsCache, setRutsCache] = useState<Record<number, RutCliente[]>>({});
@@ -117,27 +110,22 @@ const TareasSupervisionPage: React.FC = () => {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // =========================
-  // Nuevo flujo: primero modo
-  // =========================
   const [mainMode, setMainMode] = useState<MainMode | null>(null);
 
-  // Por agente
   const [agentView, setAgentView] = useState<AgentView>("dashboard");
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
 
-  // Periodo
   const [periodo, setPeriodo] = useState<Periodo>("actual");
   const [mesSelect, setMesSelect] = useState<number>(new Date().getMonth() + 1);
   const [anioSelect, setAnioSelect] = useState<number>(new Date().getFullYear());
 
-  // Filtros globales (se usan en ambos paneles)
   const [filters, setFilters] = useState<GlobalFilters>({
     estado: {
       PENDIENTE: true,
       EN_PROCESO: true,
       VENCIDA: true,
       COMPLETADA: true,
+      NO_APLICA: true,
     },
     area: "ALL",
     search: "",
@@ -148,18 +136,16 @@ const TareasSupervisionPage: React.FC = () => {
     taskKey: "ALL",
   });
 
-  // Abort controllers
   const agentAbortRef = useRef<AbortController | null>(null);
   const globalAbortRef = useRef<AbortController | null>(null);
 
-  // =========================
-  // Load resumen (lista agentes)
-  // =========================
   const loadResumen = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchJSONAuth<ResumenAgente[]>(`${API_BASE_URL}/tareas/supervision/resumen`);
+      const res = await fetchJSONAuth<ResumenAgente[]>(
+        `${API_BASE_URL}/tareas/supervision/resumen`
+      );
       setResumen(res || []);
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar supervisión");
@@ -172,9 +158,6 @@ const TareasSupervisionPage: React.FC = () => {
     loadResumen();
   }, [loadResumen]);
 
-  // =========================
-  // Carga global (para Por tarea y Comparativa)
-  // =========================
   const needsGlobal =
     mainMode === "tarea" || (mainMode === "agente" && agentView === "comparativa");
 
@@ -225,9 +208,6 @@ const TareasSupervisionPage: React.FC = () => {
     return () => ctrl.abort();
   }, [needsGlobal, resumen.length, missingGlobalIds]);
 
-  // =========================
-  // Carga on-demand para Por agente (cuando ya eligió agente)
-  // =========================
   const agentHasCache = useMemo(() => {
     if (selectedAgentId === null) return false;
     return Boolean(tareasCache[selectedAgentId] && rutsCache[selectedAgentId]);
@@ -235,7 +215,7 @@ const TareasSupervisionPage: React.FC = () => {
 
   useEffect(() => {
     if (mainMode !== "agente") return;
-    if (agentView === "comparativa") return; // comparativa usa global
+    if (agentView === "comparativa") return;
     if (selectedAgentId === null) return;
 
     if (agentHasCache) {
@@ -265,9 +245,6 @@ const TareasSupervisionPage: React.FC = () => {
     return () => ctrl.abort();
   }, [mainMode, agentView, selectedAgentId, agentHasCache]);
 
-  // =========================
-  // Dataset por agente (para panel Agente)
-  // =========================
   const clienteOptions = useMemo(() => {
     if (selectedAgentId === null) return [];
     return rutsCache[selectedAgentId] || [];
@@ -290,9 +267,6 @@ const TareasSupervisionPage: React.FC = () => {
     }));
   }, [clienteOptions]);
 
-  // =========================
-  // Dataset global (para panel Tarea + Comparativa)
-  // =========================
   const tareasGlobales = useMemo(() => {
     const out: TareaFull[] = [];
     Object.values(tareasCache).forEach((list) => out.push(...(list || [])));
@@ -304,10 +278,15 @@ const TareasSupervisionPage: React.FC = () => {
   }, [tareasGlobales, periodo, mesSelect, anioSelect]);
 
   const tareasGlobalesFiltradas = useMemo(() => {
-    // En "Por tarea" (y comparativa) no queremos que un toggle esconda completadas por accidente:
     const fixed: GlobalFilters = {
       ...filters,
-      estado: { PENDIENTE: true, EN_PROCESO: true, VENCIDA: true, COMPLETADA: true },
+      estado: {
+        PENDIENTE: true,
+        EN_PROCESO: true,
+        VENCIDA: true,
+        COMPLETADA: true,
+        NO_APLICA: true,
+      },
       onlyBacklog: false,
       onlyCompleted: false,
     };
@@ -335,13 +314,9 @@ const TareasSupervisionPage: React.FC = () => {
     ? resumen.find((r) => r.trabajadorId === selectedAgentId)
     : null;
 
-  // =========================
-  // ✅ Comparativa: construir datasets reales
-  // =========================
   const comparativaAgentes = useMemo<AgenteComparativa[]>(() => {
     if (!resumen.length) return [];
 
-    // agrupar por trabajadorId desde tareasGlobalesFiltradas (mismo periodo)
     const byId = new Map<number, TareaFull[]>();
     for (const t of tareasGlobalesFiltradas) {
       const tid = (t as any)?.trabajadorId ?? 0;
@@ -367,7 +342,8 @@ const TareasSupervisionPage: React.FC = () => {
       const total = list.length;
       const abiertas = pendientes + enProceso + vencidas;
       const cierre = pct(completadas, total);
-      const riesgo = total > 0 ? round0(((vencidas * 1.5 + pendientes) / total) * 100) : 0;
+      const riesgo =
+        total > 0 ? round0(((vencidas * 1.5 + pendientes) / total) * 100) : 0;
 
       return {
         trabajadorId: r.trabajadorId,
@@ -390,19 +366,30 @@ const TareasSupervisionPage: React.FC = () => {
 
     const totalTareas = comparativaAgentes.reduce((acc, a) => acc + (a.total || 0), 0);
     const backlog = comparativaAgentes.reduce((acc, a) => acc + (a.abiertas || 0), 0);
-    const totalCompletadas = comparativaAgentes.reduce((acc, a) => acc + (a.completadas || 0), 0);
+    const totalCompletadas = comparativaAgentes.reduce(
+      (acc, a) => acc + (a.completadas || 0),
+      0
+    );
 
     const tasaGlobal = pct(totalCompletadas, totalTareas);
     const promedioCierre =
       totalAgentes > 0
-        ? round0(comparativaAgentes.reduce((acc, a) => acc + (a.cierre || 0), 0) / totalAgentes)
+        ? round0(
+            comparativaAgentes.reduce((acc, a) => acc + (a.cierre || 0), 0) /
+              totalAgentes
+          )
         : 0;
 
     let top: AgenteComparativa | null = null;
     for (const a of comparativaAgentes) {
       if (!top) top = a;
       else if ((a.cierre || 0) > (top.cierre || 0)) top = a;
-      else if ((a.cierre || 0) === (top.cierre || 0) && (a.total || 0) > (top.total || 0)) top = a;
+      else if (
+        (a.cierre || 0) === (top.cierre || 0) &&
+        (a.total || 0) > (top.total || 0)
+      ) {
+        top = a;
+      }
     }
 
     return {
@@ -416,7 +403,6 @@ const TareasSupervisionPage: React.FC = () => {
   }, [comparativaAgentes]);
 
   const comparativaStacked = useMemo(() => {
-    // barras apiladas por agente (pendientes/enProceso/vencidas/completadas)
     const categories = comparativaAgentes.map((a) => a.nombre);
     const series: ChartSeries = [
       { name: "Pendiente", data: comparativaAgentes.map((a) => a.pendientes || 0) },
@@ -428,7 +414,6 @@ const TareasSupervisionPage: React.FC = () => {
   }, [comparativaAgentes]);
 
   const comparativaRendimiento = useMemo(() => {
-    // line/columns de cierre% y riesgo% por agente
     const categories = comparativaAgentes.map((a) => a.nombre);
     const series: ChartSeries = [
       { name: "Cierre %", data: comparativaAgentes.map((a) => a.cierre || 0) },
@@ -437,20 +422,18 @@ const TareasSupervisionPage: React.FC = () => {
     return { categories, series };
   }, [comparativaAgentes]);
 
-  // =========================
-  // UI states
-  // =========================
   if (loading) return <div>Cargando supervisión...</div>;
   if (error) return <div className="text-red-600 text-sm">{error}</div>;
 
   return (
     <div className="space-y-6">
-      {/* Step 1: elegir modo (obligatorio) */}
       {mainMode === null ? (
         <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-6">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h2 className="text-base font-semibold text-[#1d1e1c]">Supervisión de tareas</h2>
+              <h2 className="text-base font-semibold text-[#1d1e1c]">
+                Supervisión de tareas
+              </h2>
               <p className="text-sm text-black/60 mt-1">
                 Elige el modo de análisis:
               </p>
@@ -461,9 +444,7 @@ const TareasSupervisionPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ✅ 2 columnas visibles */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            {/* ✅ Primero: Por tarea */}
             <button
               onClick={() => {
                 setMainMode("tarea");
@@ -486,7 +467,9 @@ const TareasSupervisionPage: React.FC = () => {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-xs text-black/50">Modo</div>
-                  <div className="text-lg font-semibold text-[#1d1e1c]">Por tarea</div>
+                  <div className="text-lg font-semibold text-[#1d1e1c]">
+                    Por tarea
+                  </div>
                   <div className="text-sm text-black/60 mt-2">
                     Selecciona una tarea y revisa su estado consolidado en todas las empresas.
                   </div>
@@ -505,7 +488,6 @@ const TareasSupervisionPage: React.FC = () => {
               </div>
             </button>
 
-            {/* ✅ Segundo: Por agente */}
             <button
               onClick={() => {
                 setMainMode("agente");
@@ -529,7 +511,9 @@ const TareasSupervisionPage: React.FC = () => {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-xs text-black/50">Modo</div>
-                  <div className="text-lg font-semibold text-[#1d1e1c]">Por agente</div>
+                  <div className="text-lg font-semibold text-[#1d1e1c]">
+                    Por agente
+                  </div>
                   <div className="text-sm text-black/60 mt-2">
                     Dashboards, empresas e impacto dentro de la cartera de un agente.
                   </div>
@@ -557,31 +541,24 @@ const TareasSupervisionPage: React.FC = () => {
           selectedAgentId={selectedAgentId}
           setSelectedAgentId={setSelectedAgentId}
           agenteNombre={agenteSeleccionado?.nombre || ""}
-
           periodo={periodo}
           setPeriodo={setPeriodo}
           mesSelect={mesSelect}
           setMesSelect={setMesSelect}
           anioSelect={anioSelect}
           setAnioSelect={setAnioSelect}
-
           filters={filters}
           setFilters={setFilters}
-
           agentLoading={agentLoading}
           globalLoading={globalLoading}
-
           clienteOptions={clienteOptions}
           empresasCarteraAgente={empresasCarteraAgente}
           tareasAgenteFiltradas={tareasAgenteFiltradas}
           formatFecha={formatFecha}
-
-          // ✅ NUEVO: pasar datasets reales a la comparativa
           comparativaAgentes={comparativaAgentes as any}
           comparativaTotals={comparativaTotals as any}
           comparativaStacked={comparativaStacked as any}
           comparativaRendimiento={comparativaRendimiento as any}
-
           onBack={() => {
             setMainMode(null);
             setSelectedAgentId(null);

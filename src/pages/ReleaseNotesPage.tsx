@@ -13,6 +13,20 @@ type ReleaseNote = {
 const NOTES: ReleaseNote[] = [
   // ✅ ÚLTIMA VERSIÓN
   {
+    version: "v1.8",
+    date: "2026-03-20",
+    title: "Cierre de tareas: desactivación y reactivación de tareas",
+    items: [
+      "Se agrega nuevo modo 'Desactivadas' en la sección de Cierre de tareas, accesible para supervisores.",
+      "Permite visualizar todas las tareas que han sido marcadas como 'no aplica' para un cliente (desactivadas), por trabajador y período.",
+      "Incluye búsqueda avanzada por RUT, razón social, nombre de tarea, código documento, área, comentarios y trabajador asignado.",
+      "Se habilita la opción de reactivar tareas desactivadas con un comentario de auditoría del supervisor.",
+      "El flujo mejora el control y auditoría de tareas marcadas como inactivas, permitiendo revisar la decisión cuando sea necesario.",
+    ],
+    tag: "nuevo",
+  },
+
+  {
     version: "v1.7.2",
     date: "2026-03-13",
     title: "Tareas: completar sin archivo obligatorio",

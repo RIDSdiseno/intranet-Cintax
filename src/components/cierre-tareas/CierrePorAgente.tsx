@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Ban,
   CheckCircle2,
   Filter,
   Loader2,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   completarTareasSupervision,
+  desactivarTareasSupervision,
   getMisRutsSupervision,
   getTareasPorRutsSupervision,
   getTrabajadores,
@@ -28,7 +30,8 @@ type EstadoFiltro =
   | "PENDIENTE"
   | "EN_PROCESO"
   | "VENCIDA"
-  | "COMPLETADA";
+  | "COMPLETADA"
+  | "NO_APLICA";
 
 const API_MONTHS = [
   "",
@@ -216,6 +219,7 @@ export default function CierrePorAgente({ onBack }: Props) {
 
     try {
       setSubmitting(true);
+
       await completarTareasSupervision({
         tareaIds: selectedIds,
         comentario,
@@ -223,6 +227,7 @@ export default function CierrePorAgente({ onBack }: Props) {
 
       await cargarTareas();
       setComentario("");
+      setSelectedIds([]);
       alert("Tareas completadas correctamente.");
     } catch (err: any) {
       console.error(err);
@@ -260,6 +265,7 @@ export default function CierrePorAgente({ onBack }: Props) {
 
       await cargarTareas();
       setComentario("");
+      setSelectedIds([]);
       alert("Tareas completadas correctamente.");
     } catch (err: any) {
       console.error(err);
@@ -287,6 +293,93 @@ export default function CierrePorAgente({ onBack }: Props) {
     } catch (err: any) {
       console.error(err);
       alert(err?.response?.data?.message || "No se pudo completar la tarea.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const desactivarSeleccionadas = async () => {
+    if (!selectedIds.length) {
+      alert("Debes seleccionar al menos una tarea.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        tareaIds: selectedIds,
+        comentario,
+      });
+
+      await cargarTareas();
+      setComentario("");
+      setSelectedIds([]);
+      alert("Tareas desactivadas correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        err?.response?.data?.message ||
+          "No se pudieron desactivar las tareas seleccionadas."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const desactivarTodasFiltradas = async () => {
+    if (!trabajadorId) {
+      alert("Debes seleccionar un trabajador.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        trabajadorId: Number(trabajadorId),
+        rutCliente: rutFiltro || undefined,
+        anio,
+        mes,
+        incluirPendientes:
+          estadoFiltro === "TODOS" || estadoFiltro === "PENDIENTE",
+        incluirEnProceso:
+          estadoFiltro === "TODOS" || estadoFiltro === "EN_PROCESO",
+        incluirVencidas:
+          estadoFiltro === "TODOS" || estadoFiltro === "VENCIDA",
+        comentario,
+      });
+
+      await cargarTareas();
+      setComentario("");
+      setSelectedIds([]);
+      alert("Tareas desactivadas correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        err?.response?.data?.message ||
+          "No se pudieron desactivar las tareas filtradas."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const desactivarUna = async (id: number) => {
+    try {
+      setSubmitting(true);
+
+      await desactivarTareasSupervision({
+        tareaIds: [id],
+        comentario,
+      });
+
+      await cargarTareas();
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
+      alert("Tarea desactivada correctamente.");
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.response?.data?.message || "No se pudo desactivar la tarea.");
     } finally {
       setSubmitting(false);
     }
@@ -336,7 +429,9 @@ export default function CierrePorAgente({ onBack }: Props) {
       );
     }
 
-    return <span className={`${base} bg-slate-100 text-slate-700`}>{estado}</span>;
+    return (
+      <span className={`${base} bg-slate-100 text-slate-700`}>{estado}</span>
+    );
   };
 
   return (
@@ -351,7 +446,8 @@ export default function CierrePorAgente({ onBack }: Props) {
               Cierre de tareas · Por agente
             </h1>
             <p className="text-sm text-slate-500">
-              Cierra tareas de trabajadores sin necesidad de subir archivos.
+              Cierra o desactiva tareas de trabajadores sin necesidad de subir
+              archivos.
             </p>
           </div>
         </div>
@@ -422,6 +518,7 @@ export default function CierrePorAgente({ onBack }: Props) {
               <option value="EN_PROCESO">En proceso</option>
               <option value="VENCIDA">Vencida</option>
               <option value="COMPLETADA">Completada</option>
+              <option value="NO_APLICA">No aplica</option>
             </select>
           </div>
 
@@ -517,6 +614,19 @@ export default function CierrePorAgente({ onBack }: Props) {
           </button>
 
           <button
+            onClick={desactivarSeleccionadas}
+            disabled={submitting || selectedIds.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            Desactivar seleccionadas ({selectedIds.length})
+          </button>
+
+          <button
             onClick={completarTodasFiltradas}
             disabled={submitting || !trabajadorId}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -527,6 +637,24 @@ export default function CierrePorAgente({ onBack }: Props) {
               <CheckCircle2 className="h-4 w-4" />
             )}
             Completar todas las filtradas
+          </button>
+
+          <button
+            onClick={desactivarTodasFiltradas}
+            disabled={
+              submitting ||
+              !trabajadorId ||
+              estadoFiltro === "COMPLETADA" ||
+              estadoFiltro === "NO_APLICA"
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-900 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            Desactivar todas las filtradas
           </button>
         </div>
       </div>
@@ -553,7 +681,10 @@ export default function CierrePorAgente({ onBack }: Props) {
             <tbody>
               {loadingTareas ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={11}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     <div className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Cargando tareas...
@@ -562,7 +693,10 @@ export default function CierrePorAgente({ onBack }: Props) {
                 </tr>
               ) : tareasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={11}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     {error || "No hay tareas para mostrar."}
                   </td>
                 </tr>
@@ -606,17 +740,29 @@ export default function CierrePorAgente({ onBack }: Props) {
                       </td>
                       <td className="px-4 py-3">
                         {t.fechaComplecion
-                          ? new Date(t.fechaComplecion).toLocaleDateString("es-CL")
+                          ? new Date(t.fechaComplecion).toLocaleDateString(
+                              "es-CL"
+                            )
                           : "-"}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => completarUna(t.id_tarea_asignada)}
-                          disabled={disabled || submitting}
-                          className="rounded-lg bg-[var(--primary-color)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Completar
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => completarUna(t.id_tarea_asignada)}
+                            disabled={disabled || submitting}
+                            className="rounded-lg bg-[var(--primary-color)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Completar
+                          </button>
+
+                          <button
+                            onClick={() => desactivarUna(t.id_tarea_asignada)}
+                            disabled={disabled || submitting}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Desactivar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

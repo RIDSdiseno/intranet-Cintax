@@ -22,6 +22,31 @@ export type SupervisionCompletarPayload = {
   fechaComplecion?: string;
 };
 
+export type SupervisionDesactivarPayload = {
+  tareaIds?: number[];
+  trabajadorId?: number;
+  rutCliente?: string;
+  rutClientes?: string[];
+  tareaPlantillaId?: number;
+  anio?: number;
+  mes?: number;
+  incluirPendientes?: boolean;
+  incluirEnProceso?: boolean;
+  incluirVencidas?: boolean;
+  comentario?: string;
+};
+
+export type SupervisionReactivarPayload = {
+  tareaIds?: number[];
+  trabajadorId?: number;
+  rutCliente?: string;
+  rutClientes?: string[];
+  tareaPlantillaId?: number;
+  anio?: number;
+  mes?: number;
+  comentario?: string;
+};
+
 export type Trabajador = {
   id_trabajador: number;
   nombre: string;
@@ -94,11 +119,51 @@ export type GetTareasPorPlantillaResponse = {
   tareas: TareaAsignada[];
 };
 
+export type SupervisionAccionResponse = {
+  message?: string;
+  count?: number;
+  tareas?: number[];
+};
+
+export type GetTareasDesactivadasPayload = {
+  trabajadorId: number;
+  ruts?: string[];
+  anio?: number;
+  mes?: number;
+};
+
+export type GetTareasDesactivadasResponse = {
+  tareas: TareaAsignada[];
+  count?: number;
+};
+
 export async function completarTareasSupervision(
   payload: SupervisionCompletarPayload
 ) {
   const res = await http.post("/tareas/supervision/completar", payload);
   return res.data;
+}
+
+export async function desactivarTareasSupervision(
+  payload: SupervisionDesactivarPayload
+): Promise<SupervisionAccionResponse> {
+  const res = await http.patch("/tareas/supervision/desactivar", payload);
+  return {
+    message: res.data?.message,
+    count: typeof res.data?.count === "number" ? res.data.count : 0,
+    tareas: Array.isArray(res.data?.tareas) ? res.data.tareas : [],
+  };
+}
+
+export async function reactivarTareasSupervision(
+  payload: SupervisionReactivarPayload
+): Promise<SupervisionAccionResponse> {
+  const res = await http.patch("/tareas/supervision/reactivar", payload);
+  return {
+    message: res.data?.message,
+    count: typeof res.data?.count === "number" ? res.data.count : 0,
+    tareas: Array.isArray(res.data?.tareas) ? res.data.tareas : [],
+  };
 }
 
 export async function getTrabajadores(): Promise<
@@ -163,5 +228,15 @@ export async function getTareasPorPlantillaSupervision(
     filtrosAplicados: res.data?.filtrosAplicados,
     count: res.data?.count,
     tareas: Array.isArray(res.data) ? res.data : res.data?.tareas ?? [],
+  };
+}
+
+export async function getTareasDesactivadasSupervision(
+  payload: GetTareasDesactivadasPayload
+): Promise<GetTareasDesactivadasResponse> {
+  const res = await http.post("/tareas/desactivadas", payload);
+  return {
+    tareas: Array.isArray(res.data) ? res.data : res.data?.tareas ?? [],
+    count: typeof res.data?.count === "number" ? res.data.count : undefined,
   };
 }

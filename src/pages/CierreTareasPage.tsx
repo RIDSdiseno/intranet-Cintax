@@ -3,11 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import CierreModoSelector from "../components/cierre-tareas/CierreModoSelector";
 import CierrePorAgente from "../components/cierre-tareas/CierrePorAgente";
 import CierrePorTarea from "../components/cierre-tareas/CierrePorTarea";
+import TareasDesactivadas from "../components/cierre-tareas/TareasDesactivadas";
 
-export type CierreMode = "selector" | "tarea" | "agente";
+export type CierreMode = "selector" | "tarea" | "agente" | "desactivadas";
 
 function isValidMode(value: string | null): value is Exclude<CierreMode, "selector"> {
-  return value === "tarea" || value === "agente";
+  return value === "tarea" || value === "agente" || value === "desactivadas";
 }
 
 export default function CierreTareasPage() {
@@ -31,7 +32,9 @@ export default function CierreTareasPage() {
     setMode("selector");
   }, [searchParams]);
 
-  const handleSelectMode = (nextMode: Extract<CierreMode, "tarea" | "agente">) => {
+  const handleSelectMode = (
+    nextMode: Extract<CierreMode, "tarea" | "agente" | "desactivadas">
+  ) => {
     setMode(nextMode);
     setSearchParams({ modo: nextMode });
   };
@@ -49,5 +52,9 @@ export default function CierreTareasPage() {
     return <CierrePorTarea onBack={handleBack} />;
   }
 
-  return <CierrePorAgente onBack={handleBack} />;
+  if (mode === "agente") {
+    return <CierrePorAgente onBack={handleBack} />;
+  }
+
+  return <TareasDesactivadas onBack={handleBack} />;
 }

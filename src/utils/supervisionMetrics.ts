@@ -1,19 +1,25 @@
 import type { TareaFull } from "../lib/api";
+
 /** Estados que maneja la app */
-export type Estado = "PENDIENTE" | "EN_PROCESO" | "VENCIDA" | "COMPLETADA";
+export type Estado =
+  | "PENDIENTE"
+  | "EN_PROCESO"
+  | "VENCIDA"
+  | "COMPLETADA"
+  | "NO_APLICA";
 
 /** Filtro por vencimiento */
 export type DueMode = "ALL" | "OVERDUE" | "DUE_SOON" | "ON_TIME";
 
 export type GlobalFilters = {
   estado: Record<Estado, boolean>;
-  area: string;           // "ALL" | area
-  search: string;         // texto
+  area: string; // "ALL" | area
+  search: string; // texto
   dueMode: DueMode;
-  dueDays: number;        // umbral por vencer
-  onlyBacklog: boolean;   // excluye completadas
+  dueDays: number; // umbral por vencer
+  onlyBacklog: boolean; // excluye completadas y no aplica
   onlyCompleted: boolean; // solo completadas
-  taskKey: string;        // "ALL" | key
+  taskKey: string; // "ALL" | key
 };
 
 export function safeDate(iso?: string | null): Date | null {
@@ -27,12 +33,17 @@ export function getTaskKeyForFilter(t: TareaFull): string {
   const plantillaId = (t as any)?.tareaPlantilla?.id;
   const codigo = (t as any)?.tareaPlantilla?.codigoDocumento;
   const nombre = (t as any)?.tareaPlantilla?.nombre;
-  // preferimos algo estable (id plantilla), si no existe usamos código/nombre
-  return String(plantillaId ?? codigo ?? nombre ?? t.id_tarea_asignada ?? "UNKNOWN");
+
+  return String(
+    plantillaId ?? codigo ?? nombre ?? t.id_tarea_asignada ?? "UNKNOWN"
+  );
 }
 
 /** Aplica filtros globales a una lista de tareas */
-export function applyFilters(list: TareaFull[], filters: GlobalFilters): TareaFull[] {
+export function applyFilters(
+  list: TareaFull[],
+  filters: GlobalFilters
+): TareaFull[] {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
@@ -48,8 +59,13 @@ export function applyFilters(list: TareaFull[], filters: GlobalFilters): TareaFu
     if (filters.estado && filters.estado[st] === false) return false;
 
     // only backlog / only completed
-    if (filters.onlyBacklog && st === "COMPLETADA") return false;
-    if (filters.onlyCompleted && st !== "COMPLETADA") return false;
+    if (filters.onlyBacklog && (st === "COMPLETADA" || st === "NO_APLICA")) {
+      return false;
+    }
+
+    if (filters.onlyCompleted && st !== "COMPLETADA") {
+      return false;
+    }
 
     // area
     if (filters.area !== "ALL") {
@@ -65,27 +81,37 @@ export function applyFilters(list: TareaFull[], filters: GlobalFilters): TareaFu
 
     // search
     if (term) {
-      const nombre = String((t as any)?.tareaPlantilla?.nombre ?? "").toLowerCase();
+      const nombre = String(
+        (t as any)?.tareaPlantilla?.nombre ?? ""
+      ).toLowerCase();
       const area = String((t as any)?.tareaPlantilla?.area ?? "").toLowerCase();
-      const cod = String((t as any)?.tareaPlantilla?.codigoDocumento ?? "").toLowerCase();
-      if (!nombre.includes(term) && !area.includes(term) && !cod.includes(term)) return false;
+      const cod = String(
+        (t as any)?.tareaPlantilla?.codigoDocumento ?? ""
+      ).toLowerCase();
+
+      if (!nombre.includes(term) && !area.includes(term) && !cod.includes(term)) {
+        return false;
+      }
     }
 
     // dueMode
     if (filters.dueMode && filters.dueMode !== "ALL") {
       const fv = safeDate((t as any)?.fechaProgramada);
       const isCompleted = st === "COMPLETADA";
+      const isNoAplica = st === "NO_APLICA";
       const isOverdue = st === "VENCIDA";
 
       const isDueSoon =
         !isCompleted &&
+        !isNoAplica &&
         !isOverdue &&
-        fv &&
+        !!fv &&
         fv.getTime() >= hoy.getTime() &&
         fv.getTime() <= limite.getTime();
 
       const isOnTime =
         !isCompleted &&
+        !isNoAplica &&
         !isOverdue &&
         (!fv || fv.getTime() > limite.getTime());
 
@@ -104,6 +130,7 @@ export type GlobalKpis = {
   proc: number;
   venc: number;
   comp: number;
+  noAplica: number;
   porVencer: number;
 
   backlog: number;
@@ -119,7 +146,10 @@ export type GlobalKpis = {
  * KPIs globales a partir de la lista ya filtrada.
  * (filters se usa para dueDays y para consistencia)
  */
-export function computeKpis(list: TareaFull[], filters: GlobalFilters): GlobalKpis {
+export function computeKpis(
+  list: TareaFull[],
+  filters: GlobalFilters
+): GlobalKpis {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
@@ -130,6 +160,7 @@ export function computeKpis(list: TareaFull[], filters: GlobalFilters): GlobalKp
     proc = 0,
     venc = 0,
     comp = 0,
+    noAplica = 0,
     porVencer = 0;
 
   // métricas extra
@@ -146,45 +177,78 @@ export function computeKpis(list: TareaFull[], filters: GlobalFilters): GlobalKp
     else if (st === "EN_PROCESO") proc++;
     else if (st === "VENCIDA") venc++;
     else if (st === "COMPLETADA") comp++;
+    else if (st === "NO_APLICA") noAplica++;
 
-    // por vencer (no completadas)
-    if (st !== "COMPLETADA") {
+    // por vencer: solo tareas activas, no completadas y no no_aplica
+    if (
+      st !== "COMPLETADA" &&
+      st !== "NO_APLICA"
+    ) {
       const fv = safeDate((t as any)?.fechaProgramada);
-      if (fv && fv.getTime() >= hoy.getTime() && fv.getTime() <= limite.getTime()) porVencer++;
+      if (
+        fv &&
+        fv.getTime() >= hoy.getTime() &&
+        fv.getTime() <= limite.getTime()
+      ) {
+        porVencer++;
+      }
     }
 
-    // avgCierreDias (si existe fechaCierre/updatedAt)
+    // avgCierreDias
     if (st === "COMPLETADA") {
-      const fin = safeDate((t as any)?.fechaCierre) || safeDate((t as any)?.updatedAt);
+      const fin =
+        safeDate((t as any)?.fechaCierre) ||
+        safeDate((t as any)?.updatedAt) ||
+        safeDate((t as any)?.fechaComplecion);
+
       const ini = safeDate((t as any)?.createdAt);
+
       if (fin && ini) {
-        const days = Math.max(0, Math.round((fin.getTime() - ini.getTime()) / (1000 * 60 * 60 * 24)));
+        const days = Math.max(
+          0,
+          Math.round(
+            (fin.getTime() - ini.getTime()) / (1000 * 60 * 60 * 24)
+          )
+        );
         sumCierreDias += days;
         nCierre += 1;
       }
     }
 
-    // edad backlog (pendiente/en proceso)
+    // edad backlog: solo pendientes / en proceso
     if (st === "PENDIENTE" || st === "EN_PROCESO") {
-      const ini = safeDate((t as any)?.createdAt) || safeDate((t as any)?.fechaProgramada);
+      const ini =
+        safeDate((t as any)?.createdAt) ||
+        safeDate((t as any)?.fechaProgramada);
+
       if (ini) {
-        const days = Math.max(0, Math.round((hoy.getTime() - ini.getTime()) / (1000 * 60 * 60 * 24)));
+        const days = Math.max(
+          0,
+          Math.round((hoy.getTime() - ini.getTime()) / (1000 * 60 * 60 * 24))
+        );
         sumEdadBacklog += days;
         nBacklogEdad += 1;
       }
     }
   }
 
-  const total = pend + proc + venc + comp;
-  const backlog = total - comp;
+  const total = pend + proc + venc + comp + noAplica;
 
-  const cierrePct = total > 0 ? Math.round((comp / total) * 100) : 0;
+  // backlog real operativo: excluye completadas y no aplica
+  const backlog = pend + proc + venc;
+
+  // cierre % sobre tareas operativas, sin contar no aplica
+  const totalOperativo = pend + proc + venc + comp;
+  const cierrePct = totalOperativo > 0 ? Math.round((comp / totalOperativo) * 100) : 0;
+
   const avgCierreDias = nCierre > 0 ? Math.round(sumCierreDias / nCierre) : 0;
-  const edadBacklogDias = nBacklogEdad > 0 ? Math.round(sumEdadBacklog / nBacklogEdad) : 0;
+  const edadBacklogDias =
+    nBacklogEdad > 0 ? Math.round(sumEdadBacklog / nBacklogEdad) : 0;
 
-  // score y etiqueta de riesgo (simple, entendible)
-  const riskScore = venc * 3 + porVencer * 2 + backlog * 1;
-  const riskLabel = riskScore >= 30 ? "Crítico" : riskScore >= 15 ? "Riesgo" : "Normal";
+  // score y etiqueta de riesgo
+  const riskScore = venc * 3 + porVencer * 2 + backlog;
+  const riskLabel =
+    riskScore >= 30 ? "Crítico" : riskScore >= 15 ? "Riesgo" : "Normal";
 
   return {
     total,
@@ -192,6 +256,7 @@ export function computeKpis(list: TareaFull[], filters: GlobalFilters): GlobalKp
     proc,
     venc,
     comp,
+    noAplica,
     porVencer,
     backlog,
     cierrePct,

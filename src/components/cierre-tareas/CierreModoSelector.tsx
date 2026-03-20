@@ -1,7 +1,13 @@
-import { CheckCircle2, ClipboardList, Square, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  Square,
+  Users,
+  ClipboardX,
+} from "lucide-react";
 
 type Props = {
-  onSelectMode: (mode: "tarea" | "agente") => void;
+  onSelectMode: (mode: "tarea" | "agente" | "desactivadas") => void;
 };
 
 type ModeCardProps = {
@@ -34,10 +40,14 @@ function ModeCard({
           </p>
 
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-xl font-semibold text-slate-900">{title}</span>
+            <span className="text-xl font-semibold text-slate-900">
+              {title}
+            </span>
           </div>
 
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">{description}</p>
+          <p className="mt-3 max-w-2xl text-sm text-slate-600">
+            {description}
+          </p>
 
           <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[#9E8359]">
             Entrar <span aria-hidden>→</span>
@@ -74,17 +84,22 @@ export default function CierreModoSelector({ onSelectMode }: Props) {
       <div className="rounded-[28px] border border-black/5 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Cierre de tareas</h1>
-            <p className="mt-1 text-sm text-slate-600">Elige el modo de análisis:</p>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Cierre de tareas
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Elige el modo de análisis:
+            </p>
           </div>
 
           <p className="max-w-2xl text-xs text-slate-500">
             Consejo: “Por tarea” sirve para ver el consolidado global. “Por agente”
-            sirve para analizar y cerrar tareas dentro de la cartera de un trabajador.
+            sirve para analizar la cartera. “Desactivadas” permite auditar tareas
+            marcadas como no aplica.
           </p>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
           <ModeCard
             eyebrow="Modo"
             title="Por tarea"
@@ -99,6 +114,14 @@ export default function CierreModoSelector({ onSelectMode }: Props) {
             description="Dashboards, empresas e impacto dentro de la cartera de un agente."
             icon={<Users className="h-5 w-5" />}
             onClick={() => onSelectMode("agente")}
+          />
+
+          <ModeCard
+            eyebrow="Modo"
+            title="Tareas desactivadas"
+            description="Visualiza y audita tareas marcadas como 'No aplica' y su impacto en la gestión."
+            icon={<ClipboardX className="h-5 w-5" />}
+            onClick={() => onSelectMode("desactivadas")}
           />
         </div>
       </div>

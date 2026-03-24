@@ -758,6 +758,7 @@ export default function AgentSupervisionPanel({
               empresasFiltradas={empresasFiltradasParaExcel as any}
               detalleEmpresa={detalleEmpresa as any}
               groupedByAgente={groupedByAgente as any}
+              empresasSinTarea={[]} // 👈 agregado
               formatFecha={formatFecha}
             />
 

@@ -40,6 +40,36 @@ function getTaskKey(t: TareaFull) {
   return String(pid ?? `${codigo}__${nombre}`);
 }
 
+function normalizeRut(rut?: string | null) {
+  return String(rut ?? "")
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/-/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function displayRazonSocial(razonSocial?: string | null, rut?: string | null) {
+  const rs = String(razonSocial ?? "").trim();
+  const rutNorm = normalizeRut(rut);
+  const rsNorm = normalizeRut(rs);
+
+  if (!rs) return "Sin razón social";
+  if (rsNorm && rutNorm && rsNorm === rutNorm) return "Sin razón social";
+  return rs;
+}
+
+function getTrabajadorId(t: any): number | null {
+  return (
+    t?.trabajadorId ??
+    t?.id_trabajador ??
+    t?.asignado?.id_trabajador ??
+    t?.trabajador?.id ??
+    t?.trabajador?.id_trabajador ??
+    null
+  );
+}
+
 function pickFechaMasProxima(isoList: Array<string | null | undefined>): string | null {
   const fechas = isoList
     .filter(Boolean)
@@ -146,19 +176,50 @@ export default function ExportAllTasksExcelButton({
       agentesMap.set(r.trabajadorId, { nombre: r.nombre, email: r.email });
     });
 
+    const razonSocialByRut = new Map<string, string>();
+    for (const empresa of carteraGlobal) {
+      const rutNorm = normalizeRut(empresa.rut);
+      if (!rutNorm) continue;
+      if (!razonSocialByRut.has(rutNorm)) {
+        razonSocialByRut.set(rutNorm, displayRazonSocial(empresa.razonSocial, empresa.rut));
+      }
+    }
+
+    const tareasByTaskAndRut = new Map<string, TareaFull[]>();
+    for (const t of tareasGlobalesFiltradas) {
+      const taskKey = getTaskKey(t);
+      const rutNorm = normalizeRut((t as any)?.rutCliente);
+      if (!taskKey || !rutNorm) continue;
+
+      const mapKey = `${taskKey}__${rutNorm}`;
+      if (!tareasByTaskAndRut.has(mapKey)) tareasByTaskAndRut.set(mapKey, []);
+      tareasByTaskAndRut.get(mapKey)!.push(t);
+    }
+
+    const carteraUnica = Array.from(
+      new Map(
+        (carteraGlobal || [])
+          .map((e) => [normalizeRut(e.rut), e] as const)
+          .filter(([rut]) => Boolean(rut))
+      ).entries()
+    ).map(([rutNorm, empresa]) => ({
+      rutNorm,
+      rutOriginal: empresa.rut,
+      razonSocial: displayRazonSocial(empresa.razonSocial, empresa.rut),
+    }));
+
     let rows: Array<Record<string, any>> = [];
 
     for (const task of taskCatalog) {
-      for (const empresa of carteraGlobal) {
-        const instancias = tareasGlobalesFiltradas.filter(
-          (t) => getTaskKey(t) === task.key && (t.rutCliente || "SIN_RUT") === empresa.rut
-        );
+      for (const empresa of carteraUnica) {
+        const instancias =
+          tareasByTaskAndRut.get(`${task.key}__${empresa.rutNorm}`) || [];
 
         const info = resolveEstado(instancias);
 
         const agentesCount = new Map<number, number>();
-        for (const t of instancias.filter((x) => x.estado !== "COMPLETADA") as any[]) {
-          const tid = t.trabajadorId;
+        for (const t of instancias as any[]) {
+          const tid = getTrabajadorId(t);
           if (!tid) continue;
           agentesCount.set(tid, (agentesCount.get(tid) || 0) + 1);
         }
@@ -176,20 +237,25 @@ export default function ExportAllTasksExcelButton({
           .filter(Boolean)
           .sort() as string[];
 
+        const tieneTarea = instancias.length > 0;
+        const tieneAgente = agentes.length > 0;
+
         rows.push({
           Periodo: periodoLabel,
           Area: task.area,
           Codigo: task.codigo,
           Tarea: task.nombre,
-          RutEmpresa: empresa.rut,
-          RazonSocial: empresa.razonSocial,
+          RutEmpresa: empresa.rutNorm,
+          RazonSocial: razonSocialByRut.get(empresa.rutNorm) || empresa.razonSocial,
           Estado: info.estado,
           FechaComprometida: formatFecha(info.fechaComprometida),
           AtrasoDias: info.atrasoDias ?? "",
           Abiertas: info.abiertas,
-          Agentes: agentes.length
+          Agentes: tieneAgente
             ? agentes.map((a) => `${a.nombre} (${a.abiertas})`).join(", ")
-            : "-",
+            : "Sin agente",
+          TieneTarea: tieneTarea ? "Sí" : "No",
+          TieneAgente: tieneAgente ? "Sí" : "No",
           TotalInstancias: instancias.length,
           Completadas: instancias.filter((x) => x.estado === "COMPLETADA").length,
           Pendientes: instancias.filter((x) => x.estado === "PENDIENTE").length,
@@ -230,6 +296,8 @@ export default function ExportAllTasksExcelButton({
       "AtrasoDias",
       "Abiertas",
       "Agentes",
+      "TieneTarea",
+      "TieneAgente",
       "TotalInstancias",
       "Completadas",
       "Pendientes",
@@ -278,6 +346,8 @@ export default function ExportAllTasksExcelButton({
         row.AtrasoDias,
         row.Abiertas,
         row.Agentes,
+        row.TieneTarea,
+        row.TieneAgente,
         row.TotalInstancias,
         row.Completadas,
         row.Pendientes,
@@ -341,6 +411,8 @@ export default function ExportAllTasksExcelButton({
       { key: "AtrasoDias", width: 12 },
       { key: "Abiertas", width: 10 },
       { key: "Agentes", width: 36 },
+      { key: "TieneTarea", width: 12 },
+      { key: "TieneAgente", width: 12 },
       { key: "TotalInstancias", width: 14 },
       { key: "Completadas", width: 12 },
       { key: "Pendientes", width: 12 },
@@ -393,6 +465,57 @@ export default function ExportAllTasksExcelButton({
         pattern: "solid",
         fgColor: { argb: estadoFillColor(item.estado as EstadoEmpresa) },
       };
+    });
+
+    const sinTareaSinAgenteWs = workbook.addWorksheet("Sin_tarea_sin_agente");
+    sinTareaSinAgenteWs.columns = [
+      { header: "Periodo", key: "periodo", width: 18 },
+      { header: "Area", key: "area", width: 18 },
+      { header: "Codigo", key: "codigo", width: 16 },
+      { header: "Tarea", key: "tarea", width: 34 },
+      { header: "RutEmpresa", key: "rut", width: 18 },
+      { header: "RazonSocial", key: "razonSocial", width: 34 },
+      { header: "Estado", key: "estado", width: 16 },
+      { header: "TieneTarea", key: "tieneTarea", width: 12 },
+      { header: "TieneAgente", key: "tieneAgente", width: 12 },
+    ];
+
+    const soloSinTareaSinAgente = rows.filter(
+      (r) => r.Estado === "NO_INICIADA" && r.TieneTarea === "No" && r.TieneAgente === "No"
+    );
+
+    sinTareaSinAgenteWs.addRow([
+      "Periodo",
+      "Area",
+      "Codigo",
+      "Tarea",
+      "RutEmpresa",
+      "RazonSocial",
+      "Estado",
+      "TieneTarea",
+      "TieneAgente",
+    ]);
+
+    const sinHeader = sinTareaSinAgenteWs.getRow(1);
+    sinHeader.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sinHeader.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "92400E" },
+    };
+
+    soloSinTareaSinAgente.forEach((r) => {
+      sinTareaSinAgenteWs.addRow([
+        r.Periodo,
+        r.Area,
+        r.Codigo,
+        r.Tarea,
+        r.RutEmpresa,
+        r.RazonSocial,
+        r.Estado,
+        r.TieneTarea,
+        r.TieneAgente,
+      ]);
     });
 
     const buffer = await workbook.xlsx.writeBuffer();

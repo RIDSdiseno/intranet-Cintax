@@ -33,6 +33,11 @@ type Props = {
 type Tone = "ok" | "warn" | "bad" | "neutral";
 type EstadoEmpresa = "VENCIDA" | "PENDIENTE" | "EN_PROCESO" | "COMPLETADA" | "NO_INICIADA";
 
+type EmpresaSinTarea = {
+  rut: string;
+  razonSocial: string;
+};
+
 const SpinnerSmall: React.FC<{ label?: string }> = ({ label = "Cargando..." }) => (
   <div className="flex items-center gap-2 text-xs text-black/60">
     <div className="relative flex h-5 w-5 items-center justify-center">
@@ -57,7 +62,40 @@ const Badge: React.FC<{ children: React.ReactNode; tone?: Tone }> = ({ children,
 };
 
 const norm = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+const normalizeRut = (rut?: string | null) =>
+  String(rut ?? "")
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/-/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+
+function displayRazonSocial(razonSocial?: string | null, rut?: string | null) {
+  const rs = String(razonSocial ?? "").trim();
+  const rutNorm = normalizeRut(rut);
+  const rsNorm = normalizeRut(rs);
+
+  if (!rs) return "Sin razón social";
+  if (rsNorm && rutNorm && rsNorm === rutNorm) return "Sin razón social";
+  return rs;
+}
+
+function getTrabajadorId(t: any): number | null {
+  return (
+    t?.trabajadorId ??
+    t?.id_trabajador ??
+    t?.asignado?.id_trabajador ??
+    t?.trabajador?.id ??
+    t?.trabajador?.id_trabajador ??
+    null
+  );
+}
 
 function getTaskKey(t: TareaFull) {
   const pid = (t as any)?.tareaPlantilla?.id ?? (t as any)?.tareaPlantilla?.id_tarea_plantilla;
@@ -231,6 +269,7 @@ export default function TaskSupervisionPanel({
   const [selectedTaskKey, setSelectedTaskKey] = useState<string | null>(null);
 
   const [empresaSearch, setEmpresaSearch] = useState("");
+  const [empresasSinTareaSearch, setEmpresasSinTareaSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<"ALL" | EstadoEmpresa>("ALL");
   const [selectedRut, setSelectedRut] = useState<string | null>(null);
 
@@ -282,36 +321,40 @@ export default function TaskSupervisionPanel({
     for (const t of tareasGlobalesFiltradas) {
       if (getTaskKey(t) !== selectedTaskKey) continue;
 
-      const rut = (t.rutCliente || "SIN_RUT") as string;
+      const rut = normalizeRut((t as any)?.rutCliente || "SIN_RUT");
+      if (!rut) continue;
+
       if (!byRut.has(rut)) byRut.set(rut, []);
       byRut.get(rut)!.push(t);
     }
 
+    const razonSocialByRut = new Map<string, string>();
+    for (const e of carteraGlobal) {
+      const rutNorm = normalizeRut(e.rut);
+      if (!rutNorm) continue;
+      if (!razonSocialByRut.has(rutNorm)) {
+        razonSocialByRut.set(rutNorm, displayRazonSocial(e.razonSocial, e.rut));
+      }
+    }
+
     const out: RowEmpresa[] = [];
 
-    for (const e of carteraGlobal) {
-      const inst = byRut.get(e.rut) || [];
+    for (const [rutNorm, inst] of byRut.entries()) {
+      if (!inst.length) continue;
 
-      if (inst.length === 0) {
-        out.push({
-          rut: e.rut,
-          razonSocial: e.razonSocial,
-          estado: "NO_INICIADA",
-          fechaComprometida: null,
-          atrasoDias: null,
-          abiertas: 0,
-          agentes: [],
-          tareas: [],
-        });
-        continue;
-      }
+      const razonSocialRaw =
+        razonSocialByRut.get(rutNorm) ||
+        carteraGlobal.find((x) => normalizeRut(x.rut) === rutNorm)?.razonSocial ||
+        null;
+
+      const razonSocial = displayRazonSocial(razonSocialRaw, rutNorm);
 
       const abiertasList = inst.filter((x) => x.estado !== "COMPLETADA");
       const completadasList = inst.filter((x) => x.estado === "COMPLETADA");
 
       const agentesCount = new Map<number, number>();
-      for (const t of abiertasList as any[]) {
-        const tid = t.trabajadorId;
+      for (const t of inst as any[]) {
+        const tid = getTrabajadorId(t);
         if (!tid) continue;
         agentesCount.set(tid, (agentesCount.get(tid) || 0) + 1);
       }
@@ -326,8 +369,8 @@ export default function TaskSupervisionPanel({
 
       if (abiertasList.length === 0 && completadasList.length > 0) {
         out.push({
-          rut: e.rut,
-          razonSocial: e.razonSocial,
+          rut: rutNorm,
+          razonSocial,
           estado: "COMPLETADA",
           fechaComprometida: null,
           atrasoDias: 0,
@@ -348,8 +391,8 @@ export default function TaskSupervisionPanel({
       const fecha = pickFechaMasProxima(abiertasList.map((x) => x.fechaProgramada));
 
       out.push({
-        rut: e.rut,
-        razonSocial: e.razonSocial,
+        rut: rutNorm,
+        razonSocial,
         estado,
         fechaComprometida: fecha,
         atrasoDias: calcAtrasoDias(fecha),
@@ -379,30 +422,67 @@ export default function TaskSupervisionPanel({
     });
   }, [selectedTaskKey, tareasGlobalesFiltradas, carteraGlobal, agentesMap]);
 
+  const empresasSinTarea = useMemo<EmpresaSinTarea[]>(() => {
+    if (!selectedTaskKey) return [];
+
+    const rutsConTarea = new Set(empresasPorTarea.map((e) => normalizeRut(e.rut)).filter(Boolean));
+
+    const map = new Map<string, EmpresaSinTarea>();
+
+    for (const e of carteraGlobal) {
+      const rutNorm = normalizeRut(e.rut);
+      if (!rutNorm) continue;
+      if (rutsConTarea.has(rutNorm)) continue;
+
+      if (!map.has(rutNorm)) {
+        map.set(rutNorm, {
+          rut: rutNorm,
+          razonSocial: displayRazonSocial(e.razonSocial, e.rut),
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+  }, [selectedTaskKey, empresasPorTarea, carteraGlobal]);
+
   const counters = useMemo(() => {
     const base = empresasPorTarea;
     return {
       venc: base.filter((x) => x.estado === "VENCIDA").length,
       pend: base.filter((x) => x.estado === "PENDIENTE").length,
       proc: base.filter((x) => x.estado === "EN_PROCESO").length,
-      noini: base.filter((x) => x.estado === "NO_INICIADA").length,
+      noini: empresasSinTarea.length,
       comp: base.filter((x) => x.estado === "COMPLETADA").length,
     };
-  }, [empresasPorTarea]);
+  }, [empresasPorTarea, empresasSinTarea]);
 
   const empresasFiltradas = useMemo(() => {
     const term = norm(empresaSearch);
+
+    if (estadoFilter === "NO_INICIADA") {
+      const base = empresasSinTarea;
+      if (!term) return base as any;
+      return base.filter((r) => norm(`${r.razonSocial} ${r.rut}`).includes(term)) as any;
+    }
+
     let base = empresasPorTarea;
 
     if (estadoFilter !== "ALL") base = base.filter((r) => r.estado === estadoFilter);
     if (!term) return base;
 
     return base.filter((r) => norm(`${r.razonSocial} ${r.rut}`).includes(term));
-  }, [empresasPorTarea, empresaSearch, estadoFilter]);
+  }, [empresasPorTarea, empresasSinTarea, empresaSearch, estadoFilter]);
+
+  const empresasSinTareaFiltradas = useMemo(() => {
+    const term = norm(empresasSinTareaSearch);
+    if (!term) return empresasSinTarea;
+    return empresasSinTarea.filter((r) => norm(`${r.razonSocial} ${r.rut}`).includes(term));
+  }, [empresasSinTarea, empresasSinTareaSearch]);
 
   const selectedEmpresa = useMemo(() => {
     if (!selectedRut) return null;
-    return empresasPorTarea.find((x) => x.rut === selectedRut) || null;
+    const rutNorm = normalizeRut(selectedRut);
+    return empresasPorTarea.find((x) => normalizeRut(x.rut) === rutNorm) || null;
   }, [selectedRut, empresasPorTarea]);
 
   const groupedByAgente = useMemo(() => {
@@ -411,7 +491,7 @@ export default function TaskSupervisionPanel({
     const map = new Map<number, TareaFull[]>();
 
     (selectedEmpresa.tareas as any[]).forEach((t) => {
-      const tid = t.trabajadorId || 0;
+      const tid = getTrabajadorId(t) || 0;
       if (!map.has(tid)) map.set(tid, []);
       map.get(tid)!.push(t);
     });
@@ -439,7 +519,9 @@ export default function TaskSupervisionPanel({
         <div>
           <div className="text-xs text-black/50">Módulo</div>
           <div className="text-sm font-semibold text-[#1d1e1c]">Consolidado por tarea</div>
-          <div className="text-xs text-black/60 mt-1">Tarea → Empresas (con agente) → Detalle por empresa</div>
+          <div className="text-xs text-black/60 mt-1">
+            Tarea → Empresas con tarea asignada → Detalle por empresa
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -477,6 +559,7 @@ export default function TaskSupervisionPanel({
             estadoFilter={estadoFilter}
             empresaSearch={empresaSearch}
             empresasFiltradas={empresasFiltradas as any}
+            empresasSinTarea={empresasSinTareaFiltradas as any}
             detalleEmpresa={selectedEmpresa as any}
             groupedByAgente={groupedByAgente as any}
             formatFecha={formatFecha}
@@ -546,6 +629,7 @@ export default function TaskSupervisionPanel({
                     setSelectedTaskKey(t.key);
                     setSelectedRut(null);
                     setEmpresaSearch("");
+                    setEmpresasSinTareaSearch("");
                     setEstadoFilter("ALL");
                   }}
                   className={`w-full text-left px-4 py-3 border-b border-black/5 transition ${
@@ -594,13 +678,14 @@ export default function TaskSupervisionPanel({
                   <input
                     value={empresaSearch}
                     onChange={(e) => setEmpresaSearch(e.target.value)}
-                    placeholder="2) Buscar empresa (rut o razón social)..."
+                    placeholder="2) Buscar empresa con tarea (rut o razón social)..."
                     className="w-full md:w-80 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
                   />
 
                   <button
                     onClick={() => {
                       setEmpresaSearch("");
+                      setEmpresasSinTareaSearch("");
                       setEstadoFilter("ALL");
                       setSelectedRut(null);
                     }}
@@ -613,8 +698,10 @@ export default function TaskSupervisionPanel({
 
               <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
                 <div className="px-4 py-3 bg-[#f5f4f0] border-b border-black/5 flex items-center justify-between">
-                  <div className="text-xs font-semibold text-[#1d1e1c]">2) Empresas</div>
-                  <Badge tone="neutral">{empresasFiltradas.length}</Badge>
+                  <div className="text-xs font-semibold text-[#1d1e1c]">2) Empresas con esta tarea</div>
+                  <Badge tone="neutral">
+                    {estadoFilter === "NO_INICIADA" ? 0 : empresasFiltradas.length}
+                  </Badge>
                 </div>
 
                 <div className="max-h-[320px] overflow-auto">
@@ -630,54 +717,69 @@ export default function TaskSupervisionPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {empresasFiltradas.map((e) => (
-                        <tr
-                          key={e.rut}
-                          className={`border-t border-black/5 cursor-pointer hover:bg-black/[0.02] ${
-                            selectedRut === e.rut ? "bg-sky-50" : "bg-white"
-                          }`}
-                          onClick={() => setSelectedRut((prev) => (prev === e.rut ? null : e.rut))}
-                        >
-                          <td className="px-4 py-2">
-                            <div className="font-semibold text-[#1d1e1c] truncate">{e.razonSocial}</div>
-                            <div className="text-[11px] text-black/50">{e.rut}</div>
-                          </td>
+                      {estadoFilter !== "NO_INICIADA" &&
+                        (empresasFiltradas as RowEmpresa[]).map((e) => (
+                          <tr
+                            key={e.rut}
+                            className={`border-t border-black/5 cursor-pointer hover:bg-black/[0.02] ${
+                              selectedRut && normalizeRut(selectedRut) === normalizeRut(e.rut) ? "bg-sky-50" : "bg-white"
+                            }`}
+                            onClick={() =>
+                              setSelectedRut((prev) =>
+                                prev && normalizeRut(prev) === normalizeRut(e.rut) ? null : e.rut
+                              )
+                            }
+                          >
+                            <td className="px-4 py-2">
+                              <div className="font-semibold text-[#1d1e1c] truncate">{e.razonSocial}</div>
+                              <div className="text-[11px] text-black/50">{e.rut}</div>
+                            </td>
 
-                          <td className="px-4 py-2">
-                            {e.agentes.length === 0 ? (
-                              <span className="text-[11px] text-black/40">-</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {e.agentes.slice(0, 2).map((a) => (
-                                  <Badge key={a.trabajadorId} tone="neutral">
-                                    {a.nombre} · {a.abiertas}
-                                  </Badge>
-                                ))}
-                                {e.agentes.length > 2 && <Badge tone="neutral">+{e.agentes.length - 2}</Badge>}
-                              </div>
-                            )}
-                          </td>
+                            <td className="px-4 py-2">
+                              {e.agentes.length === 0 ? (
+                                <span className="text-[11px] text-black/40">-</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {e.agentes.slice(0, 2).map((a) => (
+                                    <Badge key={a.trabajadorId} tone="neutral">
+                                      {a.nombre} · {a.abiertas}
+                                    </Badge>
+                                  ))}
+                                  {e.agentes.length > 2 && <Badge tone="neutral">+{e.agentes.length - 2}</Badge>}
+                                </div>
+                              )}
+                            </td>
 
-                          <td className="px-4 py-2 text-center">
-                            <Badge tone={toneEstado(e.estado)}>{labelEstado(e.estado)}</Badge>
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            {e.fechaComprometida ? formatFecha(e.fechaComprometida) : "-"}
-                          </td>
-                          <td className="px-4 py-2 text-center">{e.atrasoDias === null ? "-" : String(e.atrasoDias)}</td>
-                          <td className="px-4 py-2 text-center">{e.abiertas}</td>
-                        </tr>
-                      ))}
+                            <td className="px-4 py-2 text-center">
+                              <Badge tone={toneEstado(e.estado)}>{labelEstado(e.estado)}</Badge>
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {e.fechaComprometida ? formatFecha(e.fechaComprometida) : "-"}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {e.atrasoDias === null ? "-" : String(e.atrasoDias)}
+                            </td>
+                            <td className="px-4 py-2 text-center">{e.abiertas}</td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
 
-                  {!empresasFiltradas.length && (
-                    <div className="p-4 text-xs text-black/60">No hay empresas para esos filtros.</div>
+                  {estadoFilter !== "NO_INICIADA" && !(empresasFiltradas as RowEmpresa[]).length && (
+                    <div className="p-4 text-xs text-black/60">
+                      No hay empresas con esta tarea para esos filtros.
+                    </div>
+                  )}
+
+                  {estadoFilter === "NO_INICIADA" && (
+                    <div className="p-4 text-xs text-black/60">
+                      El filtro “No inic” se muestra en el módulo de empresas sin tarea.
+                    </div>
                   )}
                 </div>
               </div>
 
-              {selectedEmpresa && (
+              {selectedEmpresa && estadoFilter !== "NO_INICIADA" && (
                 <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-[#f5f4f0] border-b border-black/5 flex items-center justify-between">
                     <div>
@@ -716,7 +818,10 @@ export default function TaskSupervisionPanel({
                             <tbody>
                               {g.tareas.map((t: any) => (
                                 <tr
-                                  key={t.id_tarea_asignada ?? `${t.rutCliente}-${t.fechaProgramada}-${Math.random()}`}
+                                  key={
+                                    t.id_tarea_asignada ??
+                                    `${normalizeRut(t.rutCliente)}-${getTaskKey(t)}-${String(t.fechaProgramada ?? "")}`
+                                  }
                                   className="border-t border-black/5"
                                 >
                                   <td className="px-4 py-2 text-black/70">{t.tareaPlantilla?.codigoDocumento || "-"}</td>
@@ -752,19 +857,71 @@ export default function TaskSupervisionPanel({
                     ))}
 
                     {groupedByAgente.length === 0 && (
-                      <div className="text-xs text-black/60">No hay instancias para este cliente.</div>
+                      <div className="text-xs text-black/60">
+                        No hay instancias con trabajador asociado para este cliente en esta tarea.
+                      </div>
                     )}
                   </div>
                 </div>
               )}
+
+              <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-4 py-3 bg-[#f5f4f0] border-b border-black/5 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-[#1d1e1c]">4) Empresas sin esta tarea</div>
+                  <Badge tone="warn">{empresasSinTareaFiltradas.length}</Badge>
+                </div>
+
+                <div className="p-4 border-b border-black/5 bg-white">
+                  <input
+                    value={empresasSinTareaSearch}
+                    onChange={(e) => setEmpresasSinTareaSearch(e.target.value)}
+                    placeholder="Buscar empresa sin tarea (rut o razón social)..."
+                    className="w-full md:w-80 text-xs bg-white border border-black/10 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#af9150] text-[#1d1e1c]"
+                  />
+                </div>
+
+                <div className="max-h-[300px] overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-black/60 bg-white">
+                        <th className="text-left px-4 py-2">Empresa</th>
+                        <th className="text-left px-4 py-2">RUT</th>
+                        <th className="text-center px-4 py-2">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {empresasSinTareaFiltradas.map((e) => (
+                        <tr key={e.rut} className="border-t border-black/5 bg-white">
+                          <td className="px-4 py-2">
+                            <div className="font-semibold text-[#1d1e1c] truncate">{e.razonSocial}</div>
+                          </td>
+                          <td className="px-4 py-2 text-black/60">{e.rut}</td>
+                          <td className="px-4 py-2 text-center">
+                            <Badge tone="warn">No tiene tarea</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {!empresasSinTareaFiltradas.length && (
+                    <div className="p-4 text-xs text-black/60">
+                      Todas las empresas visibles ya tienen esta tarea o no hay coincidencias con la búsqueda.
+                    </div>
+                  )}
+                </div>
+              </div>
             </>
           )}
         </div>
       </div>
 
       <div className="text-[11px] text-black/50">
-        Nota: si la columna “Agente(s)” sale “-”, revisa que tu API esté devolviendo{" "}
-        <span className="font-semibold">trabajadorId</span> en cada tarea.
+        Nota: en esta vista superior solo se muestran empresas que sí tienen la tarea asignada. El módulo “Empresas sin
+        esta tarea” lista explícitamente las que no la tienen creada para el período consultado. Si la columna
+        “Agente(s)” sale “-”, la tarea existe pero la API no está devolviendo un{" "}
+        <span className="font-semibold">trabajadorId</span> resoluble para esas instancias. Si una empresa no tiene
+        razón social válida, se mostrará como <span className="font-semibold">Sin razón social</span>.
       </div>
     </div>
   );

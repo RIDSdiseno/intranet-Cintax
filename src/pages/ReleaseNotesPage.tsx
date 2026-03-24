@@ -13,6 +13,20 @@ type ReleaseNote = {
 const NOTES: ReleaseNote[] = [
   // ✅ ÚLTIMA VERSIÓN
   {
+    version: "v1.9",
+    date: "2026-03-24",
+    title: "Mejoras en supervisión por tarea: empresas sin tarea y exportaciones avanzadas",
+    items: [
+      "Se agrega módulo 'Empresas sin esta tarea' en la vista de supervisión por tarea, mostrando explícitamente las empresas que no tienen la tarea asignada para el período consultado.",
+      "Se mejora la búsqueda y filtrado, con búsquedas separadas para empresas con tarea y sin tarea.",
+      "Se optimiza la normalización de RUT y razón social para evitar duplicados y mejorar la consistencia de datos.",
+      "Se actualizan las exportaciones Excel con nuevas columnas ('Tiene tarea', 'Tiene agente') y hojas adicionales ('Sin_tarea_sin_agente') para un análisis más completo.",
+      "Se mejora la lógica de resolución de agentes y estados para una supervisión más precisa.",
+    ],
+    tag: "mejora",
+  },
+
+  {
     version: "v1.8",
     date: "2026-03-20",
     title: "Cierre de tareas: desactivación y reactivación de tareas",

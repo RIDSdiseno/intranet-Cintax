@@ -22,6 +22,11 @@ type RowEmpresa = {
   tareas: TareaFull[];
 };
 
+type EmpresaSinTarea = {
+  rut: string;
+  razonSocial: string;
+};
+
 type GroupedByAgente = Array<{
   trabajadorId: number;
   nombre: string;
@@ -35,10 +40,9 @@ type Props = {
   estadoFilter: "ALL" | EstadoEmpresa;
   empresaSearch: string;
 
-  // ✅ ya vienen filtradas desde el panel
   empresasFiltradas: RowEmpresa[];
+  empresasSinTarea: EmpresaSinTarea[];
 
-  // si hay empresa seleccionada, exporta detalle
   detalleEmpresa: RowEmpresa | null;
   groupedByAgente: GroupedByAgente;
 
@@ -48,6 +52,7 @@ type Props = {
 function safeSheetName(name: string) {
   return name.replace(/[:\\/?*\[\]]/g, " ").slice(0, 31).trim() || "Hoja";
 }
+
 function toIsoLocalFilename() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -68,7 +73,6 @@ function applyTableStyles(ws: XLSX.WorkSheet, headerFillRgb: string, colWidths: 
   if (!ref) return;
   const range = XLSX.utils.decode_range(ref);
 
-  // Header row
   for (let c = range.s.c; c <= range.e.c; c++) {
     const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
     const cell = ws[addr] as any;
@@ -81,7 +85,6 @@ function applyTableStyles(ws: XLSX.WorkSheet, headerFillRgb: string, colWidths: 
     } as any;
   }
 
-  // Body rows (zebra + borders)
   for (let r = range.s.r + 1; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
@@ -100,14 +103,9 @@ function applyTableStyles(ws: XLSX.WorkSheet, headerFillRgb: string, colWidths: 
     }
   }
 
-  // Column widths
   (ws as any)["!cols"] = colWidths.map((wch) => ({ wch }));
-
-  // Freeze top row + autofilter
   (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
   (ws as any)["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
-
-  // row height for header
   (ws as any)["!rows"] = (ws as any)["!rows"] || [];
   (ws as any)["!rows"][0] = { hpt: 22 };
 }
@@ -155,6 +153,7 @@ export default function ExportTaskExcelButton({
   estadoFilter,
   empresaSearch,
   empresasFiltradas,
+  empresasSinTarea,
   detalleEmpresa,
   groupedByAgente,
   formatFecha,
@@ -168,7 +167,6 @@ export default function ExportTaskExcelButton({
   const onExport = () => {
     const wb = XLSX.utils.book_new();
 
-    // ===== Resumen =====
     const resumenRows = [
       { Campo: "Periodo", Valor: periodoLabel },
       { Campo: "Tarea", Valor: selectedTaskMeta?.nombre || "-" },
@@ -176,15 +174,15 @@ export default function ExportTaskExcelButton({
       { Campo: "Código", Valor: selectedTaskMeta?.codigo || "-" },
       { Campo: "Filtro estado", Valor: estadoFilter === "ALL" ? "Sin filtro" : estadoFilter },
       { Campo: "Buscar empresa", Valor: empresaSearch?.trim() || "-" },
-      { Campo: "Empresas visibles", Valor: empresasFiltradas.length },
+      { Campo: "Empresas con tarea", Valor: empresasFiltradas.length },
+      { Campo: "Empresas sin tarea y sin agente", Valor: empresasSinTarea.length },
       { Campo: "Exportado", Valor: new Date().toLocaleString("es-CL") },
     ];
 
     const wsResumen = XLSX.utils.json_to_sheet(resumenRows);
-    applyTableStyles(wsResumen, "AF9150", [22, 60]);
+    applyTableStyles(wsResumen, "AF9150", [30, 60]);
     XLSX.utils.book_append_sheet(wb, wsResumen, safeSheetName("Resumen"));
 
-    // ===== Empresas (filtradas) =====
     const empresasRows = (empresasFiltradas || []).map((e) => ({
       RUT: e.rut,
       "Razón social": e.razonSocial,
@@ -192,19 +190,32 @@ export default function ExportTaskExcelButton({
       "Fecha comprometida": e.fechaComprometida ? formatFecha(e.fechaComprometida) : "-",
       "Atraso (días)": e.atrasoDias ?? "",
       Abiertas: e.abiertas,
-      "Agentes (top)": (e.agentes || [])
-        .slice(0, 3)
-        .map((a) => `${a.nombre} (${a.abiertas})`)
-        .join(" | "),
+      "Agentes (top)": (e.agentes || []).length
+        ? (e.agentes || [])
+            .slice(0, 3)
+            .map((a) => `${a.nombre} (${a.abiertas})`)
+            .join(" | ")
+        : "Sin agente",
     }));
 
     const wsEmpresas = XLSX.utils.json_to_sheet(empresasRows);
     applyTableStyles(wsEmpresas, "111827", [14, 40, 14, 18, 12, 10, 50]);
-    // Estado está en col 2 (0-based)
     colorizeColumnByEstado(wsEmpresas, 2);
-    XLSX.utils.book_append_sheet(wb, wsEmpresas, safeSheetName("Empresas"));
+    XLSX.utils.book_append_sheet(wb, wsEmpresas, safeSheetName("Empresas_con_tarea"));
 
-    // ===== Detalle de empresa seleccionada =====
+    const empresasSinRows = (empresasSinTarea || []).map((e) => ({
+      RUT: e.rut,
+      "Razón social": e.razonSocial,
+      Estado: "NO_INICIADA",
+      "Tiene tarea": "No",
+      "Tiene agente": "No",
+    }));
+
+    const wsSin = XLSX.utils.json_to_sheet(empresasSinRows);
+    applyTableStyles(wsSin, "92400E", [14, 40, 14, 14, 14]);
+    colorizeColumnByEstado(wsSin, 2);
+    XLSX.utils.book_append_sheet(wb, wsSin, safeSheetName("Empresas_sin_tarea"));
+
     if (detalleEmpresa) {
       const tareasDet = (detalleEmpresa.tareas || []).map((t: any) => ({
         ID: t.id_tarea_asignada ?? "",
@@ -212,8 +223,8 @@ export default function ExportTaskExcelButton({
         Estado: t.estado ?? "",
         "Fecha programada": formatFecha(t.fechaProgramada ?? null),
         "Fecha compleción": formatFecha(getFechaComplecion(t)),
-        "Código": t.tareaPlantilla?.codigoDocumento ?? "-",
-        "Área": t.tareaPlantilla?.area ?? "-",
+        Código: t.tareaPlantilla?.codigoDocumento ?? "-",
+        Área: t.tareaPlantilla?.area ?? "-",
         Tarea: t.tareaPlantilla?.nombre ?? "-",
         Comentarios: t.comentarios ?? "",
         "Trabajador ID": t.trabajadorId ?? "",
@@ -225,7 +236,6 @@ export default function ExportTaskExcelButton({
       XLSX.utils.book_append_sheet(wb, wsDet, safeSheetName(`Detalle_${detalleEmpresa.rut}`));
     }
 
-    // ===== Detalle por agente (si hay empresa seleccionada) =====
     if (detalleEmpresa && groupedByAgente?.length) {
       const rows: any[] = [];
       groupedByAgente.forEach((g) => {
@@ -236,8 +246,8 @@ export default function ExportTaskExcelButton({
             Estado: t.estado ?? "",
             "Fecha programada": formatFecha(t.fechaProgramada ?? null),
             "Fecha compleción": formatFecha(getFechaComplecion(t)),
-            "Código": t.tareaPlantilla?.codigoDocumento ?? "-",
-            "Área": t.tareaPlantilla?.area ?? "-",
+            Código: t.tareaPlantilla?.codigoDocumento ?? "-",
+            Área: t.tareaPlantilla?.area ?? "-",
             Tarea: t.tareaPlantilla?.nombre ?? "-",
           });
         });
@@ -268,7 +278,7 @@ export default function ExportTaskExcelButton({
         ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-[#af9150] active:scale-[0.99]"}
         focus:outline-none focus:ring-2 focus:ring-[#af9150]/40 focus:ring-offset-2
       `}
-      title="Exportar Excel (respeta filtros activos)"
+      title="Exportar Excel (incluye empresas con tarea y empresas sin tarea ni agente)"
     >
       Exportar Excel
     </button>

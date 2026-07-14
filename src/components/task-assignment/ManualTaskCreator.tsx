@@ -73,6 +73,7 @@ function parseUiResult(raw: any): UiResult | null {
 
 export default function ManualTaskCreator() {
   const [loading, setLoading] = React.useState(true);
+  const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // guardamos el raw por si quieres debug, pero renderizamos una vista amigable
@@ -175,6 +176,8 @@ export default function ManualTaskCreator() {
   }
 
   async function onCrear() {
+    if (creating) return;
+
     try {
       setError(null);
       setResultRaw(null);
@@ -184,6 +187,8 @@ export default function ManualTaskCreator() {
       if (!paso2Ok) return setError("Selecciona al menos un cliente.");
       if (!paso3Ok) return setError("Selecciona al menos una plantilla.");
       if (!fechaProgramada) return setError("Selecciona una fecha programada.");
+
+      setCreating(true);
 
       // IMPORTANTE: este alias llama a crearDesdePlantillaMasivo (en el service actualizado),
       // que por defecto apunta al endpoint SAFE (/tareas/masivo/crear-desde-plantilla-safe).
@@ -203,13 +208,26 @@ export default function ManualTaskCreator() {
           e?.message ??
           "Error creando tareas"
       );
+    } finally {
+      setCreating(false);
     }
   }
 
   if (loading) return <div className="text-sm text-gray-500">Cargando...</div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {creating && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex flex-col items-center justify-center gap-3"
+          aria-live="assertive"
+          aria-busy="true"
+        >
+          <span className="h-10 w-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+          <div className="text-white text-sm font-medium">Creando tareas, por favor espera...</div>
+        </div>
+      )}
+
       {error && <div className="text-sm text-red-600">{error}</div>}
 
       {/* PASO 1: Trabajador */}
@@ -370,9 +388,13 @@ export default function ManualTaskCreator() {
           <button
             type="button"
             onClick={onCrear}
-            className="bg-gray-900 text-white rounded-xl px-4 py-2 text-sm hover:bg-black"
+            disabled={creating}
+            className="bg-gray-900 text-white rounded-xl px-4 py-2 text-sm hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
-            Crear tareas
+            {creating && (
+              <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            )}
+            {creating ? "Creando tareas..." : "Crear tareas"}
           </button>
         </div>
       )}

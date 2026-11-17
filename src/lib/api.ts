@@ -95,6 +95,36 @@ export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> 
   }
 }
 
+/**
+ * Saca el mensaje que escribio el servidor del error que lanza `fetchJSON`.
+ *
+ * `fetchJSON` arma el Error pegando la URL y el cuerpo crudo en el texto (ver
+ * el `throw` de arriba), asi que el motivo real queda sepultado ahi dentro.
+ * Mostrarlo importa: es la diferencia entre que el usuario entienda que
+ * llego a su limite diario y que crea que la pantalla esta rota.
+ *
+ * Vive aca y no en el modulo que la necesita porque el formato que parsea lo
+ * define `fetchJSON`, justo arriba. Separarlos es la forma de que un dia
+ * alguien cambie ese `throw` y esto deje de funcionar sin que nadie lo note.
+ *
+ * Se busca el cuerpo JSON dentro del mensaje en vez de cambiar `fetchJSON`,
+ * que lo usan casi todos los modulos y tocarlo los afectaria a todos.
+ */
+export function mensajeDeErrorApi(err: unknown, porDefecto: string): string {
+  const texto = err instanceof Error ? err.message : "";
+  const inicio = texto.indexOf("{");
+  if (inicio === -1) return porDefecto;
+
+  try {
+    const data = JSON.parse(texto.slice(inicio)) as { error?: unknown };
+    if (typeof data.error === "string" && data.error.trim()) return data.error;
+  } catch {
+    /* no venia JSON: se usa el mensaje por defecto */
+  }
+
+  return porDefecto;
+}
+
 export const mapEstadoLabel = (estado: EstadoBack) => {
   switch (estado) {
     case "PENDIENTE":

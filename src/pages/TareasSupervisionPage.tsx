@@ -1,5 +1,6 @@
 // src/pages/TareasSupervisionPage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { API_BASE_URL, fetchJSON, TareaFull, ResumenAgente } from "../lib/api";
 import { filtrarPorPeriodo, Periodo } from "../components/supervision/usePeriodo";
@@ -9,6 +10,69 @@ import AgentSupervisionPanel from "./supervision/views/panels/AgentSupervisionPa
 import TaskSupervisionPanel from "./supervision/views/panels/TaskSupervisionPanel";
 
 type RutCliente = { rut: string; razonSocial?: string | null };
+
+// =========================
+// Entrada por enlace (?modo=&agente=&estado=)
+// =========================
+//
+// Esta pantalla acepta llegar ya posicionada. La usa el boton del asistente:
+// si te dijo "Diego tiene 32 atrasadas", el enlace trae agente y estado para
+// que veas esas 32 y no las cuarenta mil de la empresa.
+//
+// Ojo con el alcance, que es a proposito mas chico que en la pestana de
+// tickets: aca la URL **solo se lee al montar**, no se escribe. Los filtros
+// siguen viviendo en estado de React y cambiarlos no actualiza la barra de
+// direcciones. Invertir eso significaria mover doce campos (los ocho de
+// `GlobalFilters` mas modo, vista, periodo y agente) en una pantalla que
+// ademas filtra en memoria; es otro trabajo. Lo que si funciona hoy es
+// entrar desde fuera con el filtro puesto, que es lo que hacia falta.
+
+const ESTADOS_VALIDOS = [
+  "PENDIENTE",
+  "EN_PROCESO",
+  "VENCIDA",
+  "COMPLETADA",
+] as const;
+
+/** Todos los estados encendidos: el valor por defecto de la pantalla. */
+function todosLosEstados(): GlobalFilters["estado"] {
+  return {
+    PENDIENTE: true,
+    EN_PROCESO: true,
+    VENCIDA: true,
+    COMPLETADA: true,
+    NO_APLICA: true,
+  };
+}
+
+/**
+ * Estados a partir de `?estado=`.
+ *
+ * El filtro de la pantalla es un registro de booleanos, no un valor: dejar
+ * "solo vencidas" es apagar los otros cuatro, no encender uno. Un valor que
+ * no se reconozca deja todo encendido, que es como si no se hubiera pedido
+ * nada: la URL la puede escribir cualquiera.
+ */
+function estadosDesdeUrl(crudo: string | null): GlobalFilters["estado"] {
+  const pedido = String(crudo ?? "").trim().toUpperCase();
+  if (!(ESTADOS_VALIDOS as readonly string[]).includes(pedido)) {
+    return todosLosEstados();
+  }
+
+  return {
+    PENDIENTE: pedido === "PENDIENTE",
+    EN_PROCESO: pedido === "EN_PROCESO",
+    VENCIDA: pedido === "VENCIDA",
+    COMPLETADA: pedido === "COMPLETADA",
+    NO_APLICA: false,
+  };
+}
+
+/** `?agente=12` -> 12. Cualquier otra cosa, ninguno. */
+function agenteDesdeUrl(crudo: string | null): number | null {
+  const n = Number(crudo);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 // =========================
 // Auth helpers (frontend)
@@ -110,23 +174,32 @@ const TareasSupervisionPage: React.FC = () => {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [mainMode, setMainMode] = useState<MainMode | null>(null);
+  const [searchParams] = useSearchParams();
+
+  // Se lee una sola vez, en el initializer de cada estado. Sin efecto que
+  // copie la URL al estado: un efecto correria tambien despues del primer
+  // render y pisaria lo que el usuario acabara de elegir.
+  const agenteInicial = agenteDesdeUrl(searchParams.get("agente"));
+
+  const [mainMode, setMainMode] = useState<MainMode | null>(() => {
+    const modo = searchParams.get("modo");
+    if (modo === "agente" || modo === "tarea") return modo;
+    // Con un agente en la URL el modo se deduce: no tiene sentido llegar con
+    // `?agente=12` y quedarse en la pantalla de seleccion.
+    return agenteInicial !== null ? "agente" : null;
+  });
 
   const [agentView, setAgentView] = useState<AgentView>("dashboard");
-  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(
+    agenteInicial
+  );
 
   const [periodo, setPeriodo] = useState<Periodo>("actual");
   const [mesSelect, setMesSelect] = useState<number>(new Date().getMonth() + 1);
   const [anioSelect, setAnioSelect] = useState<number>(new Date().getFullYear());
 
-  const [filters, setFilters] = useState<GlobalFilters>({
-    estado: {
-      PENDIENTE: true,
-      EN_PROCESO: true,
-      VENCIDA: true,
-      COMPLETADA: true,
-      NO_APLICA: true,
-    },
+  const [filters, setFilters] = useState<GlobalFilters>(() => ({
+    estado: estadosDesdeUrl(searchParams.get("estado")),
     area: "ALL",
     search: "",
     dueMode: "ALL",
@@ -134,7 +207,7 @@ const TareasSupervisionPage: React.FC = () => {
     onlyBacklog: false,
     onlyCompleted: false,
     taskKey: "ALL",
-  });
+  }));
 
   const agentAbortRef = useRef<AbortController | null>(null);
   const globalAbortRef = useRef<AbortController | null>(null);

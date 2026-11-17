@@ -4,6 +4,8 @@ import axios from "axios";
 
 import Sidebar from "../components/sidebar/Sidebar";
 import NotificationsBell from "../components/NotificationsBell";
+import AsistenteFlotante from "../modules/asistente/components/AsistenteFlotante";
+import { puedeVerInformes } from "../lib/auth";
 import { Settings } from "lucide-react";
 
 const API_BASE_URL =
@@ -61,6 +63,9 @@ export default function AppShell() {
 
   const authPayload = getAuthPayload();
   const canSeeSupervisor = isSupervisorOrAdmin();
+  // Se lee de lib/auth y no del payload local porque este archivo tiene su
+  // propia copia del decodificador, que no conoce el campo nuevo.
+  const canSeeInformes = puedeVerInformes();
 
   const displayName =
     authPayload?.nombre ||
@@ -166,6 +171,7 @@ export default function AppShell() {
               <Sidebar
                 variant="mobile"
                 canSeeSupervisor={canSeeSupervisor}
+                canSeeInformes={canSeeInformes}
                 onLogout={handleLogout}
                 onNavigate={() => setSidebarOpen(false)}
               />
@@ -176,6 +182,7 @@ export default function AppShell() {
               <Sidebar
                 variant="desktop"
                 canSeeSupervisor={canSeeSupervisor}
+                canSeeInformes={canSeeInformes}
                 onLogout={handleLogout}
               />
             </aside>
@@ -223,7 +230,7 @@ export default function AppShell() {
             </div>
           )}
 
-          {/* ✅ aquí se renderizan las páginas */}
+          {/* aquí se renderizan las páginas */}
           <Outlet />
 
           {!hideChrome && (
@@ -233,6 +240,11 @@ export default function AppShell() {
           )}
         </main>
       </div>
+
+      {/* Asistente flotante: vive en el shell, no en una ruta, asi acompana
+          al usuario por toda la intranet y la conversacion no se pierde al
+          cambiar de pantalla. Fuera del login. */}
+      {!hideChrome && <AsistenteFlotante />}
     </div>
   );
 }

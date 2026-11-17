@@ -9,6 +9,7 @@ import {
   StickyNote,
 } from "lucide-react";
 import type { TicketRow } from "../types";
+import { etiquetaArea } from "../utils/areas";
 
 function getStatusClasses(status: string): string {
   switch (status) {
@@ -146,7 +147,9 @@ export default function TicketsTable({
                   <div className="flex flex-col gap-2 lg:items-end lg:min-w-[260px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-black/[0.03] border-black/10 text-black/65">
-                        {ticket.areaDetected || ticket.areaLabel || ticket.group}
+                        {ticket.areaLabel ||
+                          etiquetaArea(ticket.areaDetected) ||
+                          ticket.group}
                       </span>
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getStatusClasses(

@@ -215,10 +215,13 @@ export default function CreateTicketModal({
                   }
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--secondary-color)] focus:ring-2 focus:ring-[var(--secondary-color)]/20"
                 >
+                  {/* El `value` es el vocabulario interno del formulario; el
+                      texto visible usa los mismos nombres que las pestanas y
+                      el detalle (ver utils/areas.ts). */}
                   <option value="">--</option>
                   <option value="Contabilidad">Contabilidad</option>
-                  <option value="Tributaria">Tributaria</option>
-                  <option value="Laboral">Laboral</option>
+                  <option value="Tributaria">Comercial y Marketing</option>
+                  <option value="Laboral">Recursos Humanos</option>
                 </select>
                 {errors.area && <p className="mt-1 text-xs text-rose-600">{errors.area}</p>}
               </div>

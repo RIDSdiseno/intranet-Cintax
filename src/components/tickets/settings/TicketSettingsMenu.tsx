@@ -1,50 +1,20 @@
-import React from "react";
-import { Settings, Bot, UserRound, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import Dropdown from "./Dropdown";
-
 type TicketSettingsMenuProps = {
   isAdmin: boolean;
 };
 
-export default function TicketSettingsMenu({ isAdmin }: TicketSettingsMenuProps) {
-  const navigate = useNavigate();
-
-  if (!isAdmin) return null;
-
-  return (
-    <Dropdown
-      triggerLabel="Configuracion de Tickets"
-      align="right"
-      hideChevron
-      triggerContent={<Settings size={16} />}
-      triggerClassName="inline-flex h-[38px] w-[38px] items-center justify-center rounded-xl border border-black/10 bg-white text-black/70 shadow-sm transition hover:border-black/20 hover:text-black focus:outline-none focus:ring-2 focus:ring-[var(--secondary-color)]/30"
-      menuClassName="w-80"
-      items={[
-        {
-          id: "automations",
-          label: "Automatizaciones",
-          description:
-            "Elimine tareas repetitivas mediante creacion de reglas.",
-          icon: <Bot size={16} />,
-          onSelect: () => navigate("/tickets/settings/automations"),
-        },
-        {
-          id: "agents",
-          label: "Agentes",
-          description: "Defina el tipo, idioma y alcance de sus agentes.",
-          icon: <UserRound size={16} />,
-          onSelect: () => navigate("/admin/agentes"),
-        },
-        {
-          id: "groups",
-          label: "Grupos",
-          description:
-            "Organice a los agentes y reciba notificaciones por equipo.",
-          icon: <Users size={16} />,
-          onSelect: () => navigate("/tickets/settings/groups"),
-        },
-      ]}
-    />
-  );
+/**
+ * Menu de configuracion de la ticketera: hoy no tiene nada que ofrecer.
+ *
+ * Sus tres destinos (Automatizaciones, Agentes y Grupos) son maquetas que
+ * guardan en `localStorage` y no tienen backend, por eso sus rutas estan
+ * comentadas en `src/routes/AppRoutes.tsx`. Mientras siga asi, el menu abria
+ * un desplegable cuyas tres opciones caian en la pagina de "no encontrado".
+ *
+ * Cuando esas pantallas tengan persistencia real: descomentar las rutas en
+ * AppRoutes y reponer aca el <Dropdown> con los items
+ * `/tickets/settings/automations`, `/admin/agentes` y
+ * `/tickets/settings/groups` (ver historial de git de este archivo).
+ */
+export default function TicketSettingsMenu(_props: TicketSettingsMenuProps) {
+  return null;
 }

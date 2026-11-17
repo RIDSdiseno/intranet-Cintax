@@ -1,6 +1,6 @@
 // src/pages/BitacoraEquipoPage.tsx
 import { useEffect, useMemo, useState } from "react";
-import sanitizeHtml from "sanitize-html";
+import { htmlATexto, safeHtml } from "../utils/htmlSeguro";
 import {
   deleteClienteBitacoraById,
   getClienteBitacorasEquipo,
@@ -125,68 +125,6 @@ function canManageFromToken(): boolean {
   return role === "ADMIN" || role === "SUPERVISOR";
 }
 
-function compactHtml(raw: string) {
-  const html = raw || "";
-
-  let out = html.replace(/\r\n/g, "\n");
-  out = out.replace(/<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<br/>");
-  out = out.replace(/(<br\s*\/?>\s*){3,}/gi, "<br/><br/>");
-  out = out.replace(/^(<br\s*\/?>\s*)+/gi, "");
-
-  return out.trim();
-}
-
-function safeHtml(html: string) {
-  const cleaned = compactHtml(html);
-
-  return sanitizeHtml(cleaned, {
-    allowedTags: [
-      "p",
-      "br",
-      "strong",
-      "em",
-      "u",
-      "s",
-      "blockquote",
-      "code",
-      "pre",
-      "ul",
-      "ol",
-      "li",
-      "h1",
-      "h2",
-      "h3",
-      "a",
-      "span",
-    ],
-    allowedAttributes: {
-      a: ["href", "target", "rel"],
-      p: ["style"],
-      span: ["style"],
-      li: ["style"],
-      ol: ["style"],
-      ul: ["style"],
-      code: ["class"],
-      pre: ["class"],
-    },
-    allowedStyles: {
-      "*": {
-        "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
-        color: [/^#([0-9a-fA-F]{3}){1,2}$/],
-        "background-color": [/^#([0-9a-fA-F]{3}){1,2}$/],
-        "font-size": [/^\d+(px|rem|em)$/],
-        "font-family": [/^[\w\s,"'-]+$/],
-      },
-    },
-    transformTags: {
-      a: sanitizeHtml.simpleTransform("a", {
-        target: "_blank",
-        rel: "noopener noreferrer",
-      }),
-    },
-  });
-}
-
 function fmtDateCL(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -206,12 +144,6 @@ function fmtTimeCL(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function stripHtmlToText(html: string) {
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html || "";
-  return (tmp.textContent || tmp.innerText || "").trim();
 }
 
 function parseIsoTime(s?: string) {
@@ -367,7 +299,7 @@ export default function BitacoraEquipoPage() {
       const worker = normalizeText(getTrabajadorNombre(b));
       const client = getClienteSearchBlob(b);
       const title = normalizeText(b.titulo || "");
-      const content = normalizeText(stripHtmlToText(b.contenido || ""));
+      const content = normalizeText(htmlATexto(b.contenido || ""));
       const date = normalizeText(String(b.fechaGestion || ""));
 
       return [worker, client, title, content, date].some((text) => text.includes(q));
@@ -395,7 +327,7 @@ export default function BitacoraEquipoPage() {
     setToast(null);
     setEditId(b.id);
     setEditTitulo(b.titulo ?? "");
-    setEditContenido(stripHtmlToText(b.contenido));
+    setEditContenido(htmlATexto(b.contenido));
   }
 
   function cancelEdit() {

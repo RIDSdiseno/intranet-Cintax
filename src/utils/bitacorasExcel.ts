@@ -2,6 +2,7 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import type { Bitacora } from "../types/bitacora";
+import { documentoInerte } from "./htmlSeguro";
 
 function fmtDateCL(iso?: string) {
   if (!iso) return "—";
@@ -47,10 +48,14 @@ function parseIsoTime(s?: string) {
 }
 
 function htmlToReadableText(html: string) {
-  if (typeof document === "undefined") return html || "";
+  if (typeof DOMParser === "undefined") return html || "";
 
-  const div = document.createElement("div");
-  div.innerHTML = html || "";
+  // Con `documentoInerte` y no con un div al que se le asigna `innerHTML`: esa
+  // forma ejecuta lo que traiga el HTML aunque el div no se monte nunca. El
+  // contenido de las bitacoras no esta saneado en la base, asi que al exportar
+  // a Excel se estaria ejecutando. Ver `utils/htmlSeguro.ts`.
+  const doc = documentoInerte(html);
+  const div = doc.body;
 
   div.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
 
@@ -61,7 +66,7 @@ function htmlToReadableText(html: string) {
 
   div.querySelectorAll("p, blockquote, h1, h2, h3, pre").forEach((el) => {
     if (el.textContent && !el.textContent.endsWith("\n")) {
-      el.appendChild(document.createTextNode("\n"));
+      el.appendChild(doc.createTextNode("\n"));
     }
   });
 

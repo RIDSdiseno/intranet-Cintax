@@ -1,12 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  Check,
   ChevronDown,
   Forward,
   Loader2,
   MessageSquareReply,
+  Plus,
   Send,
+  Sparkles,
   StickyNote,
+  Undo2,
   X,
   XCircle,
 } from "lucide-react";
@@ -29,7 +38,7 @@ import type {
   TicketThreadMessage,
 } from "../types";
 import { esAdminOSoporte, getAuthPayload } from "../../../lib/auth";
-import { API_BASE_URL } from "../../../lib/api";
+import { API_BASE_URL, mensajeDeErrorApi } from "../../../lib/api";
 import TicketRichTextEditor, {
   TicketRichTextState,
 } from "../components/TicketRichTextEditor";
@@ -38,6 +47,9 @@ import {
   loadTicketDraft,
   saveTicketDraft,
 } from "../utils/ticketDraftStorage";
+import type { AreaDetected } from "../utils/areas";
+import { AREAS_DETECTADAS, etiquetaArea } from "../utils/areas";
+import { pedirBorradorTicket } from "../../asistente/services/asistenteApi";
 
 const LEGACY_GROUP_REDIRECTS: Record<string, string | null> = {
   contabilidad: "contabilidad",
@@ -51,7 +63,6 @@ const LEGACY_GROUP_REDIRECTS: Record<string, string | null> = {
 
 const ESTADOS = ["--", "Abierto", "Pendiente", "Resuelto", "Cerrado"] as const;
 const PRIORIDADES = ["--", "Baja", "Media", "Alta", "Urgente"] as const;
-const AREAS = ["SIN_CLASIFICAR", "CONTABLE", "TRIBUTARIA", "LABORAL"] as const;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 const MAX_MESSAGE_CHARS = 5000;
 const MAX_ATTACHMENTS = 10;
@@ -96,7 +107,7 @@ type ComposerAttachment = {
 type PropertiesState = {
   status: string;
   priority: string;
-  areaDetected: "CONTABLE" | "TRIBUTARIA" | "LABORAL" | "SIN_CLASIFICAR";
+  areaDetected: AreaDetected;
   tags: string;
   agent: string;
 };
@@ -375,6 +386,24 @@ export default function TicketDetailPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  /**
+   * A donde vuelve el boton "Volver a tickets".
+   *
+   * `TicketsPage` deja los filtros que tenia puestos en el `state` de la
+   * navegacion. Sin esto, volver llevaba a `/tickets` pelado y la lista
+   * reaparecia sin filtrar: quien venia revisando los tickets abiertos de un
+   * agente perdia el filtro cada vez que abria uno.
+   *
+   * Sin `state` (enlace directo, pestana nueva, recarga) vuelve al listado
+   * por defecto, que es lo unico sensato: no habia lista de donde venir.
+   */
+  const listadoPrevio = (useLocation().state as { listado?: unknown } | null)
+    ?.listado;
+  const volverAListado =
+    typeof listadoPrevio === "string" && listadoPrevio
+      ? `/tickets?${listadoPrevio}`
+      : "/tickets";
   const isNew = id === "nuevo";
   const modeParam = searchParams.get("modo") ?? searchParams.get("mode");
   const esAdmin = esAdminOSoporte();
@@ -421,6 +450,23 @@ export default function TicketDetailPage() {
 
   const [toast, setToast] = useState<{ tone: NoticeTone; text: string } | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [generandoBorrador, setGenerandoBorrador] = useState(false);
+
+  // --- Puntos adicionales sobre el borrador del asistente ---
+  const [integrandoPunto, setIntegrandoPunto] = useState(false);
+  const [puntoNuevo, setPuntoNuevo] = useState("");
+  const [puntosIntegrados, setPuntosIntegrados] = useState<string[]>([]);
+  /** El panel de puntos solo aparece cuando hay un borrador del asistente. */
+  const [hayBorradorAsistente, setHayBorradorAsistente] = useState(false);
+  /**
+   * El primer borrador que propuso el asistente, en texto plano.
+   *
+   * Se guarda en un ref y no en estado porque no cambia nada de lo que se
+   * dibuja salvo el boton de volver atras, y porque tiene que sobrevivir a
+   * todas las integraciones sin que ninguna lo pise. Es la unica copia: el
+   * servidor no guarda borradores.
+   */
+  const borradorOriginalRef = useRef<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
   const composerPanelRef = useRef<HTMLDivElement | null>(null);
@@ -885,6 +931,129 @@ export default function TicketDetailPage() {
     setConfirmState(null);
   };
 
+  /**
+   * Pide al asistente un borrador de respuesta y lo deja en el editor.
+   *
+   * No envia nada: queda para editar y mandar como cualquier otra respuesta.
+   * Tampoco pisa lo que el agente ya escribio.
+   */
+  const sugerirBorrador = async () => {
+    if (!ticket || generandoBorrador) return;
+
+    if (!editorIsEmpty) {
+      showToast(
+        "warning",
+        "Borra el texto actual para que el asistente proponga un borrador."
+      );
+      return;
+    }
+
+    try {
+      setGenerandoBorrador(true);
+      const res = await pedirBorradorTicket(ticket.id);
+      const borrador = res.data?.borrador?.trim();
+
+      if (!borrador) {
+        showToast("warning", "El asistente no pudo proponer un borrador.");
+        return;
+      }
+
+      // Se guarda el original ANTES de tocar el editor: es lo que permite
+      // volver atras si las integraciones posteriores no gustan.
+      borradorOriginalRef.current = borrador;
+      setHayBorradorAsistente(true);
+      setPuntosIntegrados([]);
+      setPuntoNuevo("");
+
+      aplicarBorradorAlEditor(borrador);
+
+      showToast("success", "Borrador listo. Revisalo antes de enviar.");
+    } catch (err) {
+      console.error("Error pidiendo borrador:", err);
+      // El servidor explica cuando sabe por que ("llegaste al limite de 50
+      // consultas por dia", "ya hay una consulta en curso"). Taparlo con el
+      // texto generico haria que el usuario reintentara sin entender nada.
+      showToast(
+        "error",
+        mensajeDeErrorApi(err, "No se pudo generar el borrador.")
+      );
+    } finally {
+      setGenerandoBorrador(false);
+    }
+  };
+
+  /**
+   * Deja un texto plano en el editor.
+   *
+   * TipTap sincroniza desde `value` con emitUpdate: false, asi que su onChange
+   * no corre y hay que mover los contadores a mano. Sin esto el boton Enviar
+   * seguiria creyendo que el mensaje esta vacio.
+   */
+  const aplicarBorradorAlEditor = (texto: string) => {
+    setEditorHtml(textToHtml(texto));
+    setEditorTextLength(texto.length);
+    setEditorIsEmpty(texto.trim().length === 0);
+  };
+
+  /** Lo que hay ahora en el editor, como texto plano. */
+  const textoActualDelEditor = () =>
+    stripHtmlToText(editorHtml)
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+
+  /**
+   * Pide al asistente que integre un punto mas en el borrador que ya existe.
+   *
+   * Se manda lo que hay en el editor en este momento, no el ultimo borrador
+   * generado: si el agente edito a mano, esas ediciones tienen que conservarse.
+   */
+  const integrarPunto = async () => {
+    const punto = puntoNuevo.trim();
+    if (!ticket || integrandoPunto || !punto) return;
+
+    const borradorActual = textoActualDelEditor();
+    if (!borradorActual) {
+      showToast("warning", "Primero pide un borrador al asistente.");
+      return;
+    }
+
+    try {
+      setIntegrandoPunto(true);
+      const res = await pedirBorradorTicket(ticket.id, {
+        borradorActual,
+        puntos: [punto],
+      });
+
+      const actualizado = res.data?.borrador?.trim();
+      if (!actualizado) {
+        showToast("warning", "El asistente no pudo integrar ese punto.");
+        return;
+      }
+
+      aplicarBorradorAlEditor(actualizado);
+      setPuntosIntegrados((prev) => [...prev, punto]);
+      setPuntoNuevo("");
+
+      showToast("success", "Punto integrado. Revisa la respuesta.");
+    } catch (err) {
+      console.error("Error integrando punto:", err);
+      showToast("error", mensajeDeErrorApi(err, "No se pudo integrar el punto."));
+    } finally {
+      setIntegrandoPunto(false);
+    }
+  };
+
+  /** Descarta las integraciones y vuelve al borrador que propuso el asistente. */
+  const volverAlBorradorOriginal = () => {
+    const original = borradorOriginalRef.current;
+    if (!original) return;
+
+    aplicarBorradorAlEditor(original);
+    setPuntosIntegrados([]);
+    showToast("success", "Volviste al borrador original.");
+  };
+
   const handleEditorChange = React.useCallback((state: TicketRichTextState) => {
     setEditorHtml(state.html);
     setEditorTextLength(state.textLength);
@@ -1026,6 +1195,12 @@ export default function TicketDetailPage() {
       setCc("");
       setBcc("");
       setComposerAttachments([]);
+
+      // El borrador ya se envio: el panel de puntos no tiene sobre que trabajar.
+      borradorOriginalRef.current = null;
+      setHayBorradorAsistente(false);
+      setPuntosIntegrados([]);
+      setPuntoNuevo("");
       clearTicketDraft(ticket.id);
       setDraftStatus("idle");
       setSendAction("send");
@@ -1086,7 +1261,7 @@ export default function TicketDetailPage() {
         <h2 className="text-lg font-semibold text-[var(--primary-color)]">Crear ticket</h2>
         <p className="text-sm text-black/60 mt-1">Formulario de creacion pendiente de implementacion.</p>
         <button
-          onClick={() => navigate("/tickets")}
+          onClick={() => navigate(volverAListado)}
           className="mt-4 rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20"
         >
           Volver a tickets
@@ -1114,7 +1289,7 @@ export default function TicketDetailPage() {
         <h2 className="text-lg font-semibold text-[var(--primary-color)]">Detalle de ticket</h2>
         <p className="text-sm text-rose-600 mt-2">{error}</p>
         <button
-          onClick={() => navigate("/tickets")}
+          onClick={() => navigate(volverAListado)}
           className="mt-4 rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20"
         >
           Volver a tickets
@@ -1165,7 +1340,7 @@ export default function TicketDetailPage() {
                 <p className="text-xs text-black/40 mt-1">Creado: {formatDate(ticket.createdAt)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center rounded-full border border-black/10 bg-black/[0.03] px-2 py-0.5 text-[11px] font-medium text-black/70">
-                    Área: {ticket.areaDetected}
+                    Área: {etiquetaArea(ticket.areaDetected)}
                   </span>
                   {(ticket.tags ?? []).map((tag) => (
                     <span
@@ -1179,7 +1354,7 @@ export default function TicketDetailPage() {
               </div>
 
               <button
-                onClick={() => navigate("/tickets")}
+                onClick={() => navigate(volverAListado)}
                 className="rounded-xl px-3 py-2 text-sm border border-black/10 bg-white hover:border-black/20"
               >
                 Volver a tickets
@@ -1406,8 +1581,122 @@ export default function TicketDetailPage() {
                   >
                     Privado (nota)
                   </button>
+
+                  {/* El asistente propone; el agente revisa y envia. */}
+                  {tipoComposer === "PUBLIC_REPLY" && (
+                    <button
+                      type="button"
+                      onClick={sugerirBorrador}
+                      disabled={
+                        generandoBorrador || sending || composerBloqueadoPorCierre
+                      }
+                      title="El asistente propone un borrador a partir del hilo. No lo envia."
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs text-black/70 transition hover:border-black/25 hover:text-black disabled:opacity-60"
+                    >
+                      {generandoBorrador ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={13} />
+                      )}
+                      {generandoBorrador ? "Redactando..." : "Sugerir respuesta"}
+                    </button>
+                  )}
                 </div>
               )}
+
+              {/* Puntos adicionales: solo tiene sentido sobre un borrador del
+                  asistente, y solo en respuestas publicas. */}
+              {composerMode === "reply" &&
+                tipoComposer === "PUBLIC_REPLY" &&
+                hayBorradorAsistente && (
+                  <div className="mt-3 rounded-xl border border-black/10 bg-[var(--tertiary-color)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-black/70">
+                        Agregar punto adicional
+                      </p>
+
+                      {puntosIntegrados.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={volverAlBorradorOriginal}
+                          disabled={integrandoPunto || sending}
+                          title="Descarta los puntos agregados y vuelve al borrador que propuso el asistente"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 py-1 text-[11px] text-black/60 transition hover:border-black/25 hover:text-black disabled:opacity-60"
+                        >
+                          <Undo2 size={12} />
+                          Volver al original
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="mt-1 text-[11px] text-black/45">
+                      Escribe lo que falte y el asistente lo integra en la
+                      respuesta. Puedes seguir editando a mano despues.
+                    </p>
+
+                    <div className="mt-2 flex items-end gap-2">
+                      <textarea
+                        value={puntoNuevo}
+                        onChange={(e) =>
+                          setPuntoNuevo(e.target.value.slice(0, 1000))
+                        }
+                        onKeyDown={(e) => {
+                          // Enter integra; Shift+Enter hace salto de linea.
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void integrarPunto();
+                          }
+                        }}
+                        rows={2}
+                        disabled={integrandoPunto || composerBloqueadoPorCierre}
+                        placeholder="Ej: avisarle que el F29 ya quedo presentado"
+                        aria-label="Punto adicional para la respuesta"
+                        className="min-h-[52px] flex-1 resize-none rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none placeholder:text-black/35 disabled:bg-black/[0.03]"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={integrarPunto}
+                        disabled={
+                          integrandoPunto ||
+                          !puntoNuevo.trim() ||
+                          sending ||
+                          composerBloqueadoPorCierre
+                        }
+                        className="inline-flex h-[52px] shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-white shadow-sm transition active:scale-95 disabled:opacity-50"
+                        style={{ background: "var(--secondary-color)" }}
+                      >
+                        {integrandoPunto ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Plus size={13} />
+                        )}
+                        {integrandoPunto ? "Integrando..." : "Integrar"}
+                      </button>
+                    </div>
+
+                    {puntosIntegrados.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {puntosIntegrados.map((p, i) => (
+                          <li
+                            key={`${i}-${p.slice(0, 24)}`}
+                            className="flex items-start gap-1.5 text-[11px] text-black/55"
+                          >
+                            <Check
+                              size={12}
+                              className="mt-0.5 shrink-0 text-emerald-600"
+                            />
+                            <span className="min-w-0">{p}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <p className="mt-2 text-[11px] text-black/40">
+                      Nada se envia hasta que aprietes Enviar.
+                    </p>
+                  </div>
+                )}
 
               {tipoComposer !== "INTERNAL_NOTE" && (
                 <div className="mt-3 space-y-2">
@@ -1549,7 +1838,12 @@ export default function TicketDetailPage() {
                   </button>
 
                   {showSendMenu && (
-                    <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[210px] rounded-xl border border-black/10 bg-white p-1.5 shadow-xl">
+                    // Se abre HACIA ARRIBA a proposito. Este boton vive al pie
+                    // del formulario, que a su vez esta al final de la pagina:
+                    // desplegando hacia abajo, las ultimas opciones quedaban
+                    // fuera de la pantalla y no habia a donde seguir bajando.
+                    // Arriba siempre hay sitio, porque encima esta el editor.
+                    <div className="absolute right-0 bottom-[calc(100%+6px)] z-20 min-w-[210px] rounded-xl border border-black/10 bg-white p-1.5 shadow-xl">
                       <button
                         type="button"
                         onClick={() => {
@@ -1691,9 +1985,9 @@ export default function TicketDetailPage() {
                   }
                   className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm disabled:bg-black/[0.03]"
                 >
-                  {AREAS.map((item) => (
+                  {AREAS_DETECTADAS.map((item) => (
                     <option key={item} value={item}>
-                      {item}
+                      {etiquetaArea(item)}
                     </option>
                   ))}
                 </select>

@@ -22,17 +22,21 @@ import CierreTareasPage from "../pages/CierreTareasPage";
 import HomePage from "../pages/HomePage";
 import ReleaseNotesPage from "../pages/ReleaseNotesPage";
 
-// ✅ NUEVO: Módulo aislado de creación/asignación (pages/)
+//Módulo aislado de creación/asignación (pages/)
 import TaskAssignmentPage from "../pages/TaskAssignmentPage";
 
-// ✅ Bitácora
+// Bitácora
 import BitacoraPage from "../pages/BitacoraPage";
 import BitacoraEquipoPage from "../pages/BitacoraEquipoPage";
 
 import AppShell from "../layout/AppShell";
 
-// ✅ Clientes
+// Clientes
 import ClientesPage from "../pages/ClientesPage";
+
+// Informes semanales
+import InformesPage from "../modules/informes/pages/InformesPage";
+import { puedeVerInformes } from "../lib/auth";
 
 // -------- auth helpers --------
 function isAuthed() {
@@ -114,6 +118,17 @@ function SupervisorRoute({ children }: { children: React.ReactNode }) {
   return isSupervisorOrAdmin() ? <>{children}</> : <NotFoundPage />;
 }
 
+/**
+ * Informes semanales: solo los correos de INFORMES_EMAILS del backend.
+ *
+ * Devuelve la pagina de "no encontrada" en vez de un "no tienes permiso",
+ * igual que SupervisorRoute: no hace falta avisarle a nadie que la seccion
+ * existe. El backend protege los endpoints por su cuenta.
+ */
+function InformesRoute({ children }: { children: React.ReactNode }) {
+  return puedeVerInformes() ? <>{children}</> : <NotFoundPage />;
+}
+
 // ---------------- Routes ----------------
 export default function AppRoutes() {
   return (
@@ -132,18 +147,20 @@ export default function AppRoutes() {
         <Route path="inicio" element={<Navigate to="/home" replace />} />
 
         <Route path="home" element={<HomePage />} />
+        {/* El asistente no tiene ruta: es un panel flotante montado en el
+            AppShell, disponible en todas las pantallas. */}
         <Route path="drive" element={<DrivePage />} />
         <Route path="tareas" element={<TareasPage />} />
         <Route path="soporte" element={<SoportePage />} />
         <Route path="configurar" element={<ConfigurarPage />} />
 
-        {/* ✅ Bitácora (todos) */}
+        {/* Bitácora (todos) */}
         <Route
           path="bitacora"
           element={<BitacoraPage onBack={() => window.history.back()} />}
         />
 
-        {/* ✅ Bitácora equipo (solo supervisor/admin) */}
+        {/* Bitácora equipo (solo supervisor/admin) */}
         <Route
           path="bitacora/equipo"
           element={
@@ -153,7 +170,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* ✅ Clientes (solo supervisor/admin) */}
+        {/* Clientes (solo supervisor/admin) */}
         <Route
           path="clientes"
           element={
@@ -163,9 +180,24 @@ export default function AppRoutes() {
           }
         />
 
-        {/* ✅ Tickets */}
-        {/*<Route path="tickets" element={<TicketsPage />} />
-        <Route path="tickets/automatizaciones" element={<AutomationLayout />}>
+        {/* Informes semanales (solo correos autorizados) */}
+        <Route
+          path="informes"
+          element={
+            <InformesRoute>
+              <InformesPage />
+            </InformesRoute>
+          }
+        />
+
+        {/* Tickets */}
+        <Route path="tickets" element={<TicketsPage />} />
+        <Route path="tickets/:id" element={<TicketDetailPage />} />
+
+        {/* Automatizaciones / Agentes / Grupos: la UI existe pero todavia
+            no tiene backend (se guardan en localStorage). No habilitar hasta
+            que tengan persistencia real. */}
+        {/*<Route path="tickets/automatizaciones" element={<AutomationLayout />}>
           <Route index element={<AutomationPage />} />
           <Route path="new" element={<RuleEditorPage mode="new" />} />
           <Route path=":id/edit" element={<RuleEditorPage mode="edit" />} />
@@ -188,7 +220,7 @@ export default function AppRoutes() {
 
         <Route path="notas-version" element={<ReleaseNotesPage />} />
 
-        {/* ✅ Supervisor/Admin */}
+        {/* Supervisor/Admin */}
         <Route
           path="personas"
           element={
@@ -216,7 +248,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* ✅ NUEVO: módulo aislado creación/asignación de tareas */}
+        {/* módulo aislado creación/asignación de tareas */}
         <Route
           path="task-assignment"
           element={

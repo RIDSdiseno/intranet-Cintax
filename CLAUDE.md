@@ -41,7 +41,7 @@ Pick whichever pattern matches the sibling code in the file/feature you're editi
 
 - `src/pages/` — one file per route/screen (e.g. `TareasPage`, `ClientesPage`, `TareasSupervisionPage`), some with their own subfolders for sub-views (`pages/supervision/views`, `pages/creacion-tareas/tabs`).
 - `src/components/` — shared/domain components grouped by feature subfolder (`cierre-tareas`, `clientes`, `personas`, `supervision`, `tareas`, `task-assignment`, `tickets`, `ui`).
-- `src/modules/tickets/` — the most self-contained feature module (own `api/`, `components/`, `hooks/`, `pages/`, `services/`, `types/`, `utils/`, plus its own [README.md](src/modules/tickets/README.md) documenting the ticket visibility rules, HUD filters, and endpoints it calls). Note the ticket routes are currently commented out in `AppRoutes.tsx`.
+- `src/modules/tickets/` — the most self-contained feature module (own `api/`, `components/`, `hooks/`, `pages/`, `services/`, `types/`, `utils/`, plus its own [README.md](src/modules/tickets/README.md) documenting the ticket visibility rules, HUD filters, and endpoints it calls). The `tickets` and `tickets/:id` routes are live; the **Automations / Agents / Groups** settings routes are still commented out in `AppRoutes.tsx` on purpose — those screens persist to `localStorage` and have no backend yet.
 - `src/service/*.service.ts` — axios-based API clients for non-modularized features (bitacora, clientes, tareas, supervisión de tareas).
 
 Role gating convention: `SupervisorRoute` wraps routes that should only be visible to `ADMIN`/`SUPERVISOR` roles (as decoded from the JWT); everything else behind `PrivateRoute` just requires any valid token.

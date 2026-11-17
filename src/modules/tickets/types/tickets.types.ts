@@ -2,7 +2,6 @@ export type {
   TicketGroup,
   TicketsGroupsData,
   TicketRow,
-  TicketMessage,
   TicketThreadMessageAuthor,
   TicketThreadMessage,
   TicketMessagesResponse,

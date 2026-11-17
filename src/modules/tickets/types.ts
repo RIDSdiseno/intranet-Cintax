@@ -1,3 +1,7 @@
+import type { AreaDetected } from "./utils/areas";
+
+export type { AreaDetected };
+
 export type TicketGroup = {
   slug: string;
   name: string;
@@ -17,7 +21,7 @@ export type TicketRow = {
   requesterEmail: string;
   preview: string | null;
   group: string;
-  areaDetected: "CONTABLE" | "TRIBUTARIA" | "LABORAL" | "SIN_CLASIFICAR";
+  areaDetected: AreaDetected;
   areaSlug: string | null;
   areaLabel: string | null;
   categoria: string | null;
@@ -26,14 +30,6 @@ export type TicketRow = {
   status: string;
   priority: string;
   createdAt: string;
-};
-
-export type TicketMessage = {
-  id: string;
-  authorEmail: string;
-  body: string;
-  createdAt: string;
-  kind: "requester" | "reply";
 };
 
 export type TicketThreadMessageAuthor = {
@@ -100,8 +96,10 @@ export type TicketDetail = {
   requesterEmail: string;
   group: string;
   categoria: string | null;
-  areaDetected: "CONTABLE" | "TRIBUTARIA" | "LABORAL" | "SIN_CLASIFICAR";
+  areaDetected: AreaDetected;
   tags: string[];
+  /** Cliente vinculado por RUT, cuando se pudo resolver. */
+  clienteId: number | null;
   status: string;
   estado: string | null;
   priority: string;
@@ -115,11 +113,14 @@ export type TicketDetail = {
   resolutionStatus: "PENDIENTE" | "OK";
 };
 
+/**
+ * El hilo se pide aparte con `getTicketMessages` (GET /:id/messages).
+ * El detalle solo trae las propiedades del ticket.
+ */
 export type TicketDetailResponse = {
   ok: true;
   data: {
     ticket: TicketDetail;
-    messages: TicketMessage[];
   };
 };
 
@@ -138,6 +139,30 @@ export type TicketEvent = {
 export type TicketEventsResponse = {
   ok: true;
   data: TicketEvent[];
+};
+
+export type SlaMetric = {
+  percent: number | null;
+  evaluated: number;
+  breached: number;
+  pending: number;
+  avgMinutes: number | null;
+  targetHours: number;
+};
+
+export type TicketsSummary = {
+  total: number;
+  abiertos: number;
+  pendientes: number;
+  cerrados: number;
+  urgentes: number;
+  slaFirstResponse: SlaMetric;
+  slaResolution: SlaMetric;
+};
+
+export type TicketsSummaryResponse = {
+  ok: true;
+  data: TicketsSummary;
 };
 
 export type TicketGroupsResponse = {
@@ -207,7 +232,7 @@ export type CreateTicketPayload = {
   prioridad?: number | null;
   requesterEmail?: string | null;
   trabajadorId?: number | null;
-  areaDetected?: "CONTABLE" | "TRIBUTARIA" | "LABORAL" | "SIN_CLASIFICAR" | null;
+  areaDetected?: AreaDetected | null;
   tags?: string[] | string | null;
 };
 

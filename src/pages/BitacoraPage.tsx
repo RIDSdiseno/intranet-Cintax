@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import RichEditor from "../components/RichEditor";
+import { safeHtml } from "../utils/htmlSeguro";
 import { getClientes, type ClienteOption } from "../service/Clientes.service";
 import {
   getClienteBitacoras,
@@ -699,7 +700,13 @@ export default function ClienteBitacoraPage({ onBack }: Props) {
                         <div
                           className="mt-3 text-sm text-gray-700 break-words"
                           style={{ overflowWrap: "anywhere" }}
-                          dangerouslySetInnerHTML={{ __html: b.contenido }}
+                          // `safeHtml` y no el contenido crudo: lo que hay en
+                          // la base no esta saneado, asi que sin esto una
+                          // bitacora puede ejecutar codigo con la sesion de
+                          // quien la abre. Ver `utils/htmlSeguro.ts`.
+                          dangerouslySetInnerHTML={{
+                            __html: safeHtml(b.contenido),
+                          }}
                         />
                       </div>
                     );

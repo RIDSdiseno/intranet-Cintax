@@ -16,6 +16,7 @@ import {
   NotebookPen,
   Building2,
   CheckCircle2,
+  FileText,
 } from "lucide-react";
 
 type NavItem = {
@@ -23,6 +24,8 @@ type NavItem = {
   label: string;
   icon: React.ReactNode;
   supervisorOnly?: boolean;
+  /** Solo para los correos de INFORMES_EMAILS. Es mas estrecho que supervisor. */
+  informesOnly?: boolean;
   badge?: "nuevo" | "actualizacion";
 };
 
@@ -91,7 +94,10 @@ const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
         className="w-full flex items-center justify-between px-3 py-2 text-white/70 uppercase text-[10px] tracking-wider hover:text-white hover:bg-white/5 rounded-lg transition-all group"
         type="button"
       >
-        <span>Tickets</span>
+        <span className="flex items-center gap-2">
+          Tickets
+          <Badge type="nuevo" />
+        </span>
         <ChevronDown
           size={14}
           className={`transition-transform duration-300 ${
@@ -148,11 +154,13 @@ const TicketsNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
 
 export default function Sidebar({
   canSeeSupervisor,
+  canSeeInformes = false,
   onLogout,
   onNavigate,
   variant = "desktop",
 }: {
   canSeeSupervisor: boolean;
+  canSeeInformes?: boolean;
   onLogout: () => void;
   onNavigate?: () => void;
   variant?: "desktop" | "mobile";
@@ -212,6 +220,13 @@ export default function Sidebar({
       label: "Cierre de tareas",
       icon: <CheckCircle2 size={18} />,
       supervisorOnly: true,
+    },
+
+    {
+      to: "/informes",
+      label: "Informes",
+      icon: <FileText size={18} />,
+      informesOnly: true,
       badge: "nuevo",
     },
 
@@ -223,7 +238,11 @@ export default function Sidebar({
     },
   ];
 
-  const visible = navItems.filter((x) => !x.supervisorOnly || canSeeSupervisor);
+  const visible = navItems.filter((x) => {
+    if (x.supervisorOnly && !canSeeSupervisor) return false;
+    if (x.informesOnly && !canSeeInformes) return false;
+    return true;
+  });
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -252,7 +271,7 @@ export default function Sidebar({
           </NavLink>
         ))}
 
-        {/*<TicketsNav onNavigate={onNavigate} />*/}
+        <TicketsNav onNavigate={onNavigate} />
 
         <button
           type="button"

@@ -4,6 +4,7 @@ import type {
   CreateTicketResponse,
   TicketAgentsResponse,
   TicketGroupsResponse,
+  TicketsSummaryResponse,
   TicketDetailResponse,
   InboxDiagnosticResponse,
   TicketEventsResponse,
@@ -16,8 +17,21 @@ import type {
 
 const TICKETS_BASE_URL = `${API_BASE_URL}/tickets`;
 
-export async function getGroups() {
-  return fetchJSON<TicketGroupsResponse>(`${TICKETS_BASE_URL}/groups`);
+export async function getGroups(params: { view?: string } = {}) {
+  // `view` hace que los contadores de las pestanas cuenten lo mismo que
+  // muestra la tabla; sin el, "Mis tickets" mostraba el total del area.
+  const qs = params.view ? `?view=${encodeURIComponent(params.view)}` : "";
+  return fetchJSON<TicketGroupsResponse>(`${TICKETS_BASE_URL}/groups${qs}`);
+}
+
+export async function getTicketsSummary(params: { area?: string; view?: string } = {}) {
+  const search = new URLSearchParams();
+  if (params.area) search.set("area", params.area);
+  if (params.view) search.set("view", params.view);
+  const qs = search.toString();
+  return fetchJSON<TicketsSummaryResponse>(
+    `${TICKETS_BASE_URL}/summary${qs ? `?${qs}` : ""}`
+  );
 }
 
 export async function getTickets(params: TicketsQuery) {
@@ -40,6 +54,17 @@ export async function getTickets(params: TicketsQuery) {
   return fetchJSON<TicketsResponse>(url);
 }
 
+/**
+ * Ingesta manual de correo.
+ *
+ * No modifica la casilla de soporte: los hilos quedan tal como estaban,
+ * leidos o no leidos. La deduplicacion es por `gmailThreadId` y
+ * `gmailMessageId` en la base, asi que repetir la sincronizacion no duplica
+ * nada. El boton igual pide confirmacion, porque crea tickets de verdad.
+ *
+ * El endpoint acepta `?markRead=true` para marcarlos, pero eso es sobre el
+ * correo real de la empresa y no se revierte.
+ */
 export async function syncTickets() {
   return fetchJSON<{
     ok: boolean;

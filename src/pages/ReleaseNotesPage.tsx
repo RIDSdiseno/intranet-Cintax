@@ -11,7 +11,21 @@ type ReleaseNote = {
 };
 
 const NOTES: ReleaseNote[] = [
-  // ✅ ÚLTIMA VERSIÓN
+  {
+    version: "v2.0",
+    date: "2026-11-16",
+    title: "Ticketera, asistente virtual e informes semanales",
+    items: [
+      "Se habilita el módulo de Tickets, alimentado automáticamente desde la casilla de soporte: cada correo nuevo crea su ticket y las respuestas del hilo se agregan solas.",
+      "Desde el detalle del ticket se puede responder por correo al cliente, dejar notas internas que el cliente no ve, reasignar área y cerrar.",
+      "Cada trabajador ve los tickets de su área, igual que en el resto de la intranet.",
+      "Se incorpora un asistente virtual que ayuda a redactar respuestas de tickets y responde consultas, con una cuota diaria de uso por persona.",
+      "Se habilita la sección de Informes, con generación automática semanal y generación manual por período.",
+      "El informe automático de la semana y los informes manuales del mismo período conviven sin reemplazarse, con filtro por origen (Todos / Automáticos / Manuales).",
+    ],
+    tag: "nuevo",
+  },
+
   {
     version: "v1.9",
     date: "2026-03-24",
